@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-badge">E</div><div>EDGE<small>Auditoria</small></div></div>
+    <div class="nav-card">
+      <a class="nav-link" href="{{ url_for('home') }}">🏠 Início</a>
+      <a class="nav-link" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
+      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
+      <a class="nav-link active" href="{{ url_for('auditoria') }}">📋 Auditoria</a>
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}">🚪 Sair</a>
+    </div>
+  </aside>
+  <main class="main-area">
+    <div class="topbar compact-topbar">
+      <div class="page-title"><span class="eyebrow">Governança</span><h1>Auditoria de ações</h1><p>Últimos eventos relevantes do sistema: login, usuários, bloqueios e alterações de senha.</p></div>
+      <div class="user-pill"><div class="avatar"></div><div><strong>{{ current_user['nome'] }}</strong><div class="muted">{{ user_roles[current_user['cargo']] }}</div></div></div>
+    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+    <section class="content-card">
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Data</th><th>Usuário</th><th>Cargo</th><th>Ação</th><th>Detalhe</th><th>IP</th></tr></thead>
+          <tbody>
+            {% for log in logs %}
+              <tr><td>{{ log['criado_em'] }}</td><td>{{ log['username'] }}</td><td>{{ log['cargo'] }}</td><td><span class="status-chip">{{ log['acao'] }}</span></td><td>{{ log['detalhe'] }}</td><td>{{ log['ip'] }}</td></tr>
+            {% else %}
+              <tr><td colspan="6">Nenhum evento de auditoria registrado ainda.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

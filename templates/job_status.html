@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Processamento em andamento</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-badge">E</div><div>EDGE<small>Processamento</small></div></div>
+    <div class="nav-card">
+      <a class="nav-link" href="{{ url_for('home') }}">🏠 Início</a>
+      <a class="nav-link" href="{{ url_for('relatorios') }}">📊 Relatórios</a>
+      <a class="nav-link" href="{{ url_for('encaminhamentos') }}">📄 Encaminhamentos</a>
+      <a class="nav-link" href="{{ url_for('renumerador') }}">🔢 Renumerador</a>
+      <a class="nav-link" href="{{ url_for('esocial') }}">🗂️ E-SOCIAL</a>
+    </div>
+  </aside>
+  <main class="main-area">
+    <section class="content-card job-card" data-job-id="{{ job_id }}">
+      <div class="page-title"><h1>{{ title }}</h1><p>Você pode manter esta tela aberta enquanto o sistema trabalha.</p></div>
+      <div class="progress-shell"><div class="progress-bar" id="jobProgress" style="width:0%"></div></div>
+      <p id="jobMessage" class="helper-box">Iniciando...</p>
+      <div id="jobDownload" class="actions" style="display:none"><a class="btn btn--primary" href="{{ url_for('job_download', job_id=job_id) }}">Baixar arquivo final</a></div>
+      <div id="jobError" class="alert error" style="display:none">Não foi possível concluir o processamento.</div>
+    </section>
+  </main>
+</div>
+<script>
+const jobId = document.querySelector('.job-card').dataset.jobId;
+async function pollJob(){
+  const res = await fetch(`/jobs/${jobId}/status`);
+  const data = await res.json();
+  document.getElementById('jobProgress').style.width = `${data.progress || 0}%`;
+  document.getElementById('jobMessage').textContent = data.message || '';
+  if(data.status === 'finished'){
+    document.getElementById('jobDownload').style.display = 'flex';
+    return;
+  }
+  if(data.status === 'failed'){
+    document.getElementById('jobError').style.display = 'block';
+    return;
+  }
+  setTimeout(pollJob, 1200);
+}
+pollJob();
+</script>
+</body>
+</html>

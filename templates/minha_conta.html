@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-badge">E</div><div>EDGE<small>Segurança</small></div></div>
+    <div class="nav-card">
+      <a class="nav-link" href="{{ url_for('home') }}">🏠 Início</a>
+      <a class="nav-link active" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
+      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
+      {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link" href="{{ url_for('auditoria') }}">📋 Auditoria</a>{% endif %}
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}">🚪 Sair</a>
+    </div>
+  </aside>
+  <main class="main-area">
+    <div class="topbar compact-topbar">
+      <div class="page-title"><span class="eyebrow">Segurança</span><h1>Minha conta</h1><p>Altere sua senha periodicamente e não compartilhe seu acesso.</p></div>
+      <div class="user-pill"><div class="avatar"></div><div><strong>{{ current_user['nome'] }}</strong><div class="muted">{{ user_roles[current_user['cargo']] }}</div></div></div>
+    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}{% endif %}{% endwith %}
+    <section class="content-card narrow-card">
+      <div class="section-header"><div><span class="eyebrow">Credenciais</span><h2>Alterar senha</h2></div></div>
+      <form method="post">
+        <div class="form-grid">
+          <div class="field col-2"><label>Senha atual</label><input type="password" name="old_password" required></div>
+          <div class="field col-1"><label>Nova senha</label><input type="password" name="new_password" minlength="8" required placeholder="Letras e números"></div>
+          <div class="field col-1"><label>Confirmar nova senha</label><input type="password" name="confirm_password" minlength="8" required></div>
+        </div>
+        <div class="actions"><button class="btn btn--primary" type="submit">Salvar nova senha</button></div>
+      </form>
+    </section>
+  </main>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

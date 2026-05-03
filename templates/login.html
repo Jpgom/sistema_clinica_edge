@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}"></head>
+<body>
+<div class="login-page">
+  <section class="login-card">
+    <div class="brand login-brand">
+      <div class="brand-badge">E</div>
+      <div>EDGE<small>Sistema interno</small></div>
+    </div>
+    <h1>Acesso restrito</h1>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <form method="post">
+      <div class="field">
+        <label for="username">Usuário</label>
+        <input id="username" name="username" type="text" required autocomplete="username">
+      </div>
+      <div class="field">
+        <label for="password">Senha</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password">
+      </div>
+      <div class="actions">
+        <button class="btn btn--primary" type="submit">Entrar</button>
+      </div>
+    </form>
+  </section>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

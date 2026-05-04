@@ -1,0 +1,24 @@
+Sistema EDGE - pacote completo atualizado
+
+Inclui:
+- Encaminhamento individual para especialista.
+- Cadastro de empresas para encaminhamento individual.
+- Cadastro de especialistas para encaminhamento individual.
+- Card do Encaminhamento individual na tela inicial, junto dos demais módulos.
+- Correção do negrito no Word:
+  * Empresa, Funcionário, RG e CPF: valores sem negrito.
+  * Frase do encaminhamento: em negrito.
+  * Data: em negrito.
+- Correção de espaçamento no modelo ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE.docx.
+  O modelo renderizado possui separação visual entre os dois encaminhamentos.
+- Correção do botão que ficava em "Processando..." após download.
+- Correções anteriores do renumerador e layout/responsividade.
+
+Arquivo principal do template:
+edge_app/ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE.docx
+
+Rota principal:
+/encaminhamento-especialista
+
+Rota de cadastros:
+/encaminhamento-especialista/cadastros

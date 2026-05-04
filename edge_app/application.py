@@ -19,6 +19,10 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from docxtpl import DocxTemplate, RichText
 from docx import Document
 from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+from docx.shared import Inches, Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
 
 try:
     import psycopg2
@@ -1918,6 +1922,142 @@ def docx_replace_paragraph_parts(paragraph, parts, alignment=None):
         paragraph.alignment = alignment
 
 
+def encaminhamento_extract_logo(tmpdir: str) -> str | None:
+    """Extrai a logo do modelo original para reutilizar no DOCX gerado.
+
+    A versão anterior editava/duplicava diretamente a estrutura do template. Isso
+    herdava bordas e tabelas invisíveis do Word, causando a linha encostada no
+    segundo encaminhamento. Agora a saída é montada do zero, usando apenas a logo.
+    """
+    try:
+        with zipfile.ZipFile(ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE_PATH) as zf:
+            media_files = [name for name in zf.namelist() if name.startswith('word/media/')]
+            if not media_files:
+                return None
+            media_name = media_files[0]
+            ext = os.path.splitext(media_name)[1] or '.jpeg'
+            logo_path = os.path.join(tmpdir, f'encaminhamento_logo{ext}')
+            with open(logo_path, 'wb') as out:
+                out.write(zf.read(media_name))
+            return logo_path
+    except Exception:
+        logger.exception('Não foi possível extrair a logo do template de encaminhamento')
+        return None
+
+
+def encaminhamento_set_cell_border(cell, color: str = '111827', size: str = '8'):
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    tcBorders = tcPr.first_child_found_in('w:tcBorders')
+    if tcBorders is None:
+        tcBorders = OxmlElement('w:tcBorders')
+        tcPr.append(tcBorders)
+    for edge in ('top', 'left', 'bottom', 'right'):
+        tag = 'w:{}'.format(edge)
+        element = tcBorders.find(qn(tag))
+        if element is None:
+            element = OxmlElement(tag)
+            tcBorders.append(element)
+        element.set(qn('w:val'), 'single')
+        element.set(qn('w:sz'), size)
+        element.set(qn('w:space'), '0')
+        element.set(qn('w:color'), color)
+
+
+def encaminhamento_clear_cell_padding(cell):
+    tcPr = cell._tc.get_or_add_tcPr()
+    tcMar = tcPr.first_child_found_in('w:tcMar')
+    if tcMar is None:
+        tcMar = OxmlElement('w:tcMar')
+        tcPr.append(tcMar)
+    for m in ('top', 'left', 'bottom', 'right'):
+        node = tcMar.find(qn(f'w:{m}'))
+        if node is None:
+            node = OxmlElement(f'w:{m}')
+            tcMar.append(node)
+        node.set(qn('w:w'), '130')
+        node.set(qn('w:type'), 'dxa')
+
+
+def encaminhamento_add_paragraph(cell, parts=None, text: str = '', bold: bool = False, size: int = 10,
+                                 align=None, space_after: int = 4, space_before: int = 0):
+    p = cell.add_paragraph()
+    p.paragraph_format.space_after = Pt(space_after)
+    p.paragraph_format.space_before = Pt(space_before)
+    p.paragraph_format.line_spacing = 1.0
+    if align is not None:
+        p.alignment = align
+    if parts:
+        for value, is_bold in parts:
+            run = p.add_run(value)
+            run.bold = bool(is_bold)
+            run.font.size = Pt(size)
+            run.font.name = 'Arial'
+    else:
+        run = p.add_run(text)
+        run.bold = bold
+        run.font.size = Pt(size)
+        run.font.name = 'Arial'
+    return p
+
+
+def encaminhamento_add_block(doc, logo_path: str | None, empresa_upper: str, funcionario_upper: str,
+                             funcionario_frase: str, rg_clean: str, cpf_clean: str,
+                             especialista_clean: str, data_fmt: str):
+    """Cria um encaminhamento limpo, sem copiar tabelas/linhas residuais do modelo."""
+    table = doc.add_table(rows=1, cols=1)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.autofit = False
+    table.columns[0].width = Inches(7.25)
+    cell = table.cell(0, 0)
+    cell.width = Inches(7.25)
+    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
+    encaminhamento_set_cell_border(cell)
+    encaminhamento_clear_cell_padding(cell)
+
+    # Remove o parágrafo vazio padrão da célula, evitando espaços fantasmas.
+    if cell.paragraphs:
+        p = cell.paragraphs[0]._element
+        p.getparent().remove(p)
+
+    if logo_path and os.path.exists(logo_path):
+        logo_p = cell.add_paragraph()
+        logo_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        logo_p.paragraph_format.space_after = Pt(4)
+        logo_run = logo_p.add_run()
+        logo_run.add_picture(logo_path, width=Inches(5.25))
+
+    encaminhamento_add_paragraph(cell, text='ENCAMINHAMENTO', bold=True, size=15,
+                                 align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10)
+
+    encaminhamento_add_paragraph(cell, parts=[('Empresa : ', True), (empresa_upper, False)], size=9, space_after=3)
+    encaminhamento_add_paragraph(cell, parts=[
+        ('Funcionário: ', True), (funcionario_upper, False),
+        (' RG: ', True), (rg_clean, False),
+        (' CPF: ', True), (cpf_clean, False),
+    ], size=9, space_after=12)
+
+    encaminhamento_add_paragraph(
+        cell,
+        text=f'Encaminho o(a) colaborador(a) {funcionario_frase}, para avaliação com especialista {especialista_clean}.',
+        bold=True,
+        size=10,
+        space_after=18,
+    )
+
+    encaminhamento_add_paragraph(cell, text=f'BELÉM, PA,{data_fmt}', bold=True, size=10,
+                                 align=WD_ALIGN_PARAGRAPH.RIGHT, space_after=16)
+    encaminhamento_add_paragraph(cell, text='__________________________', bold=True, size=10,
+                                 align=WD_ALIGN_PARAGRAPH.RIGHT, space_after=0)
+    encaminhamento_add_paragraph(cell, text='MÉDICO EXAMINADOR', bold=True, size=10,
+                                 align=WD_ALIGN_PARAGRAPH.RIGHT, space_after=18)
+
+    encaminhamento_add_paragraph(cell, text='Endereço: TRAVESSA DO CHACO, Nº2546, MARCO, BELÉM-PA',
+                                 bold=True, size=8, space_after=0)
+    encaminhamento_add_paragraph(cell, text='Fone: 91– 3349-6948 e-mail: edgeocupacional@hotmail.com',
+                                 bold=True, size=8, space_after=0)
+
+
 def gerar_encaminhamento_especialista_docx(empresa: str, funcionario: str, rg: str, cpf: str, data_doc: str, especialista: str, output_path: str):
     empresa_upper = encaminhamento_empresa_name(empresa)
     funcionario_upper = encaminhamento_clean_text(funcionario, upper=True)
@@ -1927,28 +2067,31 @@ def gerar_encaminhamento_especialista_docx(empresa: str, funcionario: str, rg: s
     especialista_clean = encaminhamento_especialista_name(especialista)
     data_fmt = encaminhamento_format_date(data_doc)
 
-    doc = Document(ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE_PATH)
-    for paragraph in doc.paragraphs:
-        text = paragraph.text.strip()
-        if text.startswith('Empresa :'):
-            # Regra solicitada: dados preenchidos da primeira parte NÃO ficam em negrito.
-            docx_replace_paragraph_parts(paragraph, [('Empresa : ', True), (empresa_upper, False)])
-        elif text.startswith('Funcionário:'):
-            docx_replace_paragraph_parts(paragraph, [
-                ('Funcionário: ', True), (funcionario_upper, False),
-                (' RG: ', True), (rg_clean, False),
-                (' CPF: ', True), (cpf_clean, False),
-            ])
-        elif text.startswith('Encaminho o(a) colaborador(a)'):
-            # A frase permanece em negrito conforme o modelo original.
-            docx_replace_paragraph(paragraph, f'Encaminho o(a) colaborador(a) {funcionario_frase}, para avaliação com especialista {especialista_clean}.', bold=True)
-        elif text.startswith('BELÉM, PA,'):
-            # A data permanece em negrito conforme solicitado.
-            assinatura = ''
-            if '__________________________' in paragraph.text:
-                assinatura = '\n\n__________________________ \nMÉDICO EXAMINADOR'
-            docx_replace_paragraph(paragraph, f'BELÉM, PA,{data_fmt}{assinatura}', bold=True)
-    doc.save(output_path)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logo_path = encaminhamento_extract_logo(tmpdir)
+        doc = Document()
+        section = doc.sections[0]
+        section.top_margin = Inches(0.18)
+        section.bottom_margin = Inches(0.18)
+        section.left_margin = Inches(0.20)
+        section.right_margin = Inches(0.20)
+
+        # Primeiro encaminhamento
+        encaminhamento_add_block(doc, logo_path, empresa_upper, funcionario_upper, funcionario_frase,
+                                 rg_clean, cpf_clean, especialista_clean, data_fmt)
+
+        # Espaço real entre os dois blocos. Não usa tabela copiada do Word, então não
+        # herda a linha/borda residual que estava encostando no segundo formulário.
+        spacer = doc.add_paragraph()
+        spacer.paragraph_format.space_after = Pt(12)
+        spacer.paragraph_format.space_before = Pt(0)
+        spacer.paragraph_format.line_spacing = 1.0
+
+        # Segundo encaminhamento limpo
+        encaminhamento_add_block(doc, logo_path, empresa_upper, funcionario_upper, funcionario_frase,
+                                 rg_clean, cpf_clean, especialista_clean, data_fmt)
+
+        doc.save(output_path)
 
 
 def encaminhamento_especialista_render(form_data=None):

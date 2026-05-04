@@ -280,3 +280,36 @@ hideLoading();
     });
   });
 })();
+
+
+// Redesign minimalista: transforma navegação em ícones com tooltip e adiciona cabeçalho SaaS.
+(function () {
+  const navLinks = document.querySelectorAll('.nav-link');
+  navLinks.forEach((link) => {
+    if (link.querySelector('.nav-icon')) return;
+    const text = (link.textContent || '').trim();
+    const match = text.match(/^([^\wÀ-ÿ]+)\s*(.*)$/u);
+    const icon = match ? match[1].trim() : '•';
+    const label = match ? match[2].trim() : text;
+    link.innerHTML = `<span class="nav-icon" aria-hidden="true">${icon}</span><span class="nav-label">${label}</span>`;
+    if (!link.getAttribute('aria-label')) link.setAttribute('aria-label', label || text);
+    if (!link.getAttribute('title')) link.setAttribute('title', label || text);
+  });
+
+  const main = document.querySelector('.main-area');
+  if (!main || main.querySelector('.dashboard-header')) return;
+  const pageTitle = document.querySelector('.page-title h1')?.textContent?.trim() || 'Painel';
+  const today = new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: 'long', year: 'numeric' }).format(new Date());
+  const header = document.createElement('div');
+  header.className = 'dashboard-header';
+  header.innerHTML = `
+    <div class="dashboard-welcome">
+      <h2>Bem-vindo ao sistema EDGE</h2>
+      <p>${today} • ${pageTitle}</p>
+    </div>
+    <div class="dashboard-tools">
+      <input class="dashboard-search" type="search" placeholder="Buscar no sistema" aria-label="Buscar no sistema">
+      <div class="dashboard-avatar" aria-label="Usuário">E</div>
+    </div>`;
+  main.insertBefore(header, main.firstElementChild);
+})();

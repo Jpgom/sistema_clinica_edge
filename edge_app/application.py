@@ -536,7 +536,6 @@ def login():
             session['cargo'] = row_get(user, 'cargo')
             auth_mark_login(int(row_get(user, 'id')))
             audit_log('login_sucesso', 'Login realizado.')
-            flash('Login realizado com sucesso.', 'success')
             return redirect(request.args.get('next') or url_for('home'))
         audit_log('login_falhou', f'Tentativa para usuário: {username}')
         flash('Usuário ou senha inválidos.', 'error')

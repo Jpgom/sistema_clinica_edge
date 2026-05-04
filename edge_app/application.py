@@ -43,6 +43,7 @@ ALLOWED_EXTENSIONS = {".xls", ".xlsx", ".html", ".htm"}
 EXCEL_EXTENSIONS = {".xls", ".xlsx"}
 RENUM_ALLOWED_EXTENSIONS = {".docx", ".zip"}
 FISICO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ATESTADO_FISICO_MENTAL_TEMPLATE.docx")
+ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE.docx")
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.environ.get("RENDER_DISK_PATH") or os.environ.get("DATA_DIR") or BASE_DIR
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -1799,6 +1800,109 @@ def fisico_gerar():
         payload = Path(docx_path).read_bytes()
         return send_file(io.BytesIO(payload), as_attachment=True, download_name=f'{filename_base}.docx', mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 
+
+# =========================
+# ENCAMINHAMENTO PARA ESPECIALISTA
+# =========================
+def encaminhamento_clean_text(value: str, upper: bool = False) -> str:
+    value = (value or '').strip()
+    value = re.sub(r'\s+', ' ', value)
+    return value.upper() if upper else value
+
+
+def encaminhamento_title_name(value: str) -> str:
+    value = encaminhamento_clean_text(value)
+    if not value:
+        return ''
+    return ' '.join(part.capitalize() for part in value.split())
+
+
+def encaminhamento_format_date(raw_date: str) -> str:
+    if raw_date:
+        dt = datetime.strptime(raw_date, '%Y-%m-%d').date()
+    else:
+        dt = datetime.today().date()
+    return dt.strftime('%d/%m/%Y')
+
+
+def docx_replace_paragraph(paragraph, text: str, bold: bool = False, alignment=None):
+    for run in list(paragraph.runs):
+        run.text = ''
+    run = paragraph.add_run(text)
+    run.bold = bold
+    if alignment is not None:
+        paragraph.alignment = alignment
+
+
+def gerar_encaminhamento_especialista_docx(empresa: str, funcionario: str, rg: str, cpf: str, data_doc: str, especialista: str, output_path: str):
+    empresa_upper = encaminhamento_clean_text(empresa, upper=True)
+    funcionario_upper = encaminhamento_clean_text(funcionario, upper=True)
+    funcionario_frase = encaminhamento_title_name(funcionario)
+    rg_clean = encaminhamento_clean_text(rg)
+    cpf_clean = encaminhamento_clean_text(cpf)
+    especialista_clean = encaminhamento_title_name(especialista)
+    data_fmt = encaminhamento_format_date(data_doc)
+
+    doc = Document(ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE_PATH)
+    for paragraph in doc.paragraphs:
+        text = paragraph.text.strip()
+        if text.startswith('Empresa :'):
+            docx_replace_paragraph(paragraph, f'Empresa : {empresa_upper}', bold=True)
+        elif text.startswith('Funcionário:'):
+            docx_replace_paragraph(paragraph, f'Funcionário: {funcionario_upper} RG: {rg_clean} CPF: {cpf_clean}', bold=True)
+        elif text.startswith('Encaminho o(a) colaborador(a)'):
+            docx_replace_paragraph(paragraph, f'Encaminho o(a) colaborador(a)\u00a0{funcionario_frase}, para avaliação com especialista {especialista_clean}.', bold=True)
+        elif text.startswith('BELÉM, PA,'):
+            # Mantém a assinatura que já existe no mesmo parágrafo, quando houver.
+            assinatura = ''
+            if '__________________________' in paragraph.text:
+                assinatura = '\n\n__________________________ \nMÉDICO EXAMINADOR'
+            docx_replace_paragraph(paragraph, f'BELÉM, PA,{data_fmt}{assinatura}', bold=True)
+    doc.save(output_path)
+
+
+def encaminhamento_especialista_render(form_data=None):
+    form_data = form_data or {}
+    return render_template('encaminhamento_especialista.html',
+                           title='Encaminhamento',
+                           today=form_data.get('data_documento') or datetime.today().strftime('%Y-%m-%d'),
+                           form_data=form_data)
+
+
+@app.route('/encaminhamento-especialista', methods=['GET'])
+def encaminhamento_especialista():
+    return encaminhamento_especialista_render()
+
+
+@app.route('/encaminhamento-especialista/gerar', methods=['POST'])
+def encaminhamento_especialista_gerar():
+    form_data = request.form.to_dict(flat=True)
+    empresa = encaminhamento_clean_text(request.form.get('empresa', ''), upper=True)
+    funcionario = encaminhamento_clean_text(request.form.get('funcionario', ''), upper=True)
+    rg = encaminhamento_clean_text(request.form.get('rg', ''))
+    cpf = encaminhamento_clean_text(request.form.get('cpf', ''))
+    data_documento = request.form.get('data_documento', '')
+    especialista = encaminhamento_clean_text(request.form.get('especialista', ''))
+
+    if not empresa or not funcionario or not rg or not cpf or not especialista:
+        flash('Preencha empresa, funcionário, RG, CPF e especialista.', 'error')
+        return encaminhamento_especialista_render(form_data)
+
+    if len(somente_numeros(cpf)) != 11:
+        flash('CPF inválido. Informe os 11 números do CPF.', 'error')
+        return encaminhamento_especialista_render(form_data)
+
+    filename_base = sanitize_filename(f'ENCAMINHAMENTO - {funcionario}')
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_path = os.path.join(tmpdir, f'{filename_base}.docx')
+        try:
+            gerar_encaminhamento_especialista_docx(empresa, funcionario, rg, cpf, data_documento, especialista, output_path)
+        except Exception:
+            logger.exception('Erro ao gerar encaminhamento para especialista')
+            flash('Não foi possível gerar o encaminhamento. Confira os dados e tente novamente.', 'error')
+            return encaminhamento_especialista_render(form_data)
+        payload = Path(output_path).read_bytes()
+        return send_file(io.BytesIO(payload), as_attachment=True, download_name=f'{filename_base}.docx', mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 
 @app.route("/healthz")
 def healthz():

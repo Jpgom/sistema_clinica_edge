@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-badge">E</div>
+      <div>EDGE<small>Encaminhamento</small></div>
+    </div>
+    <div class="nav-card">
+      <a class="nav-link" href="{{ url_for('home') }}">🏠 Início</a>
+      <a class="nav-link" href="{{ url_for('relatorios') }}">📊 Relatórios</a>
+      <a class="nav-link" href="{{ url_for('encaminhamentos') }}">📄 Encaminhamentos em lote</a>
+      <a class="nav-link active" href="{{ url_for('encaminhamento_especialista') }}">📝 Encaminhamento individual</a>
+      <a class="nav-link" href="{{ url_for('renumerador') }}">🔢 Renumerador</a>
+      <a class="nav-link" href="{{ url_for('esocial') }}">🗂️ E-SOCIAL</a>
+      <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
+      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
+      {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link" href="{{ url_for('auditoria') }}">📋 Auditoria</a>{% endif %}
+      <a class="nav-link" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}">🚪 Sair</a>
+    </div>
+  </aside>
+
+  <main class="main-area">
+    <div class="topbar compact-topbar">
+      <div class="page-title">
+        <h1>Encaminhamento individual</h1>
+        <p>Preencha os dados e baixe o Word pronto para impressão.</p>
+      </div>
+      <div class="user-pill"><div class="avatar"></div><div><strong>EDGE</strong><div class="muted">Word automático</div></div></div>
+    </div>
+
+    <section class="content-card" id="formulario">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <div class="section-head">
+        <div>
+          <h2>Criar encaminhamento</h2>
+          <p>O sistema mantém o texto padrão e altera somente os dados preenchidos.</p>
+        </div>
+      </div>
+
+      <form action="{{ url_for('encaminhamento_especialista_gerar') }}" method="post" id="encaminhamentoEspecialistaForm">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="form-grid">
+          <div class="field col-2">
+            <label for="empresa">Empresa</label>
+            <input id="empresa" name="empresa" type="text" required placeholder="Nome completo da empresa" value="{{ form_data.get('empresa','') }}">
+          </div>
+
+          <div class="field col-2">
+            <label for="funcionario">Funcionário</label>
+            <input id="funcionario" name="funcionario" type="text" required placeholder="Nome completo do funcionário" value="{{ form_data.get('funcionario','') }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="rg">RG</label>
+            <input id="rg" name="rg" type="text" required placeholder="Ex.: 3929773" value="{{ form_data.get('rg','') }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="cpf">CPF</label>
+            <input id="cpf" name="cpf" type="text" required maxlength="14" placeholder="000.000.000-00" value="{{ form_data.get('cpf','') }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="especialista">Especialista</label>
+            <input id="especialista" name="especialista" type="text" required placeholder="Ex.: Ortopedista" value="{{ form_data.get('especialista','') }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="data_documento">Data</label>
+            <input id="data_documento" name="data_documento" type="date" value="{{ form_data.get('data_documento', today) }}">
+          </div>
+        </div>
+
+        <div class="info-box" style="margin-top:18px">
+          <strong>Frase padrão:</strong><br>
+          Encaminho o(a) colaborador(a) <strong>FUNCIONÁRIO</strong>, para avaliação com especialista <strong>ESPECIALISTA</strong>.
+        </div>
+
+        <div class="actions inline-actions">
+          <button class="btn btn--primary" type="submit">Gerar Word</button>
+          <a class="btn btn--light" href="{{ url_for('home') }}">Voltar ao início</a>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+<script>
+const cpfInput = document.getElementById('cpf');
+function applyCpfMask(value){
+  const digits = value.replace(/\D/g,'').slice(0,11);
+  return digits
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+}
+cpfInput.addEventListener('input', e => { e.target.value = applyCpfMask(e.target.value); });
+cpfInput.value = applyCpfMask(cpfInput.value);
+</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

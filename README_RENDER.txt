@@ -23,3 +23,6 @@ ADMIN_NAME=Administrador
 Se ADMIN_USERNAME e ADMIN_PASSWORD forem definidos, o sistema cria o admin automaticamente na primeira inicialização, caso ele ainda não exista.
 
 Depois do primeiro login, é recomendado remover ADMIN_PASSWORD do ambiente ou trocar a senha pela tela Minha conta.
+
+
+Arquitetura: consulte ARQUITETURA_MODULAR.md para a estrutura edge_app/routes, services, workers, models, auth, utils, templates e static.

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}"></head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-badge">E</div>
+      <div>EDGE<small>Sistema unificado</small></div>
+    </div>
+    <div class="nav-card">
+      <a class="nav-link active" href="{{ url_for('home') }}">🏠 Início</a>
+      <a class="nav-link" href="{{ url_for('relatorios') }}">📊 Relatórios</a>
+      <a class="nav-link" href="{{ url_for('encaminhamentos') }}">📄 Encaminhamentos</a>
+      <a class="nav-link" href="{{ url_for('renumerador') }}">🔢 Renumerador</a>
+      <a class="nav-link" href="{{ url_for('esocial') }}">🗂️ E-SOCIAL</a>
+      <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
+          {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
+      {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link" href="{{ url_for('auditoria') }}">📋 Auditoria</a>{% endif %}
+      <a class="nav-link" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}">🚪 Sair</a>
+    </div>
+  </aside>
+
+  <main class="main-area">
+
+    <section class="dashboard-grid compact-cards" aria-label="Módulos do sistema">
+      <div class="feature-card" data-icon="📊"><h3>Relatórios</h3><p>Relatório de periódicos e base mensal em ZIP.</p><a class="btn btn--primary" href="{{ url_for('relatorios') }}">Abrir</a></div>
+      <div class="feature-card" data-icon="📄"><h3>Encaminhamentos</h3><p>Geração padronizada por empresa e funcionário.</p><a class="btn btn--primary" href="{{ url_for('encaminhamentos') }}">Abrir</a></div>
+      <div class="feature-card" data-icon="🔢"><h3>Renumerador</h3><p>Recibos Word renumerados em lote.</p><a class="btn btn--primary" href="{{ url_for('renumerador') }}">Abrir</a></div>
+      <div class="feature-card" data-icon="🗂️"><h3>E-SOCIAL</h3><p>Conferência e geração por empresa.</p><a class="btn btn--primary" href="{{ url_for('esocial') }}">Abrir</a></div>
+      <div class="feature-card" data-icon="🩺"><h3>Físico e Mental</h3><p>Atestados rápidos com cadastros reutilizáveis.</p><a class="btn btn--primary" href="{{ url_for('fisico_mental') }}">Abrir</a></div>
+    </section>
+  </main>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

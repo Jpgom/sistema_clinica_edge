@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}"></head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-badge">E</div><div>EDGE<small>Administração</small></div></div>
+    <div class="nav-card">
+      <a class="nav-link" href="{{ url_for('home') }}">🏠 Início</a>
+      <a class="nav-link" href="{{ url_for('relatorios') }}">📊 Relatórios</a>
+      <a class="nav-link" href="{{ url_for('encaminhamentos') }}">📄 Encaminhamentos</a>
+      <a class="nav-link" href="{{ url_for('renumerador') }}">🔢 Renumerador</a>
+      <a class="nav-link" href="{{ url_for('esocial') }}">🗂️ E-SOCIAL</a>
+      <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
+      <a class="nav-link active" href="{{ url_for('usuarios') }}">👥 Usuários</a>
+      <a class="nav-link" href="{{ url_for('auditoria') }}">📋 Auditoria</a>
+      <a class="nav-link" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}">🚪 Sair</a>
+    </div>
+  </aside>
+  <main class="main-area">
+    <div class="topbar compact-topbar">
+      <div class="page-title"><span class="eyebrow">Controle de acesso</span><h1>Usuários do sistema</h1><p>Somente administradores podem criar, editar, desativar ou excluir usuários.</p></div>
+      <div class="user-pill"><div class="avatar"></div><div><strong>{{ current_user['nome'] }}</strong><div class="muted">{{ user_roles[current_user['cargo']] }}</div></div></div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <section class="content-card">
+      <div class="section-header"><div><span class="eyebrow">Novo acesso</span><h2>Criar usuário</h2></div></div>
+      <form method="post" action="{{ url_for('usuarios_criar') }}">
+        <div class="form-grid">
+          <div class="field col-1"><label>Nome</label><input name="nome" type="text" required placeholder="Nome completo"></div>
+          <div class="field col-1"><label>Usuário</label><input name="username" type="text" required placeholder="login.usuario"></div>
+          <div class="field col-1"><label>Cargo</label><select name="cargo" required>{% for key, label in roles.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select><small class="field-help">Administrador gerencia usuários. Visualizador não altera dados.</small></div>
+          <div class="field col-1"><label>Senha inicial</label><input name="password" type="password" required minlength="8" placeholder="Mínimo 8 caracteres, letras e números"></div>
+          <div class="field col-2 check-field"><label><input type="checkbox" name="precisa_trocar_senha" value="1" checked> Exigir troca de senha no primeiro acesso</label></div>
+        </div>
+        <div class="actions"><button class="btn btn--primary" type="submit">Criar usuário</button></div>
+      </form>
+    </section>
+
+    <section class="content-card">
+      <div class="section-header"><div><span class="eyebrow">Acessos cadastrados</span><h2>Gerenciar usuários</h2></div></div>
+      <div class="table-wrap users-table-wrap">
+        <table class="data-table users-table">
+          <thead><tr><th>Nome</th><th>Usuário</th><th>Cargo</th><th>Status</th><th>Senha</th><th>Ações</th></tr></thead>
+          <tbody>
+          {% for user in usuarios %}
+            <tr>
+              <td colspan="6">
+                <form class="user-row-form" method="post" action="{{ url_for('usuarios_editar') }}">
+                  <input type="hidden" name="id" value="{{ user['id'] }}">
+                  <div class="user-row-grid">
+                    <input name="nome" value="{{ user['nome'] }}" required>
+                    <input name="username" value="{{ user['username'] }}" required>
+                    <select name="cargo" required>{% for key, label in roles.items() %}<option value="{{ key }}" {% if user['cargo'] == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+                    <select name="ativo"><option value="1" {% if user['ativo'] == 1 %}selected{% endif %}>Ativo</option><option value="0" {% if user['ativo'] == 0 %}selected{% endif %}>Inativo</option></select>
+                    <div><input name="password" type="password" placeholder="Manter senha atual"><label class="mini-check"><input type="checkbox" name="precisa_trocar_senha" value="1" {% if user['precisa_trocar_senha'] == 1 %}checked{% endif %}> exigir troca</label><small class="field-help">Último login: {{ user['ultimo_login'] or 'Nunca' }}</small></div>
+                    <div class="row-actions"><button class="btn btn--secondary" type="submit">Salvar</button>
+                </form>
+                <form method="post" action="{{ url_for('usuarios_excluir') }}" onsubmit="return confirm('Excluir este usuário?')">
+                  <input type="hidden" name="id" value="{{ user['id'] }}">
+                  <button class="btn btn--danger" type="submit">Excluir</button>
+                </form></div></div>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="helper-box">Cargos disponíveis: <strong>Administrador</strong> gerencia usuários; <strong>Operador</strong> usa as funcionalidades; <strong>Visualizador</strong> possui acesso ao sistema, reservado para consultas futuras.</div>
+    </section>
+  </main>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -26,7 +26,7 @@ try:
 except Exception:
     psycopg2 = None
 
-app = Flask(__name__, template_folder="../templates", static_folder="../static")
+app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", 75 * 1024 * 1024))
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -1925,7 +1925,7 @@ def esocial_processar():
 # =========================
 # FILA ASSÍNCRONA PARA PROCESSAMENTOS PESADOS
 # =========================
-from edge_app.async_jobs import JobManager
+from edge_app.workers.jobs import JobManager
 
 JOBS_DIR = os.path.join(DATA_DIR, "jobs")
 job_manager = JobManager(

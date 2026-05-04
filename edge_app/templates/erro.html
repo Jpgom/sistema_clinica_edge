@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ codigo }} - {{ titulo }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body>
+<div class="login-page">
+  <section class="login-card error-page-card">
+    <div class="brand login-brand"><div class="brand-badge">E</div><div>EDGE<small>Proteção do sistema</small></div></div>
+    <span class="error-code">{{ codigo }}</span>
+    <h1>{{ titulo }}</h1>
+    <p class="muted">{{ mensagem }}</p>
+    <div class="actions">
+      <a class="btn btn--primary" href="{{ url_for('home') }}">Voltar ao início</a>
+      <button class="btn btn--light" type="button" onclick="history.back()">Voltar</button>
+    </div>
+  </section>
+</div>
+</body>
+</html>

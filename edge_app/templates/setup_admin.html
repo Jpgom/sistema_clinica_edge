@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}"></head>
+<body>
+<div class="login-page">
+  <section class="login-card setup-card">
+    <div class="brand login-brand">
+      <div class="brand-badge">E</div>
+      <div>EDGE<small>Primeiro acesso</small></div>
+    </div>
+    <h1>Criar usuário administrador</h1>
+    <p class="muted">Este cadastro aparece somente quando ainda não existe nenhum usuário. O administrador poderá criar os demais acessos depois.</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <form method="post">
+      <div class="field">
+        <label for="nome">Nome do administrador</label>
+        <input id="nome" name="nome" type="text" required autocomplete="name" placeholder="Ex.: João Gomes">
+      </div>
+      <div class="field">
+        <label for="username">Usuário de login</label>
+        <input id="username" name="username" type="text" required autocomplete="username" placeholder="Ex.: joao.admin">
+      </div>
+      <div class="field">
+        <label for="password">Senha</label>
+        <input id="password" name="password" type="password" required autocomplete="new-password" minlength="8">
+      </div>
+      <div class="field">
+        <label for="confirm_password">Confirmar senha</label>
+        <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password" minlength="8">
+      </div>
+      <div class="actions">
+        <button class="btn btn--primary" type="submit">Criar administrador</button>
+      </div>
+    </form>
+  </section>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

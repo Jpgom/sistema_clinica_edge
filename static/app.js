@@ -246,3 +246,37 @@ hideLoading();
     });
   });
 })();
+
+// Refinamento UX: mostra o nome/tamanho dos arquivos selecionados abaixo de inputs comuns.
+(function () {
+  function humanSize(bytes) {
+    if (!bytes) return '0 KB';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const idx = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return `${(bytes / Math.pow(1024, idx)).toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
+  }
+
+  document.querySelectorAll('input[type="file"]').forEach((input) => {
+    if (input.hidden || ['relFilesPicker', 'relFolderPicker', 'hiddenRelFiles'].includes(input.id)) return;
+
+    let preview = input.parentElement.querySelector('.file-preview');
+    if (!preview) {
+      preview = document.createElement('small');
+      preview.className = 'file-preview';
+      preview.textContent = 'Nenhum arquivo selecionado.';
+      input.insertAdjacentElement('afterend', preview);
+    }
+
+    input.addEventListener('change', () => {
+      const files = Array.from(input.files || []);
+      if (!files.length) {
+        preview.textContent = 'Nenhum arquivo selecionado.';
+        return;
+      }
+      const total = files.reduce((sum, file) => sum + file.size, 0);
+      const firstNames = files.slice(0, 2).map(file => file.name).join(', ');
+      const extra = files.length > 2 ? ` +${files.length - 2} arquivo(s)` : '';
+      preview.textContent = `${firstNames}${extra} • ${humanSize(total)}`;
+    });
+  });
+})();

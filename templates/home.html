@@ -28,17 +28,18 @@
   </aside>
 
   <main class="main-area">
-    <div class="topbar compact-topbar">
-      <div class="page-title"><h1>{{ title }}</h1></div>
-      <div class="user-pill"><div class="avatar"></div><div><strong>EDGE</strong></div></div>
-    </div>
+    <section class="hero-banner">
+      <span class="badge">Sistema interno EDGE</span>
+      <h2>A central de automações da clínica, simples e pronta para produção.</h2>
+      <p>Gere relatórios, encaminhamentos, recibos e conferências do E-SOCIAL em uma interface limpa, rápida e segura.</p>
+    </section>
 
-    <section class="dashboard-grid compact-cards">
-      <div class="feature-card"><h3>Relatórios</h3><a class="btn btn--primary" href="{{ url_for('relatorios') }}">Abrir</a></div>
-      <div class="feature-card"><h3>Encaminhamentos</h3><a class="btn btn--primary" href="{{ url_for('encaminhamentos') }}">Abrir</a></div>
-      <div class="feature-card"><h3>Renumerador</h3><a class="btn btn--primary" href="{{ url_for('renumerador') }}">Abrir</a></div>
-      <div class="feature-card"><h3>E-SOCIAL</h3><a class="btn btn--primary" href="{{ url_for('esocial') }}">Abrir</a></div>
-      <div class="feature-card"><h3>Físico e Mental</h3><a class="btn btn--primary" href="{{ url_for('fisico_mental') }}">Abrir</a></div>
+    <section class="dashboard-grid compact-cards" aria-label="Módulos do sistema">
+      <div class="feature-card"><h3>Relatórios</h3><p>Relatório de periódicos e base mensal em ZIP.</p><a class="btn btn--primary" href="{{ url_for('relatorios') }}">Abrir</a></div>
+      <div class="feature-card"><h3>Encaminhamentos</h3><p>Geração padronizada por empresa e funcionário.</p><a class="btn btn--primary" href="{{ url_for('encaminhamentos') }}">Abrir</a></div>
+      <div class="feature-card"><h3>Renumerador</h3><p>Recibos Word renumerados em lote.</p><a class="btn btn--primary" href="{{ url_for('renumerador') }}">Abrir</a></div>
+      <div class="feature-card"><h3>E-SOCIAL</h3><p>Conferência e geração por empresa.</p><a class="btn btn--primary" href="{{ url_for('esocial') }}">Abrir</a></div>
+      <div class="feature-card"><h3>Físico e Mental</h3><p>Atestados rápidos com cadastros reutilizáveis.</p><a class="btn btn--primary" href="{{ url_for('fisico_mental') }}">Abrir</a></div>
     </section>
   </main>
 </div>

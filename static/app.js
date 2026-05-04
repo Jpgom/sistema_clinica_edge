@@ -282,7 +282,7 @@ hideLoading();
 })();
 
 
-// Redesign minimalista: transforma navegação em ícones com tooltip e adiciona cabeçalho SaaS.
+// Acabamento premium: normaliza navegação em ícone + label e adiciona cabeçalho sem campo de busca.
 (function () {
   const navLinks = document.querySelectorAll('.nav-link');
   navLinks.forEach((link) => {
@@ -308,7 +308,6 @@ hideLoading();
       <p>${today} • ${pageTitle}</p>
     </div>
     <div class="dashboard-tools">
-      <input class="dashboard-search" type="search" placeholder="Buscar no sistema" aria-label="Buscar no sistema">
       <div class="dashboard-avatar" aria-label="Usuário">E</div>
     </div>`;
   main.insertBefore(header, main.firstElementChild);

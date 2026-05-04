@@ -545,7 +545,6 @@ def login():
 def logout():
     audit_log('logout', 'Usuário saiu do sistema.')
     session.clear()
-    flash('Você saiu do sistema.', 'success')
     return redirect(url_for('login'))
 
 @app.route('/minha-conta', methods=['GET', 'POST'])

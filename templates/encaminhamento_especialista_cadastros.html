@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-badge">E</div>
+      <div>EDGE<small>Cadastros</small></div>
+    </div>
+    <div class="nav-card">
+      <a class="nav-link" href="{{ url_for('home') }}">🏠 Início</a>
+      <a class="nav-link" href="{{ url_for('relatorios') }}">📊 Relatórios</a>
+      <a class="nav-link" href="{{ url_for('encaminhamentos') }}">📄 Encaminhamentos em lote</a>
+      <a class="nav-link" href="{{ url_for('encaminhamento_especialista') }}">📝 Encaminhamento individual</a>
+      <a class="nav-link active" href="{{ url_for('encaminhamento_especialista_cadastros') }}">⚙️ Cadastros de encaminhamento</a>
+      <a class="nav-link" href="{{ url_for('renumerador') }}">🔢 Renumerador</a>
+      <a class="nav-link" href="{{ url_for('esocial') }}">🗂️ E-SOCIAL</a>
+      <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
+      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
+      <a class="nav-link" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}">🚪 Sair</a>
+    </div>
+  </aside>
+
+  <main class="main-area">
+    <div class="topbar compact-topbar">
+      <div class="page-title">
+        <h1>Cadastros de encaminhamento</h1>
+        <p>Cadastre empresas e especialistas para agilizar o preenchimento do Word.</p>
+      </div>
+      <div class="user-pill"><div class="avatar"></div><div><strong>EDGE</strong><div class="muted">Cadastros rápidos</div></div></div>
+    </div>
+
+    <section class="content-card">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <div class="section-head">
+        <div>
+          <h2>Empresas</h2>
+          <p>As empresas cadastradas aparecerão como sugestão no campo Empresa.</p>
+        </div>
+      </div>
+
+      <form class="inline-form" action="{{ url_for('encaminhamento_especialista_add_empresa') }}" method="post">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="field grow">
+          <label for="empresa_nome">Nova empresa</label>
+          <input id="empresa_nome" name="nome" type="text" required placeholder="Nome da empresa">
+        </div>
+        <button class="btn btn--primary" type="submit">Cadastrar empresa</button>
+      </form>
+
+      <div class="table-wrap compact-list">
+        <table>
+          <thead><tr><th>Empresa cadastrada</th><th style="width:120px">Ação</th></tr></thead>
+          <tbody>
+            {% for empresa in empresas %}
+            <tr>
+              <td>{{ empresa['nome'] }}</td>
+              <td>
+                <form action="{{ url_for('encaminhamento_especialista_remover_cadastro') }}" method="post" onsubmit="return confirm('Remover esta empresa?')">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="tipo" value="empresa">
+                  <input type="hidden" name="id" value="{{ empresa['id'] }}">
+                  <button class="btn btn--danger btn--sm" type="submit">Remover</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="2" class="muted">Nenhuma empresa cadastrada ainda.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="content-card" style="margin-top:20px">
+      <div class="section-head">
+        <div>
+          <h2>Especialistas</h2>
+          <p>Os especialistas cadastrados aparecerão como sugestão no campo Especialista.</p>
+        </div>
+      </div>
+
+      <form class="inline-form" action="{{ url_for('encaminhamento_especialista_add_especialista') }}" method="post">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="field grow">
+          <label for="especialista_nome">Novo especialista</label>
+          <input id="especialista_nome" name="nome" type="text" required placeholder="Ex.: Ortopedista">
+        </div>
+        <button class="btn btn--primary" type="submit">Cadastrar especialista</button>
+      </form>
+
+      <div class="table-wrap compact-list">
+        <table>
+          <thead><tr><th>Especialista cadastrado</th><th style="width:120px">Ação</th></tr></thead>
+          <tbody>
+            {% for especialista in especialistas %}
+            <tr>
+              <td>{{ especialista['nome'] }}</td>
+              <td>
+                <form action="{{ url_for('encaminhamento_especialista_remover_cadastro') }}" method="post" onsubmit="return confirm('Remover este especialista?')">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="tipo" value="especialista">
+                  <input type="hidden" name="id" value="{{ especialista['id'] }}">
+                  <button class="btn btn--danger btn--sm" type="submit">Remover</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="2" class="muted">Nenhum especialista cadastrado ainda.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="actions inline-actions">
+        <a class="btn btn--light" href="{{ url_for('encaminhamento_especialista') }}">Voltar ao encaminhamento</a>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

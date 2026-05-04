@@ -1817,6 +1817,75 @@ def encaminhamento_title_name(value: str) -> str:
     return ' '.join(part.capitalize() for part in value.split())
 
 
+def encaminhamento_empresa_name(value: str) -> str:
+    return encaminhamento_clean_text(value, upper=True)
+
+
+def encaminhamento_especialista_name(value: str) -> str:
+    return encaminhamento_title_name(value)
+
+
+def init_encaminhamento_db():
+    """Cria os cadastros usados no encaminhamento individual.
+
+    Usa o mesmo banco configurado em DATABASE_URL quando existir; caso contrário,
+    usa o SQLite local de compatibilidade.
+    """
+    with auth_get_conn() as conn:
+        db_execute(conn, f"""CREATE TABLE IF NOT EXISTS encaminhamento_empresas (
+            id {db_id_type()},
+            nome TEXT NOT NULL UNIQUE,
+            criado_em TEXT NOT NULL
+        )""")
+        db_execute(conn, f"""CREATE TABLE IF NOT EXISTS encaminhamento_especialistas (
+            id {db_id_type()},
+            nome TEXT NOT NULL UNIQUE,
+            criado_em TEXT NOT NULL
+        )""")
+        conn.commit()
+
+
+def encaminhamento_listar_cadastros(table_name: str):
+    if table_name not in {'encaminhamento_empresas', 'encaminhamento_especialistas'}:
+        return []
+    with auth_get_conn() as conn:
+        return db_fetchall(conn, f"SELECT id, nome FROM {table_name} ORDER BY nome")
+
+
+def encaminhamento_add_cadastro(table_name: str, nome: str) -> tuple[bool, str]:
+    if table_name == 'encaminhamento_empresas':
+        nome = encaminhamento_empresa_name(nome)
+        label = 'Empresa'
+    elif table_name == 'encaminhamento_especialistas':
+        nome = encaminhamento_especialista_name(nome)
+        label = 'Especialista'
+    else:
+        return False, 'Cadastro inválido.'
+    if not nome:
+        return False, f'Informe o nome de {label.lower()}.'
+    try:
+        with auth_get_conn() as conn:
+            db_execute(conn, f"INSERT INTO {table_name} (nome, criado_em) VALUES ({db_param()}, {db_param()})", (nome, datetime.now().isoformat(timespec='seconds')))
+            conn.commit()
+        return True, f'{label} cadastrado(a) com sucesso.'
+    except Exception:
+        logger.exception('Erro ao cadastrar item de encaminhamento')
+        return False, f'Não foi possível cadastrar. Talvez {label.lower()} já exista.'
+
+
+def encaminhamento_delete_cadastro(table_name: str, item_id: str) -> tuple[bool, str]:
+    if table_name not in {'encaminhamento_empresas', 'encaminhamento_especialistas'}:
+        return False, 'Cadastro inválido.'
+    try:
+        with auth_get_conn() as conn:
+            db_execute(conn, f"DELETE FROM {table_name} WHERE id = {db_param()}", (item_id,))
+            conn.commit()
+        return True, 'Cadastro removido com sucesso.'
+    except Exception:
+        logger.exception('Erro ao remover cadastro de encaminhamento')
+        return False, 'Não foi possível remover o cadastro.'
+
+
 def encaminhamento_format_date(raw_date: str) -> str:
     if raw_date:
         dt = datetime.strptime(raw_date, '%Y-%m-%d').date()
@@ -1834,26 +1903,47 @@ def docx_replace_paragraph(paragraph, text: str, bold: bool = False, alignment=N
         paragraph.alignment = alignment
 
 
+def docx_replace_paragraph_parts(paragraph, parts, alignment=None):
+    """Substitui o parágrafo preservando a regra de negrito por trecho.
+
+    parts: lista de tuplas (texto, bold).
+    """
+    for run in list(paragraph.runs):
+        run.text = ''
+    for text, bold in parts:
+        if text:
+            run = paragraph.add_run(text)
+            run.bold = bool(bold)
+    if alignment is not None:
+        paragraph.alignment = alignment
+
+
 def gerar_encaminhamento_especialista_docx(empresa: str, funcionario: str, rg: str, cpf: str, data_doc: str, especialista: str, output_path: str):
-    empresa_upper = encaminhamento_clean_text(empresa, upper=True)
+    empresa_upper = encaminhamento_empresa_name(empresa)
     funcionario_upper = encaminhamento_clean_text(funcionario, upper=True)
     funcionario_frase = encaminhamento_title_name(funcionario)
     rg_clean = encaminhamento_clean_text(rg)
     cpf_clean = encaminhamento_clean_text(cpf)
-    especialista_clean = encaminhamento_title_name(especialista)
+    especialista_clean = encaminhamento_especialista_name(especialista)
     data_fmt = encaminhamento_format_date(data_doc)
 
     doc = Document(ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE_PATH)
     for paragraph in doc.paragraphs:
         text = paragraph.text.strip()
         if text.startswith('Empresa :'):
-            docx_replace_paragraph(paragraph, f'Empresa : {empresa_upper}', bold=True)
+            # Regra solicitada: dados preenchidos da primeira parte NÃO ficam em negrito.
+            docx_replace_paragraph_parts(paragraph, [('Empresa : ', True), (empresa_upper, False)])
         elif text.startswith('Funcionário:'):
-            docx_replace_paragraph(paragraph, f'Funcionário: {funcionario_upper} RG: {rg_clean} CPF: {cpf_clean}', bold=True)
+            docx_replace_paragraph_parts(paragraph, [
+                ('Funcionário: ', True), (funcionario_upper, False),
+                (' RG: ', True), (rg_clean, False),
+                (' CPF: ', True), (cpf_clean, False),
+            ])
         elif text.startswith('Encaminho o(a) colaborador(a)'):
-            docx_replace_paragraph(paragraph, f'Encaminho o(a) colaborador(a)\u00a0{funcionario_frase}, para avaliação com especialista {especialista_clean}.', bold=True)
+            # A frase permanece em negrito conforme o modelo original.
+            docx_replace_paragraph(paragraph, f'Encaminho o(a) colaborador(a) {funcionario_frase}, para avaliação com especialista {especialista_clean}.', bold=True)
         elif text.startswith('BELÉM, PA,'):
-            # Mantém a assinatura que já existe no mesmo parágrafo, quando houver.
+            # A data permanece em negrito conforme solicitado.
             assinatura = ''
             if '__________________________' in paragraph.text:
                 assinatura = '\n\n__________________________ \nMÉDICO EXAMINADOR'
@@ -1866,7 +1956,12 @@ def encaminhamento_especialista_render(form_data=None):
     return render_template('encaminhamento_especialista.html',
                            title='Encaminhamento',
                            today=form_data.get('data_documento') or datetime.today().strftime('%Y-%m-%d'),
+                           empresas=encaminhamento_listar_cadastros('encaminhamento_empresas'),
+                           especialistas=encaminhamento_listar_cadastros('encaminhamento_especialistas'),
                            form_data=form_data)
+
+
+init_encaminhamento_db()
 
 
 @app.route('/encaminhamento-especialista', methods=['GET'])
@@ -1874,15 +1969,46 @@ def encaminhamento_especialista():
     return encaminhamento_especialista_render()
 
 
+@app.route('/encaminhamento-especialista/cadastros', methods=['GET'])
+def encaminhamento_especialista_cadastros():
+    return render_template('encaminhamento_especialista_cadastros.html',
+                           title='Cadastros de Encaminhamento',
+                           empresas=encaminhamento_listar_cadastros('encaminhamento_empresas'),
+                           especialistas=encaminhamento_listar_cadastros('encaminhamento_especialistas'))
+
+
+@app.route('/encaminhamento-especialista/cadastros/empresa', methods=['POST'])
+def encaminhamento_especialista_add_empresa():
+    ok, msg = encaminhamento_add_cadastro('encaminhamento_empresas', request.form.get('nome', ''))
+    flash(msg, 'success' if ok else 'error')
+    return redirect(url_for('encaminhamento_especialista_cadastros'))
+
+
+@app.route('/encaminhamento-especialista/cadastros/especialista', methods=['POST'])
+def encaminhamento_especialista_add_especialista():
+    ok, msg = encaminhamento_add_cadastro('encaminhamento_especialistas', request.form.get('nome', ''))
+    flash(msg, 'success' if ok else 'error')
+    return redirect(url_for('encaminhamento_especialista_cadastros'))
+
+
+@app.route('/encaminhamento-especialista/cadastros/remover', methods=['POST'])
+def encaminhamento_especialista_remover_cadastro():
+    tipo = request.form.get('tipo')
+    table = 'encaminhamento_empresas' if tipo == 'empresa' else 'encaminhamento_especialistas' if tipo == 'especialista' else ''
+    ok, msg = encaminhamento_delete_cadastro(table, request.form.get('id', ''))
+    flash(msg, 'success' if ok else 'error')
+    return redirect(url_for('encaminhamento_especialista_cadastros'))
+
+
 @app.route('/encaminhamento-especialista/gerar', methods=['POST'])
 def encaminhamento_especialista_gerar():
     form_data = request.form.to_dict(flat=True)
-    empresa = encaminhamento_clean_text(request.form.get('empresa', ''), upper=True)
+    empresa = encaminhamento_empresa_name(request.form.get('empresa', ''))
     funcionario = encaminhamento_clean_text(request.form.get('funcionario', ''), upper=True)
     rg = encaminhamento_clean_text(request.form.get('rg', ''))
     cpf = encaminhamento_clean_text(request.form.get('cpf', ''))
     data_documento = request.form.get('data_documento', '')
-    especialista = encaminhamento_clean_text(request.form.get('especialista', ''))
+    especialista = encaminhamento_especialista_name(request.form.get('especialista', ''))
 
     if not empresa or not funcionario or not rg or not cpf or not especialista:
         flash('Preencha empresa, funcionário, RG, CPF e especialista.', 'error')

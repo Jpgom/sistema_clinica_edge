@@ -343,3 +343,15 @@ img,svg,video{max-width:100%;height:auto}
 @media (max-width: 380px){
   .nav-card{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* Cadastros de encaminhamento */
+.inline-form{display:flex;gap:14px;align-items:end;flex-wrap:wrap;margin-bottom:18px}
+.inline-form .grow{flex:1 1 360px}
+.btn--sm{min-height:34px;padding:8px 11px;border-radius:10px;font-size:12px}
+.compact-list{margin-top:10px}
+.compact-list table{min-width:0}
+@media (max-width: 760px){
+  .inline-form{display:grid;grid-template-columns:1fr;align-items:stretch}
+  .inline-form .btn{width:100%}
+  .compact-list table{min-width:540px}
+}

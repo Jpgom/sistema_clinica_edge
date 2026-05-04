@@ -19,6 +19,7 @@
       <a class="nav-link" href="{{ url_for('relatorios') }}">📊 Relatórios</a>
       <a class="nav-link" href="{{ url_for('encaminhamentos') }}">📄 Encaminhamentos em lote</a>
       <a class="nav-link active" href="{{ url_for('encaminhamento_especialista') }}">📝 Encaminhamento individual</a>
+      <a class="nav-link" href="{{ url_for('encaminhamento_especialista_cadastros') }}">⚙️ Cadastros de encaminhamento</a>
       <a class="nav-link" href="{{ url_for('renumerador') }}">🔢 Renumerador</a>
       <a class="nav-link" href="{{ url_for('esocial') }}">🗂️ E-SOCIAL</a>
       <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
@@ -59,7 +60,10 @@
         <div class="form-grid">
           <div class="field col-2">
             <label for="empresa">Empresa</label>
-            <input id="empresa" name="empresa" type="text" required placeholder="Nome completo da empresa" value="{{ form_data.get('empresa','') }}">
+            <input id="empresa" name="empresa" list="empresasList" type="text" required placeholder="Digite ou selecione a empresa" value="{{ form_data.get('empresa','') }}">
+            <datalist id="empresasList">
+              {% for empresa in empresas %}<option value="{{ empresa['nome'] }}"></option>{% endfor %}
+            </datalist>
           </div>
 
           <div class="field col-2">
@@ -79,7 +83,10 @@
 
           <div class="field col-1">
             <label for="especialista">Especialista</label>
-            <input id="especialista" name="especialista" type="text" required placeholder="Ex.: Ortopedista" value="{{ form_data.get('especialista','') }}">
+            <input id="especialista" name="especialista" list="especialistasList" type="text" required placeholder="Digite ou selecione" value="{{ form_data.get('especialista','') }}">
+            <datalist id="especialistasList">
+              {% for especialista in especialistas %}<option value="{{ especialista['nome'] }}"></option>{% endfor %}
+            </datalist>
           </div>
 
           <div class="field col-1">
@@ -95,6 +102,7 @@
 
         <div class="actions inline-actions">
           <button class="btn btn--primary" type="submit">Gerar Word</button>
+          <a class="btn btn--light" href="{{ url_for('encaminhamento_especialista_cadastros') }}">Cadastrar empresas/especialistas</a>
           <a class="btn btn--light" href="{{ url_for('home') }}">Voltar ao início</a>
         </div>
       </form>

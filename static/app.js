@@ -234,17 +234,43 @@ hideLoading();
 
 
 (function () {
+  function setSubmitProcessing(submit) {
+    if (!submit || submit.dataset.keepEnabled === '1') return;
+    if (!submit.dataset.originalText) {
+      submit.dataset.originalText = submit.textContent || submit.value || 'Processar';
+    }
+    submit.dataset.processing = '1';
+    submit.disabled = true;
+    if (submit.tagName === 'BUTTON') submit.textContent = 'Processando...';
+    else submit.value = 'Processando...';
+  }
+
+  function resetProcessingButtons() {
+    document.querySelectorAll('[data-processing="1"]').forEach((submit) => {
+      submit.disabled = false;
+      const original = submit.dataset.originalText || 'Processar';
+      if (submit.tagName === 'BUTTON') submit.textContent = original;
+      else submit.value = original;
+      delete submit.dataset.processing;
+    });
+  }
+
   document.querySelectorAll('form').forEach((form) => {
     form.addEventListener('submit', () => {
       const submit = form.querySelector('button[type="submit"], input[type="submit"]');
-      if (!submit || submit.dataset.keepEnabled === '1') return;
-      submit.dataset.originalText = submit.textContent || submit.value || 'Processando...';
-      setTimeout(() => {
-        submit.disabled = true;
-        if (submit.tagName === 'BUTTON') submit.textContent = 'Processando...';
-      }, 0);
+      setTimeout(() => setSubmitProcessing(submit), 0);
+
+      // Quando o POST retorna um arquivo para download, a página não recarrega.
+      // Sem esse reset, o botão fica preso em "Processando..." e impede novo envio.
+      const resetAfter = Number(form.dataset.resetSubmitAfter || 2500);
+      if (resetAfter > 0) {
+        window.setTimeout(resetProcessingButtons, resetAfter);
+      }
     });
   });
+
+  window.addEventListener('pageshow', resetProcessingButtons);
+  window.addEventListener('focus', resetProcessingButtons);
 })();
 
 // Refinamento UX: mostra o nome/tamanho dos arquivos selecionados abaixo de inputs comuns.

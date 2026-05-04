@@ -1029,15 +1029,131 @@ def _write_docx_preserving_package(caminho_entrada: str, caminho_saida: str, doc
                     zout.writestr(item, zin.read(item.filename))
 
 
-def encontrar_ultimo_numero_xml(paragraphs, ns_map) -> str:
-    numeros = []
+def _paragraph_text_nodes_with_offsets(p, ns_map):
+    """Retorna o texto completo do parágrafo e o mapa de offsets por nó <w:t>.
+
+    Isso permite trocar apenas um trecho específico do texto sem reconstruir o
+    parágrafo inteiro. É essencial para DOCX reais, onde o Word divide um único
+    número em vários runs, por exemplo: "1" + "4" + "2".
+    """
+    w = '{%s}' % ns_map['w']
+    text_nodes = list(p.iter(w + 't'))
+    pieces = []
+    offsets = []
+    cursor = 0
+    for node in text_nodes:
+        value = node.text or ''
+        pieces.append(value)
+        offsets.append((node, cursor, cursor + len(value)))
+        cursor += len(value)
+    return ''.join(pieces), offsets
+
+
+def _replace_text_range_in_paragraph(p, ns_map, start: int, end: int, replacement: str, bold: bool | None = None) -> bool:
+    """Substitui um intervalo de caracteres preservando o máximo da formatação.
+
+    O replacement é colocado no primeiro nó de texto atingido e o trecho antigo
+    é apagado dos demais nós. Assim evitamos o erro clássico de usar
+    paragraph.text = ..., que destrói a formatação/tabelas do Word.
+    """
+    full_text, offsets = _paragraph_text_nodes_with_offsets(p, ns_map)
+    if start < 0 or end <= start or end > len(full_text):
+        return False
+
+    first_written = False
+    for node, node_start, node_end in offsets:
+        if node_end <= start or node_start >= end:
+            continue
+        local_start = max(0, start - node_start)
+        local_end = min(node_end - node_start, end - node_start)
+        current = node.text or ''
+        before = current[:local_start]
+        after = current[local_end:]
+        if not first_written:
+            node.text = before + replacement + after
+            first_written = True
+        else:
+            node.text = before + after
+
+    if bold is not None:
+        import xml.etree.ElementTree as _ET
+        _set_paragraph_bold_et(_ET, p, ns_map, bold)
+    return first_written
+
+
+def _receipt_number_match_in_paragraph(texto: str):
+    """Encontra o número do recibo dentro de um parágrafo.
+
+    Casos aceitos:
+    1. Parágrafo só com número: "00142".
+    2. Número grudado ao total: "TOTAL R$: 150,00142".
+
+    O segundo caso apareceu nos recibos reais e era a causa de arquivos não
+    renumerados. A regra só roda quando o parágrafo possui TOTAL/R$, reduzindo
+    risco de alterar CNPJ, datas ou valores indevidos.
+    """
+    raw = texto or ''
+    stripped = raw.strip()
+    if _is_receipt_number(stripped):
+        start = raw.find(stripped)
+        return start, start + len(stripped), stripped, 'numero_isolado'
+
+    normalized = normalize_text(raw)
+    if 'TOTAL' in normalized and ('R$' in raw.upper() or 'R$:' in raw.upper() or 'R$' in normalized):
+        # Ex.: TOTAL R$: 150,00TOTAL R$: 150,00142
+        match = re.search(r"(?:R\$\s*:?\s*)?\d{1,3}(?:\.\d{3})*,\d{2}(\d{1,8})\s*$", raw, re.IGNORECASE)
+        if match:
+            number = match.group(1)
+            return match.start(1), match.end(1), number, 'numero_grudado_ao_total'
+
+    return None
+
+
+def _find_receipt_number_after_nota(paragraphs, ns_map, nota_index: int, lookahead: int = 12):
+    """Busca o número do recibo depois de NOTA DE BALCÃO.
+
+    A busca para ao encontrar Data/Cliente ou outra NOTA, mas também tolera
+    documentos onde o número aparece grudado no total antes da data.
+    """
+    stop_re = re.compile(r"^\s*(Data:|CLIENTE:)", re.IGNORECASE)
+    best = None
+    for j in range(nota_index + 1, min(nota_index + lookahead + 1, len(paragraphs))):
+        texto = _paragraph_text_clean_et(paragraphs[j], ns_map)
+        if _looks_like_nota_balcao(texto):
+            break
+        match = _receipt_number_match_in_paragraph(texto)
+        if match:
+            return j, match
+        if stop_re.match(texto) and best is None:
+            break
+    return best
+
+
+def encontrar_numeros_recibos_xml(paragraphs, ns_map):
+    encontrados = []
+    pendentes = []
     for i, p in enumerate(paragraphs):
         if _looks_like_nota_balcao(_paragraph_text_clean_et(p, ns_map)):
-            for prox in paragraphs[i + 1:i + 5]:
-                num = _paragraph_text_clean_et(prox, ns_map)
-                if _is_receipt_number(num):
-                    numeros.append(num)
-                    break
+            found = _find_receipt_number_after_nota(paragraphs, ns_map, i)
+            if found:
+                paragraph_index, match = found
+                start, end, numero, tipo = match
+                encontrados.append({
+                    'nota_index': i,
+                    'paragraph_index': paragraph_index,
+                    'start': start,
+                    'end': end,
+                    'numero': numero,
+                    'tipo': tipo,
+                })
+            else:
+                pendentes.append(i)
+    return encontrados, pendentes
+
+
+def encontrar_ultimo_numero_xml(paragraphs, ns_map) -> str:
+    encontrados, _pendentes = encontrar_numeros_recibos_xml(paragraphs, ns_map)
+    numeros = [item['numero'] for item in encontrados if _is_receipt_number(item['numero'])]
     if numeros:
         return max(numeros, key=lambda x: int(x))
     return "0"
@@ -1046,34 +1162,52 @@ def encontrar_ultimo_numero_xml(paragraphs, ns_map) -> str:
 def renumerar_documento(caminho_entrada: str, caminho_saida: str, nova_data: str):
     ET, root, ns_map = _docx_xml_tree(caminho_entrada)
     paragraphs = _docx_xml_paragraphs(root, ns_map)
-    ultimo = encontrar_ultimo_numero_xml(paragraphs, ns_map)
-    tamanho = max(len(ultimo), 1)
+    encontrados, pendentes = encontrar_numeros_recibos_xml(paragraphs, ns_map)
+    numeros_originais = [item['numero'] for item in encontrados]
+    ultimo = max(numeros_originais, key=lambda x: int(x)) if numeros_originais else "0"
+    tamanho = max([len(n) for n in numeros_originais] + [len(ultimo), 1])
     numero_atual = int(ultimo) + 1
     alterados = 0
     datas_alteradas = 0
+    avisos = []
+
+    if pendentes:
+        avisos.append(f"{len(pendentes)} NOTA(S) DE BALCÃO sem número detectado")
+
+    # Remove negrito do título NOTA DE BALCÃO, mantendo o padrão usado nos recibos.
+    for item in encontrados:
+        _set_paragraph_bold_et(ET, paragraphs[item['nota_index']], ns_map, False)
+
+    for item in encontrados:
+        p = paragraphs[item['paragraph_index']]
+        novo_num = str(numero_atual).zfill(max(tamanho, len(item['numero'])))
+        # Recalcula o match no momento da substituição porque offsets podem mudar
+        # quando há mais de uma troca no mesmo parágrafo.
+        texto_atual, _offsets = _paragraph_text_nodes_with_offsets(p, ns_map)
+        match = _receipt_number_match_in_paragraph(texto_atual)
+        if not match:
+            avisos.append(f"Número original {item['numero']} não pôde ser reencontrado no parágrafo")
+            continue
+        start, end, _numero_detectado, _tipo = match
+        if _replace_text_range_in_paragraph(p, ns_map, start, end, novo_num, bold=True):
+            numero_atual += 1
+            alterados += 1
+        else:
+            avisos.append(f"Falha ao substituir número {item['numero']}")
+
     data_padrao = re.compile(r"^\s*Data:\s*\d{2}/\d{2}/\d{4}\s*$", re.IGNORECASE)
-    i = 0
-    while i < len(paragraphs):
-        p = paragraphs[i]
+    for p in paragraphs:
         texto = _paragraph_text_clean_et(p, ns_map)
-        if _looks_like_nota_balcao(texto):
-            _set_paragraph_bold_et(ET, p, ns_map, False)
-            for j in range(i + 1, min(i + 5, len(paragraphs))):
-                texto_num = _paragraph_text_clean_et(paragraphs[j], ns_map)
-                if _is_receipt_number(texto_num):
-                    novo_num = str(numero_atual).zfill(max(tamanho, len(texto_num)))
-                    if _replace_paragraph_text_et(ET, paragraphs[j], ns_map, novo_num, bold=True):
-                        numero_atual += 1
-                        alterados += 1
-                        i = j
-                    break
-        elif data_padrao.match(texto):
+        if data_padrao.match(texto):
             if _replace_paragraph_text_et(ET, p, ns_map, f"Data: {nova_data}", bold=True):
                 datas_alteradas += 1
-        i += 1
+
+    if encontrados and datas_alteradas != alterados:
+        avisos.append(f"Quantidade de datas alteradas ({datas_alteradas}) diferente de recibos renumerados ({alterados})")
+
     xml_bytes = ET.tostring(root, encoding='utf-8', xml_declaration=True)
     _write_docx_preserving_package(caminho_entrada, caminho_saida, xml_bytes)
-    return alterados, ultimo, datas_alteradas
+    return alterados, ultimo, datas_alteradas, avisos
 
 # =========================
 # E-SOCIAL
@@ -1802,10 +1936,16 @@ def renumerador():
                 relativo = caminho.relative_to(entrada_dir)
                 destino = saida_dir / relativo
                 try:
-                    alterados, ultimo, datas_alteradas = renumerar_documento(str(caminho), str(destino), nova_data)
+                    resultado = renumerar_documento(str(caminho), str(destino), nova_data)
+                    if len(resultado) == 3:
+                        alterados, ultimo, datas_alteradas = resultado
+                        avisos = []
+                    else:
+                        alterados, ultimo, datas_alteradas, avisos = resultado
                     total_arquivos += 1
                     total_recibos += alterados
-                    relatorio.append(f"{relativo.as_posix()} | último encontrado: {ultimo} | recibos renumerados: {alterados} | datas alteradas: {datas_alteradas}")
+                    detalhe_avisos = f" | avisos: {'; '.join(avisos)}" if avisos else ""
+                    relatorio.append(f"{relativo.as_posix()} | último encontrado: {ultimo} | recibos renumerados: {alterados} | datas alteradas: {datas_alteradas}{detalhe_avisos}")
                 except Exception as e:
                     relatorio.append(f"{relativo.as_posix()} | erro: {str(e)}")
 

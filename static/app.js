@@ -308,7 +308,7 @@ hideLoading();
 })();
 
 
-// Acabamento premium: normaliza navegação em ícone + label e adiciona cabeçalho sem campo de busca.
+// Acabamento premium: normaliza navegação em ícone + label e adiciona cabeçalho limpo sem busca e sem avatar.
 (function () {
   const navLinks = document.querySelectorAll('.nav-link');
   navLinks.forEach((link) => {
@@ -330,11 +330,9 @@ hideLoading();
   header.className = 'dashboard-header';
   header.innerHTML = `
     <div class="dashboard-welcome">
-      <h2>Bem-vindo ao sistema EDGE</h2>
+      <span class="eyebrow">Sistema EDGE</span>
+      <h2>Central operacional</h2>
       <p>${today} • ${pageTitle}</p>
-    </div>
-    <div class="dashboard-tools">
-      <div class="dashboard-avatar" aria-label="Usuário">E</div>
     </div>`;
   main.insertBefore(header, main.firstElementChild);
 })();

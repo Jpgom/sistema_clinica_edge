@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f5f7fb">
 <title>{{ codigo }} - {{ titulo }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 <meta name="csrf-token" content="{{ csrf_token() }}">
@@ -10,7 +11,7 @@
 <body>
 <div class="login-page">
   <section class="login-card error-page-card">
-    <div class="brand login-brand"><div class="brand-badge">E</div><div>EDGE<small>Proteção do sistema</small></div></div>
+    <div class="brand login-brand"><img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho"><div>EDGE<small>Proteção do sistema</small></div></div>
     <span class="error-code">{{ codigo }}</span>
     <h1>{{ titulo }}</h1>
     <p class="muted">{{ mensagem }}</p>

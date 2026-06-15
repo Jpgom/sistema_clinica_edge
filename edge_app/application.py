@@ -46,6 +46,12 @@ TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTOS PERIODI
 ALLOWED_EXTENSIONS = {".xls", ".xlsx", ".html", ".htm"}
 EXCEL_EXTENSIONS = {".xls", ".xlsx"}
 RENUM_ALLOWED_EXTENSIONS = {".docx", ".zip"}
+ESOCIAL_MONTHS = {
+    "JANEIRO": "JANEIRO", "FEVEREIRO": "FEVEREIRO", "MARCO": "MARÇO",
+    "ABRIL": "ABRIL", "MAIO": "MAIO", "JUNHO": "JUNHO",
+    "JULHO": "JULHO", "AGOSTO": "AGOSTO", "SETEMBRO": "SETEMBRO",
+    "OUTUBRO": "OUTUBRO", "NOVEMBRO": "NOVEMBRO", "DEZEMBRO": "DEZEMBRO",
+}
 FISICO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ATESTADO_FISICO_MENTAL_TEMPLATE.docx")
 ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE.docx")
 BASE_DIR = os.path.dirname(__file__)
@@ -1230,6 +1236,22 @@ def extract_cnpj(text: str) -> str:
     digits = re.sub(r"\D", "", ("" if text is None else str(text)))
     return digits[:14] if len(digits) >= 14 else ""
 
+def format_cnpj(cnpj: str) -> str:
+    digits = re.sub(r"\D", "", cnpj or "")
+    if len(digits) != 14:
+        return "CNPJ NÃO INFORMADO"
+    return f"{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}"
+
+def build_esocial_pdf_filename(company_text: str, company_cnpj: str, pdf_month: str) -> str:
+    company_name = str(company_text or "").strip()
+    if company_cnpj:
+        flexible_cnpj = r"\D*".join(re.escape(digit) for digit in company_cnpj)
+        company_name = re.sub(flexible_cnpj, "", company_name, count=1)
+    company_name = re.sub(r"\s*[-–—|/]\s*$", "", company_name).strip(" -–—|/")
+    company_name = company_name or "EMPRESA"
+    filename_cnpj = format_cnpj(company_cnpj).replace("/", "-")
+    return sanitize_filename(f"{company_name} - {filename_cnpj} - {pdf_month}") + ".pdf"
+
 def score_dataframe(df: pd.DataFrame) -> int:
     score = 0
     cols = [normalize_text(c) for c in df.columns]
@@ -1475,7 +1497,7 @@ def reorder_system_by_base(filtered_system: pd.DataFrame, base_company_df: pd.Da
     ordered_df = pd.DataFrame(ordered_rows)
     return ordered_df[[c for c in ordered_df.columns if c != "__CHAVE__"]].reset_index(drop=True)
 
-def run_company_process(system_file: str, base_file: str, pdf_folder: str, log_folder: str, base_sheet: str | None = None):
+def run_company_process(system_file: str, base_file: str, pdf_folder: str, log_folder: str, pdf_month: str, base_sheet: str | None = None):
     system_df = prepare_dataframe(read_spreadsheet(system_file))
     base_df = prepare_dataframe(read_spreadsheet(base_file, selected_sheet=base_sheet))
     system_nome = find_column(system_df, ["NOME"])
@@ -1516,6 +1538,7 @@ def run_company_process(system_file: str, base_file: str, pdf_folder: str, log_f
         f.write(f"Planilha do sistema: {system_file}\nPlanilha base: {base_file}\n")
         f.write(f"Aba base usada: {base_sheet or 'Detecção automática'}\n")
         f.write(f"Empresa do sistema: {company_text}\nCNPJ detectado: {company_cnpj or 'NÃO INFORMADO'}\n")
+        f.write(f"Mês usado no nome do PDF: {pdf_month}\n")
         f.write(f"Método de correspondência da empresa: {match_method}\n")
         f.write(f"Total base empresa: {len(base_company_df)}\nTotal encontrado no sistema: {len(filtered_system)}\n\n")
         if reasons:
@@ -1529,7 +1552,7 @@ def run_company_process(system_file: str, base_file: str, pdf_folder: str, log_f
         return {"empresa": company_text, "cnpj": company_cnpj, "status": "NÃO GERADO", "total_base": len(base_company_df), "total_encontrado": len(filtered_system), "motivo": " | ".join(reasons), "pdf": ""}
 
     ordered_system = reorder_system_by_base(filtered_system, base_company_df, system_nome, system_tipo, base_nome, base_tipo)
-    pdf_path = unique_path(os.path.join(pdf_folder, sanitize_filename(company_text) + ".pdf"))
+    pdf_path = unique_path(os.path.join(pdf_folder, build_esocial_pdf_filename(company_text, company_cnpj, pdf_month)))
     build_pdf(ordered_system, pdf_path, title=company_text)
     return {"empresa": company_text, "cnpj": company_cnpj, "status": "GERADO", "total_base": len(base_company_df), "total_encontrado": len(ordered_system), "motivo": "OK", "pdf": pdf_path}
 
@@ -2374,6 +2397,11 @@ def esocial_processar():
     base_file = request.files.get("base_file")
     rel_files = request.files.getlist("rel_files")
     base_sheet = request.form.get("base_sheet", "").strip() or None
+    pdf_month = ESOCIAL_MONTHS.get(normalize_text(request.form.get("pdf_month", "")))
+
+    if not pdf_month:
+        flash("Selecione o mês que será usado no nome dos PDFs.")
+        return redirect(url_for("esocial"))
 
     if not base_file or not base_file.filename:
         flash("Selecione a planilha base.")
@@ -2411,7 +2439,7 @@ def esocial_processar():
 
         for rel_path in rel_paths:
             try:
-                summary_rows.append(run_company_process(str(rel_path), str(base_path), pdf_folder, log_folder, base_sheet=base_sheet))
+                summary_rows.append(run_company_process(str(rel_path), str(base_path), pdf_folder, log_folder, pdf_month, base_sheet=base_sheet))
             except Exception:
                 logger.exception("Erro ao processar RELFUNCGERAL: %s", rel_path.name)
                 summary_rows.append({"empresa": rel_path.name, "cnpj": "", "status": "NÃO GERADO", "total_base": 0, "total_encontrado": 0, "motivo": "Erro ao processar este arquivo. Verifique o modelo da planilha.", "pdf": ""})
@@ -2422,6 +2450,7 @@ def esocial_processar():
         with open(Path(log_folder) / "RESUMO_GERAL.txt", "w", encoding="utf-8") as f:
             f.write("RESUMO GERAL DO PROCESSAMENTO\n" + "="*80 + "\n\n")
             f.write(f"Planilha base: {base_path.name}\nAba base usada: {base_sheet or 'Detecção automática'}\n")
+            f.write(f"Mês usado no nome dos PDFs: {pdf_month}\n")
             f.write(f"Total de empresas processadas: {len(summary_rows)}\n")
             f.write(f"PDFs gerados: {sum(1 for r in summary_rows if r['status']=='GERADO')}\n")
             f.write(f"PDFs não gerados: {sum(1 for r in summary_rows if r['status']!='GERADO')}\n")
@@ -2576,6 +2605,11 @@ def esocial_processar_async():
     base_file = request.files.get("base_file")
     rel_files = [f for f in request.files.getlist("rel_files") if f and f.filename]
     base_sheet = request.form.get("base_sheet", "").strip() or None
+    pdf_month = ESOCIAL_MONTHS.get(normalize_text(request.form.get("pdf_month", "")))
+
+    if not pdf_month:
+        flash("Selecione o mês que será usado no nome dos PDFs.")
+        return redirect(url_for("esocial"))
 
     ok, msg = validate_uploaded_file(base_file, ALLOWED_EXTENSIONS, "a planilha base")
     if not ok:
@@ -2603,7 +2637,7 @@ def esocial_processar_async():
         for index, rel_path in enumerate(rel_paths, start=1):
             progress(10 + int((index - 1) * 70 / total), f"Processando {rel_path.name} ({index}/{total})...")
             try:
-                summary_rows.append(run_company_process(str(rel_path), str(base_path), pdf_folder, log_folder, base_sheet=base_sheet))
+                summary_rows.append(run_company_process(str(rel_path), str(base_path), pdf_folder, log_folder, pdf_month, base_sheet=base_sheet))
             except Exception:
                 logger.exception("Erro ao processar RELFUNCGERAL em job: %s", rel_path.name)
                 summary_rows.append({"empresa": rel_path.name, "cnpj": "", "status": "NÃO GERADO", "total_base": 0, "total_encontrado": 0, "motivo": "Erro ao processar este arquivo. Verifique o modelo da planilha.", "pdf": ""})
@@ -2613,6 +2647,7 @@ def esocial_processar_async():
         with open(Path(log_folder) / "RESUMO_GERAL.txt", "w", encoding="utf-8") as f:
             f.write("RESUMO GERAL DO PROCESSAMENTO\n" + "="*80 + "\n\n")
             f.write(f"Planilha base: {base_path.name}\nAba base usada: {base_sheet or 'Detecção automática'}\n")
+            f.write(f"Mês usado no nome dos PDFs: {pdf_month}\n")
             f.write(f"Total de empresas processadas: {len(summary_rows)}\n")
             f.write(f"PDFs gerados: {sum(1 for r in summary_rows if r['status']=='GERADO')}\n")
             f.write(f"PDFs não gerados: {sum(1 for r in summary_rows if r['status']!='GERADO')}\n")
@@ -2621,7 +2656,7 @@ def esocial_processar_async():
         zip_path = Path(create_zip_from_folder(str(general_output_folder)))
         return str(zip_path), zip_path.name
 
-    job = job_manager.create("E-SOCIAL", task)
+    job = job_manager.create(f"E-SOCIAL - {pdf_month}", task)
     return redirect(url_for("job_page", job_id=job.id))
 
 @app.errorhandler(403)

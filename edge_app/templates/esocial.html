@@ -30,6 +30,7 @@
       {% with messages = get_flashed_messages() %}{% if messages %}<div class="alert error">{% for message in messages %}<div>{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
       <form id="uploadForm" action="{{ url_for('esocial_processar_async') }}" method="post" enctype="multipart/form-data">
         <div class="form-grid">
+          <div class="field col-4"><label for="pdfMonth">Mês no nome dos PDFs</label><select name="pdf_month" id="pdfMonth" required><option value="" selected disabled>Selecione o mês</option><option>JANEIRO</option><option>FEVEREIRO</option><option>MARÇO</option><option>ABRIL</option><option>MAIO</option><option>JUNHO</option><option>JULHO</option><option>AGOSTO</option><option>SETEMBRO</option><option>OUTUBRO</option><option>NOVEMBRO</option><option>DEZEMBRO</option></select><small>Os arquivos serão nomeados como EMPRESA - CNPJ - MÊS.pdf.</small></div>
           <div class="field col-2"><label>Planilha base</label><input type="file" name="base_file" id="baseFile" accept=".xls,.xlsx,.html,.htm" required><small>Colunas esperadas: FUNCIONÁRIO, TIPO DE EXAME, DEPOSITANTE e coluna da empresa.</small></div>
           <div class="field col-2"><label>Aba da planilha base</label><select name="base_sheet" id="baseSheetSelect"><option value="">Carregue a planilha base primeiro</option></select></div>
           <div class="field col-2"><label>Adicionar RELFUNCGERAL por arquivo</label><input type="file" id="relFilesPicker" accept=".xls,.xlsx,.html,.htm" multiple></div>

@@ -2185,6 +2185,24 @@ def encaminhamento_especialista_name(value: str) -> str:
     return encaminhamento_title_name(value)
 
 
+ENCAMINHAMENTO_LOCAIS_EXAME = {
+    'belem': {
+        'label': 'BELÉM-PA',
+        'cidade_data': 'BELÉM, PA',
+        'endereco': 'TRAVESSA DO CHACO, Nº2546, MARCO, BELÉM-PA',
+    },
+    'macapa': {
+        'label': 'MACAPÁ-AP',
+        'cidade_data': 'MACAPÁ, AP',
+        'endereco': 'AVENIDA FELICIANO COELHO, Nº 327, BAIRRO: TREM',
+    },
+}
+
+
+def encaminhamento_get_local_exame(value: str) -> dict | None:
+    return ENCAMINHAMENTO_LOCAIS_EXAME.get((value or '').strip().lower())
+
+
 def init_encaminhamento_db():
     """Cria os cadastros usados no encaminhamento individual.
 
@@ -2359,7 +2377,7 @@ def encaminhamento_add_paragraph(cell, parts=None, text: str = '', bold: bool = 
 
 def encaminhamento_add_block(doc, logo_path: str | None, empresa_upper: str, funcionario_upper: str,
                              funcionario_frase: str, rg_clean: str, cpf_clean: str,
-                             especialista_clean: str, data_fmt: str):
+                             especialista_clean: str, data_fmt: str, local_exame: dict):
     """Cria um encaminhamento limpo, sem copiar tabelas/linhas residuais do modelo."""
     table = doc.add_table(rows=1, cols=1)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -2401,20 +2419,20 @@ def encaminhamento_add_block(doc, logo_path: str | None, empresa_upper: str, fun
         space_after=18,
     )
 
-    encaminhamento_add_paragraph(cell, text=f'BELÉM, PA,{data_fmt}', bold=True, size=10,
+    encaminhamento_add_paragraph(cell, text=f"{local_exame['cidade_data']}, {data_fmt}", bold=True, size=10,
                                  align=WD_ALIGN_PARAGRAPH.RIGHT, space_after=16)
     encaminhamento_add_paragraph(cell, text='__________________________', bold=True, size=10,
                                  align=WD_ALIGN_PARAGRAPH.RIGHT, space_after=0)
     encaminhamento_add_paragraph(cell, text='MÉDICO EXAMINADOR', bold=True, size=10,
                                  align=WD_ALIGN_PARAGRAPH.RIGHT, space_after=18)
 
-    encaminhamento_add_paragraph(cell, text='Endereço: TRAVESSA DO CHACO, Nº2546, MARCO, BELÉM-PA',
+    encaminhamento_add_paragraph(cell, text=f"Endereço: {local_exame['endereco']}",
                                  bold=True, size=8, space_after=0)
     encaminhamento_add_paragraph(cell, text='Fone: 91– 3349-6948 e-mail: edgeocupacional@hotmail.com',
                                  bold=True, size=8, space_after=0)
 
 
-def gerar_encaminhamento_especialista_docx(empresa: str, funcionario: str, rg: str, cpf: str, data_doc: str, especialista: str, output_path: str):
+def gerar_encaminhamento_especialista_docx(empresa: str, funcionario: str, rg: str, cpf: str, data_doc: str, especialista: str, local_exame_key: str, output_path: str):
     empresa_upper = encaminhamento_empresa_name(empresa)
     funcionario_upper = encaminhamento_clean_text(funcionario, upper=True)
     funcionario_frase = encaminhamento_title_name(funcionario)
@@ -2422,6 +2440,9 @@ def gerar_encaminhamento_especialista_docx(empresa: str, funcionario: str, rg: s
     cpf_clean = encaminhamento_clean_text(cpf)
     especialista_clean = encaminhamento_especialista_name(especialista)
     data_fmt = encaminhamento_format_date(data_doc)
+    local_exame = encaminhamento_get_local_exame(local_exame_key)
+    if not local_exame:
+        raise ValueError('Local de exame inválido.')
 
     with tempfile.TemporaryDirectory() as tmpdir:
         logo_path = encaminhamento_extract_logo(tmpdir)
@@ -2434,7 +2455,7 @@ def gerar_encaminhamento_especialista_docx(empresa: str, funcionario: str, rg: s
 
         # Primeiro encaminhamento
         encaminhamento_add_block(doc, logo_path, empresa_upper, funcionario_upper, funcionario_frase,
-                                 rg_clean, cpf_clean, especialista_clean, data_fmt)
+                                 rg_clean, cpf_clean, especialista_clean, data_fmt, local_exame)
 
         # Espaço real entre os dois blocos. Não usa tabela copiada do Word, então não
         # herda a linha/borda residual que estava encostando no segundo formulário.
@@ -2445,7 +2466,7 @@ def gerar_encaminhamento_especialista_docx(empresa: str, funcionario: str, rg: s
 
         # Segundo encaminhamento limpo
         encaminhamento_add_block(doc, logo_path, empresa_upper, funcionario_upper, funcionario_frase,
-                                 rg_clean, cpf_clean, especialista_clean, data_fmt)
+                                 rg_clean, cpf_clean, especialista_clean, data_fmt, local_exame)
 
         doc.save(output_path)
 
@@ -2457,6 +2478,7 @@ def encaminhamento_especialista_render(form_data=None):
                            today=form_data.get('data_documento') or datetime.today().strftime('%Y-%m-%d'),
                            empresas=encaminhamento_listar_cadastros('encaminhamento_empresas'),
                            especialistas=encaminhamento_listar_cadastros('encaminhamento_especialistas'),
+                           locais_exame=ENCAMINHAMENTO_LOCAIS_EXAME,
                            form_data=form_data)
 
 
@@ -2508,9 +2530,14 @@ def encaminhamento_especialista_gerar():
     cpf = encaminhamento_clean_text(request.form.get('cpf', ''))
     data_documento = request.form.get('data_documento', '')
     especialista = encaminhamento_especialista_name(request.form.get('especialista', ''))
+    local_exame_key = request.form.get('local_exame', '')
 
-    if not empresa or not funcionario or not rg or not cpf or not especialista:
-        flash('Preencha empresa, funcionário, RG, CPF e especialista.', 'error')
+    if not empresa or not funcionario or not rg or not cpf or not especialista or not local_exame_key:
+        flash('Preencha empresa, funcionário, RG, CPF, especialista e local do exame.', 'error')
+        return encaminhamento_especialista_render(form_data)
+
+    if not encaminhamento_get_local_exame(local_exame_key):
+        flash('Selecione um local de exame válido: Belém-PA ou Macapá-AP.', 'error')
         return encaminhamento_especialista_render(form_data)
 
     if len(somente_numeros(cpf)) != 11:
@@ -2521,7 +2548,7 @@ def encaminhamento_especialista_gerar():
     with tempfile.TemporaryDirectory() as tmpdir:
         output_path = os.path.join(tmpdir, f'{filename_base}.docx')
         try:
-            gerar_encaminhamento_especialista_docx(empresa, funcionario, rg, cpf, data_documento, especialista, output_path)
+            gerar_encaminhamento_especialista_docx(empresa, funcionario, rg, cpf, data_documento, especialista, local_exame_key, output_path)
         except Exception:
             logger.exception('Erro ao gerar encaminhamento para especialista')
             flash('Não foi possível gerar o encaminhamento. Confira os dados e tente novamente.', 'error')

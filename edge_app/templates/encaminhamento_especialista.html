@@ -94,11 +94,26 @@
             <label for="data_documento">Data</label>
             <input id="data_documento" name="data_documento" type="date" value="{{ form_data.get('data_documento', today) }}">
           </div>
+
+          <div class="field col-2">
+            <label for="local_exame">Local do exame</label>
+            <select id="local_exame" name="local_exame" required>
+              <option value="">Selecione o local</option>
+              {% for key, local in locais_exame.items() %}
+                <option value="{{ key }}" {% if form_data.get('local_exame') == key %}selected{% endif %}>{{ local['label'] }}</option>
+              {% endfor %}
+            </select>
+            <small>Esse local será usado antes da data e no campo de endereço do encaminhamento.</small>
+          </div>
         </div>
 
         <div class="info-box" style="margin-top:18px">
           <strong>Frase padrão:</strong><br>
           Encaminho o(a) colaborador(a) <strong>FUNCIONÁRIO</strong>, para avaliação com especialista <strong>ESPECIALISTA</strong>.
+          <br><br>
+          <strong>Locais disponíveis:</strong><br>
+          BELÉM-PA — TRAVESSA DO CHACO, Nº2546, MARCO, BELÉM-PA<br>
+          MACAPÁ-AP — AVENIDA FELICIANO COELHO, Nº 327, BAIRRO: TREM
         </div>
 
         <div class="actions inline-actions">

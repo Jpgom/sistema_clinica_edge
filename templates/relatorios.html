@@ -27,9 +27,9 @@
       <form action="{{ url_for('relatorios_async') }}" method="POST" enctype="multipart/form-data">
         <div class="form-grid">
           <div class="field col-1"><label for="mes">Mês (1 a 12)</label><input type="number" id="mes" name="mes" min="1" max="12" required></div>
-          <div class="field col-3"><label for="files">Planilhas</label><input type="file" id="files" name="files" accept=".xls,.xlsx" multiple required></div>
+          <div class="field col-3"><label for="files">Planilhas ou ZIP do mês</label><input type="file" id="files" name="files" accept=".xls,.xlsx,.zip" multiple required></div>
         </div>
-        <div class="helper-box" style="margin-top:16px">Gera <strong>Relatório</strong> e <strong>Base do Mês</strong>, entregues juntos em um ZIP.</div>
+        <div class="helper-box" style="margin-top:16px">Gera <strong>Relatório</strong> e <strong>Base do Mês</strong>, entregues juntos em um ZIP. Você pode enviar as planilhas separadas ou o ZIP do mês inteiro.</div>
         <div class="actions"><button class="btn btn--primary" type="submit">Gerar arquivos</button></div>
       </form>
     </section>

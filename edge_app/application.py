@@ -45,6 +45,7 @@ APP_TITLE = "Sistema Interno"
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTOS PERIODICO MCP.docx")
 ALLOWED_EXTENSIONS = {".xls", ".xlsx", ".html", ".htm"}
 EXCEL_EXTENSIONS = {".xls", ".xlsx"}
+RELATORIOS_EXTENSIONS = {".xls", ".xlsx", ".zip"}
 RENUM_ALLOWED_EXTENSIONS = {".docx", ".zip"}
 ESOCIAL_MONTHS = {
     "JANEIRO": "JANEIRO", "FEVEREIRO": "FEVEREIRO", "MARCO": "MARÇO",
@@ -699,6 +700,58 @@ class UploadedMemoryFile(BytesIO):
         super().__init__(data)
         self.filename = filename
 
+def extrair_planilhas_relatorios_uploads(files):
+    """Recebe uploads .xls/.xlsx ou .zip e retorna planilhas em memória.
+
+    A funcionalidade de Relatórios normalmente recebe muitos arquivos de
+    Convocação. Para facilitar o uso, o usuário também pode enviar o ZIP do mês
+    inteiro; o sistema extrai somente .xls/.xlsx e ignora pastas/outros formatos.
+    """
+    planilhas = []
+    for file in files:
+        if not file or not getattr(file, "filename", ""):
+            continue
+        ok, msg = validate_uploaded_file(file, RELATORIOS_EXTENSIONS, "as planilhas")
+        if not ok:
+            raise ValueError(msg)
+
+        filename = Path(file.filename).name
+        suffix = Path(filename).suffix.lower()
+        dados = file.read()
+
+        if suffix == ".zip":
+            try:
+                with zipfile.ZipFile(BytesIO(dados), "r") as zip_ref:
+                    for member in zip_ref.infolist():
+                        member_name = member.filename.replace("\\", "/")
+                        if member.is_dir() or not member_name:
+                            continue
+                        member_path = Path(member_name)
+                        if member_path.suffix.lower() not in EXCEL_EXTENSIONS:
+                            continue
+                        if member_path.is_absolute() or ".." in member_path.parts:
+                            raise ValueError("O ZIP contém caminho inseguro e foi bloqueado.")
+                        with zip_ref.open(member) as source:
+                            planilhas.append((member_path.name, source.read()))
+            except zipfile.BadZipFile as exc:
+                raise ValueError(f"Arquivo ZIP inválido: {filename}.") from exc
+        else:
+            planilhas.append((filename, dados))
+    return planilhas
+
+def salvar_planilhas_relatorios_uploads(files, destination: Path):
+    destination.mkdir(parents=True, exist_ok=True)
+    planilhas = extrair_planilhas_relatorios_uploads(files)
+    saved = []
+    for index, (filename, data) in enumerate(planilhas, start=1):
+        safe_name = secure_filename(Path(filename).name)
+        if not safe_name:
+            safe_name = f"planilha_{index}.xlsx"
+        path = destination / f"{index:03d}_{safe_name}"
+        path.write_bytes(data)
+        saved.append(path)
+    return saved
+
 # =========================
 # RELATÓRIOS + BASE DO MÊS
 # =========================
@@ -712,6 +765,61 @@ def nome_empresa_da_planilha(row, col_empresa, col_setor, nome_arquivo):
         if not pd.isna(valor) and str(valor).strip():
             return str(valor).strip()
     return limpar_nome_arquivo(nome_arquivo)
+
+def data_referencia_do_arquivo(nome_arquivo):
+    """Extrai a data de geração do nome Convocacao_..._AAAAMMDD_...xlsx."""
+    match = re.search(r"_(20\d{6})_", str(nome_arquivo or ""))
+    if match:
+        parsed = pd.to_datetime(match.group(1), format="%Y%m%d", errors="coerce")
+        if not pd.isna(parsed):
+            return parsed
+    return pd.Timestamp(datetime.now().date())
+
+def extrair_data_periodico(row, col_validade, col_ultimo_exame, col_data_fallback, nome_arquivo):
+    """Calcula a data de vencimento do periódico nos modelos de Convocação.
+
+    Os arquivos atuais trazem a informação principal em VALIDDADE/VALIDADE:
+    - "Próximo Periódico: 16/07/2026" -> usa a data informada.
+    - "O Periódico irá vencer em: 30 Dia(s)" -> soma os dias à data do arquivo.
+    Caso não exista data em VALIDADE, usa ULTIMO EXAME + 1 ano. A ADMISSAO fica
+    apenas como último fallback para manter compatibilidade com bases antigas.
+    """
+    validade = "" if not col_validade or pd.isna(row.get(col_validade)) else str(row.get(col_validade)).strip()
+
+    match_data = re.search(r"(\d{1,2}/\d{1,2}/\d{2,4})", validade)
+    if match_data:
+        parsed = pd.to_datetime(match_data.group(1), dayfirst=True, errors="coerce")
+        if not pd.isna(parsed):
+            return parsed
+
+    match_dias = re.search(r"(\d+)\s*dia", validade, flags=re.IGNORECASE)
+    if match_dias:
+        return data_referencia_do_arquivo(nome_arquivo) + pd.Timedelta(days=int(match_dias.group(1)))
+
+    if col_ultimo_exame and not pd.isna(row.get(col_ultimo_exame)):
+        ultimo = pd.to_datetime(row.get(col_ultimo_exame), dayfirst=True, errors="coerce")
+        if not pd.isna(ultimo):
+            try:
+                return ultimo + pd.DateOffset(years=1)
+            except Exception:
+                return ultimo + pd.Timedelta(days=365)
+
+    if col_data_fallback and not pd.isna(row.get(col_data_fallback)):
+        fallback = pd.to_datetime(row.get(col_data_fallback), dayfirst=True, errors="coerce")
+        if not pd.isna(fallback):
+            return fallback
+
+    return pd.NaT
+
+def filtrar_periodicos_do_mes(df, mes, col_nome, col_validade, col_ultimo_exame, col_data_fallback, nome_arquivo):
+    df = df.copy()
+    df["_data_periodico_calculada"] = df.apply(
+        lambda row: extrair_data_periodico(row, col_validade, col_ultimo_exame, col_data_fallback, nome_arquivo),
+        axis=1,
+    )
+    df["_data_periodico_calculada"] = pd.to_datetime(df["_data_periodico_calculada"], errors="coerce")
+    df = df.dropna(subset=["_data_periodico_calculada", col_nome])
+    return df[df["_data_periodico_calculada"].dt.month == mes].copy()
 
 def criar_relatorio(files, mes):
     wb = Workbook()
@@ -730,14 +838,14 @@ def criar_relatorio(files, mes):
             file.seek(0)
             df = pd.read_excel(file)
 
-            col_data = encontrar_coluna(df, ["admissao", "admissão", "data"], obrigatoria=True)
             col_nome = encontrar_coluna(df, ["nome", "funcionario", "funcionário"], obrigatoria=True)
+            col_data = encontrar_coluna(df, ["admissao", "admissão", "data"])
+            col_validade = encontrar_coluna(df, ["validade", "vencimento", "periodico", "periódico", "proximo periodico", "próximo periódico"])
+            col_ultimo_exame = encontrar_coluna(df, ["ultimo exame", "último exame"])
             col_empresa = encontrar_coluna(df, ["empresa"])
             col_setor = encontrar_coluna(df, ["setor"])
 
-            df[col_data] = pd.to_datetime(df[col_data], dayfirst=True, errors="coerce")
-            df = df.dropna(subset=[col_data, col_nome])
-            filtrado = df[df[col_data].dt.month == mes].copy()
+            filtrado = filtrar_periodicos_do_mes(df, mes, col_nome, col_validade, col_ultimo_exame, col_data, file.filename)
 
             if not filtrado.empty:
                 titulo = nome_empresa_da_planilha(filtrado.iloc[0], col_empresa, col_setor, file.filename)
@@ -838,16 +946,16 @@ def criar_base(files, mes):
             file.seek(0)
             df = pd.read_excel(file)
 
-            col_data = encontrar_coluna(df, ["admissao", "admissão", "data"], obrigatoria=True)
             col_nome = encontrar_coluna(df, ["nome", "funcionario", "funcionário"], obrigatoria=True)
+            col_data = encontrar_coluna(df, ["admissao", "admissão", "data"])
+            col_validade = encontrar_coluna(df, ["validade", "vencimento", "periodico", "periódico", "proximo periodico", "próximo periódico"])
+            col_ultimo_exame = encontrar_coluna(df, ["ultimo exame", "último exame"])
             col_cargo = encontrar_coluna(df, ["cargo", "função", "funcao"])
             col_empresa = encontrar_coluna(df, ["empresa"])
             col_setor = encontrar_coluna(df, ["setor"])
             col_comp = encontrar_coluna(df, ["complementares", "complementar"])
 
-            df[col_data] = pd.to_datetime(df[col_data], dayfirst=True, errors="coerce")
-            df = df.dropna(subset=[col_data, col_nome])
-            filtrado = df[df[col_data].dt.month == mes].copy()
+            filtrado = filtrar_periodicos_do_mes(df, mes, col_nome, col_validade, col_ultimo_exame, col_data, file.filename)
 
             documento_arquivo = extrair_documento_do_final_do_arquivo(file.filename)
 
@@ -2216,24 +2324,14 @@ def relatorios():
             flash("Mês inválido.")
             return redirect(url_for("relatorios"))
 
-        arquivos_validos = []
-        arquivos_invalidos = []
-        for f in files:
-            if not f or not f.filename:
-                continue
-            ok, msg = validate_uploaded_file(f, EXCEL_EXTENSIONS, "as planilhas")
-            if ok:
-                arquivos_validos.append(f)
-            else:
-                arquivos_invalidos.append(f.filename)
-
-        if arquivos_invalidos:
-            flash("Alguns arquivos foram recusados por formato inválido: " + ", ".join(arquivos_invalidos[:5]))
+        try:
+            arquivos_memoria = extrair_planilhas_relatorios_uploads(files)
+        except ValueError as exc:
+            flash(str(exc))
             return redirect(url_for("relatorios"))
 
-        arquivos_memoria = [(f.filename, f.read()) for f in arquivos_validos]
         if not arquivos_memoria:
-            flash("Selecione as planilhas em .xls ou .xlsx.")
+            flash("Selecione planilhas em .xls/.xlsx ou um ZIP contendo as planilhas.")
             return redirect(url_for("relatorios"))
 
         files_rel = [UploadedMemoryFile(nome, dados) for nome, dados in arquivos_memoria]
@@ -2493,7 +2591,7 @@ def _save_uploads_for_job(files, destination: Path, allowed_extensions: set[str]
 
 def _memory_file_from_path(path: Path):
     data = path.read_bytes()
-    mem = UploadedMemoryFile(data, path.name)
+    mem = UploadedMemoryFile(path.name, data)
     mem.seek(0)
     return mem
 
@@ -2545,9 +2643,13 @@ def relatorios_async():
 
     job_root = Path(tempfile.mkdtemp(prefix="job_relatorios_", dir=JOBS_DIR))
     try:
-        saved_paths = _save_uploads_for_job(files, job_root / "uploads", EXCEL_EXTENSIONS, "as planilhas")
+        saved_paths = salvar_planilhas_relatorios_uploads(files, job_root / "uploads")
     except ValueError as exc:
         flash(str(exc))
+        return redirect(url_for("relatorios"))
+
+    if not saved_paths:
+        flash("Selecione planilhas em .xls/.xlsx ou um ZIP contendo as planilhas.")
         return redirect(url_for("relatorios"))
 
     def task(progress):

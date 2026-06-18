@@ -54,6 +54,7 @@ ESOCIAL_MONTHS = {
     "OUTUBRO": "OUTUBRO", "NOVEMBRO": "NOVEMBRO", "DEZEMBRO": "DEZEMBRO",
 }
 FISICO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ATESTADO_FISICO_MENTAL_TEMPLATE.docx")
+PCD_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "MODELO LAUDO PCD.docx")
 ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE.docx")
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.environ.get("RENDER_DISK_PATH") or os.environ.get("DATA_DIR") or BASE_DIR
@@ -1934,6 +1935,230 @@ def fisico_gerar():
                 flash(f'Não foi possível gerar PDF agora: {exc}. O arquivo foi enviado em Word.', 'error')
         payload = Path(docx_path).read_bytes()
         return send_file(io.BytesIO(payload), as_attachment=True, download_name=f'{filename_base}.docx', mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+
+# =========================
+# LAUDO PCD
+# =========================
+PCD_TIPOS = {
+    'fisica': 'FÍSICA',
+    'auditiva': 'AUDITIVA',
+    'visual': 'VISUAL',
+    'intelectual': 'INTELECTUAL/MENTAL',
+    'multipla': 'MÚLTIPLA',
+}
+
+
+def pcd_render_home(form_data=None):
+    form_data = form_data or {}
+    return render_template(
+        'laudo_pcd.html',
+        title='Laudo PCD',
+        today=form_data.get('data_laudo') or datetime.today().strftime('%Y-%m-%d'),
+        empresas=fisico_list_empresas(),
+        cargos=fisico_list_cargos(),
+        tipos=PCD_TIPOS,
+        form_data=form_data,
+    )
+
+
+def pcd_docx_escape(value: str) -> str:
+    value = '' if value is None else str(value)
+    lines = value.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    escaped = [line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;') for line in lines]
+    return '</w:t><w:br/><w:t>'.join(escaped)
+
+
+def pcd_placeholder_pattern(placeholder: str) -> str:
+    """Regex que encontra placeholder mesmo quando o Word divide em vários runs."""
+    return r'(?:<[^>]+>)*'.join(re.escape(ch) for ch in placeholder)
+
+
+def pcd_replace_placeholder(xml: str, placeholder: str, value: str, count: int = 0) -> str:
+    pattern = pcd_placeholder_pattern(placeholder)
+    return re.sub(pattern, lambda _match: pcd_docx_escape(value), xml, count=count)
+
+
+def pcd_format_date_parts(raw_date: str) -> tuple[str, str, str]:
+    if raw_date:
+        try:
+            dt = datetime.strptime(raw_date, '%Y-%m-%d').date()
+        except Exception:
+            dt = datetime.today().date()
+    else:
+        dt = datetime.today().date()
+    return f'{dt.day:02d}', nome_mes(dt.month), str(dt.year)
+
+
+def pcd_replace_docx_placeholders(template_path: str, output_path: str, replacements: dict[str, str], sequence_replacements: dict[str, list[str]]):
+    """Substitui placeholders do modelo PCD preservando o pacote DOCX original.
+
+    O modelo recebido possui campos como {{EMPRESA - CNPJ}}, que não são nomes
+    válidos para Jinja/docxtpl. Por isso a substituição é feita diretamente no
+    XML do Word, mantendo layout, tabelas e imagens do arquivo enviado.
+    """
+    with zipfile.ZipFile(template_path, 'r') as zin:
+        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if item.filename == 'word/document.xml':
+                    xml = data.decode('utf-8')
+                    auditiva_mark = replacements.get('__AUDITIVA_MARK__', '')
+                    xml = re.sub(r'<w:t>XX</w:t>', f'<w:t>{pcd_docx_escape(auditiva_mark)}</w:t>', xml)
+                    for placeholder, values in sequence_replacements.items():
+                        for value in values:
+                            xml = pcd_replace_placeholder(xml, placeholder, value, count=1)
+                        xml = pcd_replace_placeholder(xml, placeholder, '')
+                    for placeholder, value in replacements.items():
+                        if placeholder.startswith('__'):
+                            continue
+                        xml = pcd_replace_placeholder(xml, placeholder, value)
+                    data = xml.encode('utf-8')
+                zout.writestr(item, data)
+
+
+def pcd_quick_add_empresa(nome: str) -> tuple[bool, str, dict]:
+    nome = fisico_clean_text(nome)
+    if not nome:
+        return False, 'Informe o nome da empresa.', {}
+    with fisico_get_conn() as conn:
+        existente = conn.execute('SELECT id, nome FROM fisico_empresas WHERE nome = ?', (nome,)).fetchone()
+        if existente:
+            return True, 'Empresa já cadastrada.', {'id': existente['id'], 'nome': existente['nome']}
+        conn.execute('INSERT INTO fisico_empresas (nome) VALUES (?)', (nome,))
+        conn.commit()
+        novo = conn.execute('SELECT id, nome FROM fisico_empresas WHERE nome = ?', (nome,)).fetchone()
+        return True, 'Empresa cadastrada.', {'id': novo['id'], 'nome': novo['nome']}
+
+
+def pcd_quick_add_cargo(nome: str) -> tuple[bool, str, dict]:
+    nome = fisico_clean_text(nome)
+    if not nome:
+        return False, 'Informe o nome do cargo.', {}
+    with fisico_get_conn() as conn:
+        existente = conn.execute('SELECT id, nome FROM fisico_cargos WHERE nome = ?', (nome,)).fetchone()
+        if existente:
+            return True, 'Cargo já cadastrado.', {'id': existente['id'], 'nome': existente['nome']}
+        conn.execute('INSERT INTO fisico_cargos (nome) VALUES (?)', (nome,))
+        conn.commit()
+        novo = conn.execute('SELECT id, nome FROM fisico_cargos WHERE nome = ?', (nome,)).fetchone()
+        return True, 'Cargo cadastrado.', {'id': novo['id'], 'nome': novo['nome']}
+
+
+@app.route('/laudo-pcd', methods=['GET'])
+def laudo_pcd():
+    return pcd_render_home()
+
+
+@app.route('/laudo-pcd/cadastros/empresa/adicionar-rapido', methods=['POST'])
+def laudo_pcd_adicionar_empresa_rapido():
+    ok, msg, item = pcd_quick_add_empresa(request.form.get('nome', ''))
+    return jsonify({'ok': ok, 'message': msg, 'item': item}), 200 if ok else 400
+
+
+@app.route('/laudo-pcd/cadastros/cargo/adicionar-rapido', methods=['POST'])
+def laudo_pcd_adicionar_cargo_rapido():
+    ok, msg, item = pcd_quick_add_cargo(request.form.get('nome', ''))
+    return jsonify({'ok': ok, 'message': msg, 'item': item}), 200 if ok else 400
+
+
+@app.route('/laudo-pcd/gerar', methods=['POST'])
+def laudo_pcd_gerar():
+    form_data = request.form.to_dict(flat=True)
+    tipo = (request.form.get('tipo_deficiencia') or '').strip()
+    empresa = fisico_clean_text(request.form.get('empresa_nome', ''))
+    empresa_cnpj = request.form.get('empresa_cnpj', '').strip()
+    cargo = fisico_clean_text(request.form.get('cargo_nome', ''))
+    nome = fisico_clean_text(request.form.get('nome', ''))
+    cpf = request.form.get('cpf', '').strip()
+    rg = fisico_clean_text(request.form.get('rg', ''))
+    uf = fisico_clean_text(request.form.get('uf', ''))
+    cid = fisico_clean_text(request.form.get('cid', ''))
+    obs = (request.form.get('obs') or '').strip()
+    data_laudo = request.form.get('data_laudo', '')
+
+    if tipo not in PCD_TIPOS:
+        flash('Selecione o tipo de laudo PCD.', 'error')
+        return pcd_render_home(form_data)
+    if not empresa or not nome or not cpf or not rg or not cid:
+        flash('Preencha empresa, nome, CPF, RG e CID.', 'error')
+        return pcd_render_home(form_data)
+
+    cpf_digits = somente_numeros(cpf)
+    if len(cpf_digits) != 11:
+        flash('CPF inválido. Informe os 11 números do CPF.', 'error')
+        return pcd_render_home(form_data)
+
+    dia, mes_extenso, ano = pcd_format_date_parts(data_laudo)
+    empresa_doc = empresa
+    if empresa_cnpj:
+        empresa_doc = f'{empresa} - {formatar_documento(empresa_cnpj) or empresa_cnpj}'
+
+    cid_values = {
+        'fisica': [cid, '', '', ''],
+        'auditiva': ['', cid, '', ''],
+        'visual': ['', '', cid, ''],
+        'intelectual': ['', '', '', cid],
+        'multipla': ['', '', '', ''],
+    }[tipo]
+    obs_values = {
+        'fisica': [obs, '', '', '', ''],
+        'auditiva': ['', obs, '', '', ''],
+        'visual': ['', '', obs, '', ''],
+        'intelectual': ['', '', '', obs, ''],
+        'multipla': ['', '', '', '', obs],
+    }[tipo]
+
+    replacements = {
+        '{{EMPRESA - CNPJ}}': empresa_doc,
+        '{{NOME}}': nome,
+        '{{CPF}}': formatar_documento(cpf_digits) or cpf,
+        '{{RG}}': rg,
+        '{{UF}}': uf,
+        '{{dia}}': dia,
+        '{{MÊS}}': mes_extenso,
+        '{{ANO}}': ano,
+        '{{OlhoDAcuidade}}': request.form.get('olho_d_acuidade', ''),
+        '{{OlhoEAcuidade}}': request.form.get('olho_e_acuidade', ''),
+        '{{OlhoDCampo}}': request.form.get('olho_d_campo', ''),
+        '{{OlhoECampo}}': request.form.get('olho_e_campo', ''),
+        '{{OlhoDVisao}}': request.form.get('olho_d_visao', ''),
+        '{{OlhoEVisao}}': request.form.get('olho_e_visao', ''),
+        '__AUDITIVA_MARK__': 'X' if tipo == 'auditiva' else '',
+    }
+    sequence_replacements = {
+        '{{CID}}': cid_values,
+        '{{Obs}}': obs_values,
+        '{{ouvidod}}': [
+            request.form.get('ouvido_d_500', ''),
+            request.form.get('ouvido_d_1000', ''),
+            request.form.get('ouvido_d_2000', ''),
+            request.form.get('ouvido_d_3000', ''),
+        ],
+        '{{ouvidoe}}': [
+            request.form.get('ouvido_e_500', ''),
+            request.form.get('ouvido_e_1000', ''),
+            request.form.get('ouvido_e_2000', ''),
+            request.form.get('ouvido_e_3000', ''),
+        ],
+    }
+
+    filename_base = sanitize_filename(f'LAUDO PCD - {nome} - {PCD_TIPOS[tipo]}')
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_path = os.path.join(tmpdir, f'{filename_base}.docx')
+        try:
+            pcd_replace_docx_placeholders(PCD_TEMPLATE_PATH, output_path, replacements, sequence_replacements)
+        except Exception:
+            logger.exception('Erro ao gerar Laudo PCD')
+            flash('Não foi possível gerar o Laudo PCD. Confira os dados e tente novamente.', 'error')
+            return pcd_render_home(form_data)
+        payload = Path(output_path).read_bytes()
+        return send_file(
+            io.BytesIO(payload),
+            as_attachment=True,
+            download_name=f'{filename_base}.docx',
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        )
 
 
 # =========================

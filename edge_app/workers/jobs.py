@@ -30,6 +30,11 @@ class Job:
     updated_at: datetime = field(default_factory=datetime.utcnow)
 
 
+# Compatibilidade com versões anteriores que importavam JobState de
+# edge_app.async_jobs. O estado atual do job é representado pela dataclass Job.
+JobState = Job
+
+
 class JobManager:
     def __init__(self, storage_dir: str, max_workers: int = 2, ttl_hours: int = 12):
         self.storage_dir = Path(storage_dir)

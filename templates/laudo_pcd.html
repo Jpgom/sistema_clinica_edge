@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f5f7fb">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}"></head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho">
+      <div>EDGE<small>Laudo PCD</small></div>
+    </div>
+    <div class="nav-card">
+      <a class="nav-link" href="{{ url_for('home') }}">🏠 Início</a>
+      <a class="nav-link active" href="{{ url_for('laudo_pcd') }}">♿ Laudo PCD</a>
+      <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
+      <a class="nav-link" href="{{ url_for('fisico_mental_cadastros') }}">🏢 Empresas e cargos</a>
+      <a class="nav-link" href="{{ url_for('relatorios') }}">📊 Relatórios</a>
+      <a class="nav-link" href="{{ url_for('encaminhamentos') }}">📄 Encaminhamentos</a>
+      <a class="nav-link" href="{{ url_for('encaminhamento_especialista') }}">📝 Enc. individual</a>
+      <a class="nav-link" href="{{ url_for('renumerador') }}">🔢 Renumerador</a>
+      <a class="nav-link" href="{{ url_for('esocial') }}">🗂️ E-SOCIAL</a>
+      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
+      {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link" href="{{ url_for('auditoria') }}">📋 Auditoria</a>{% endif %}
+      <a class="nav-link" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}">🚪 Sair</a>
+    </div>
+  </aside>
+
+  <main class="main-area">
+    <div class="topbar compact-topbar">
+      <div class="page-title">
+        <h1>Laudo PCD</h1>
+        <p>Gere o laudo conforme o tipo de deficiência, usando empresas e cargos globais ou preenchimento livre.</p>
+      </div>
+    </div>
+
+    <section class="content-card" id="formulario">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <form action="{{ url_for('laudo_pcd_gerar') }}" method="post" id="pcdForm" data-draft-key="edge_laudo_pcd_draft" data-has-server-form="{% if form_data %}1{% else %}0{% endif %}">
+        <div class="section-head">
+          <div>
+            <h2>Dados principais</h2>
+            <p class="muted">Você pode selecionar empresa/cargo cadastrado ou digitar manualmente sem cadastrar.</p>
+          </div>
+          <button class="btn btn--light" type="button" id="clearPcdDraft">Limpar rascunho</button>
+        </div>
+
+        <div class="form-grid">
+          <div class="field col-2 list-panel">
+            <label for="empresa_search">Empresa</label>
+            <input id="empresa_search" type="text" placeholder="Digite ou selecione a empresa" autocomplete="off" value="{{ form_data.get('empresa_nome','') }}">
+            <input type="hidden" id="empresa_nome" name="empresa_nome" value="{{ form_data.get('empresa_nome','') }}">
+            <select id="empresa_select" size="5" style="margin-top:10px">
+              {% for empresa in empresas %}
+                <option value="{{ empresa['nome'] }}" {% if form_data.get('empresa_nome','') == empresa['nome'] %}selected{% endif %}>{{ empresa['nome'] }}</option>
+              {% endfor %}
+            </select>
+            <div class="inline-actions" style="margin-top:10px">
+              <button class="btn btn--light" type="button" id="quickAddEmpresa">Cadastrar esta empresa</button>
+              <span class="selected-chip" id="empresaEscolhida">{{ form_data.get('empresa_nome','Nenhuma empresa selecionada') }}</span>
+            </div>
+          </div>
+
+          <div class="field col-1">
+            <label for="empresa_cnpj">CNPJ da empresa</label>
+            <input id="empresa_cnpj" name="empresa_cnpj" type="text" placeholder="00.000.000/0000-00" value="{{ form_data.get('empresa_cnpj','') }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="data_laudo">Data do laudo</label>
+            <input id="data_laudo" name="data_laudo" type="date" value="{{ form_data.get('data_laudo', today) }}">
+          </div>
+
+          <div class="field col-2">
+            <label for="nome">Nome do colaborador</label>
+            <input id="nome" name="nome" type="text" required placeholder="Nome completo" value="{{ form_data.get('nome','') }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="cpf">CPF</label>
+            <input id="cpf" name="cpf" type="text" required maxlength="14" placeholder="000.000.000-00" value="{{ form_data.get('cpf','') }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="rg">RG</label>
+            <input id="rg" name="rg" type="text" required placeholder="Número do RG" value="{{ form_data.get('rg','') }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="uf">Órgão emissor/UF</label>
+            <input id="uf" name="uf" type="text" placeholder="Ex.: SSP/PA" value="{{ form_data.get('uf','') }}">
+          </div>
+
+          <div class="field col-1 list-panel">
+            <label for="cargo_search">Cargo</label>
+            <input id="cargo_search" type="text" placeholder="Digite ou selecione o cargo" autocomplete="off" value="{{ form_data.get('cargo_nome','') }}">
+            <input type="hidden" id="cargo_nome" name="cargo_nome" value="{{ form_data.get('cargo_nome','') }}">
+            <select id="cargo_select" size="5" style="margin-top:10px">
+              {% for cargo in cargos %}
+                <option value="{{ cargo['nome'] }}" {% if form_data.get('cargo_nome','') == cargo['nome'] %}selected{% endif %}>{{ cargo['nome'] }}</option>
+              {% endfor %}
+            </select>
+            <div class="inline-actions" style="margin-top:10px">
+              <button class="btn btn--light" type="button" id="quickAddCargo">Cadastrar cargo</button>
+              <span class="selected-chip" id="cargoEscolhido">{{ form_data.get('cargo_nome','Nenhum cargo selecionado') }}</span>
+            </div>
+          </div>
+
+          <div class="field col-1">
+            <label for="tipo_deficiencia">Tipo de laudo PCD</label>
+            <select id="tipo_deficiencia" name="tipo_deficiencia" required>
+              <option value="">Selecione...</option>
+              {% for key, label in tipos.items() %}
+                <option value="{{ key }}" {% if form_data.get('tipo_deficiencia','') == key %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="field col-1">
+            <label for="cid">CID-10</label>
+            <input id="cid" name="cid" type="text" required placeholder="Ex.: H90.3" value="{{ form_data.get('cid','') }}">
+          </div>
+        </div>
+
+        <div class="helper-box" style="margin:18px 0">Após escolher o tipo de laudo, preencha apenas os campos que aparecerem para aquela deficiência.</div>
+
+        <section class="pcd-panel" data-pcd-panel="fisica">
+          <h3>Deficiência física</h3>
+          <div class="form-grid">
+            <div class="field col-4">
+              <label for="obs_fisica">Interferência funcional / observações</label>
+              <textarea id="obs_fisica" name="obs" rows="4" placeholder="Descreva a interferência funcional da deficiência.">{{ form_data.get('obs','') }}</textarea>
+            </div>
+          </div>
+        </section>
+
+        <section class="pcd-panel" data-pcd-panel="auditiva">
+          <h3>Deficiência auditiva</h3>
+          <div class="form-grid">
+            <div class="field col-1"><label>OD 500 Hz</label><input name="ouvido_d_500" value="{{ form_data.get('ouvido_d_500','') }}"></div>
+            <div class="field col-1"><label>OD 1000 Hz</label><input name="ouvido_d_1000" value="{{ form_data.get('ouvido_d_1000','') }}"></div>
+            <div class="field col-1"><label>OD 2000 Hz</label><input name="ouvido_d_2000" value="{{ form_data.get('ouvido_d_2000','') }}"></div>
+            <div class="field col-1"><label>OD 3000 Hz</label><input name="ouvido_d_3000" value="{{ form_data.get('ouvido_d_3000','') }}"></div>
+            <div class="field col-1"><label>OE 500 Hz</label><input name="ouvido_e_500" value="{{ form_data.get('ouvido_e_500','') }}"></div>
+            <div class="field col-1"><label>OE 1000 Hz</label><input name="ouvido_e_1000" value="{{ form_data.get('ouvido_e_1000','') }}"></div>
+            <div class="field col-1"><label>OE 2000 Hz</label><input name="ouvido_e_2000" value="{{ form_data.get('ouvido_e_2000','') }}"></div>
+            <div class="field col-1"><label>OE 3000 Hz</label><input name="ouvido_e_3000" value="{{ form_data.get('ouvido_e_3000','') }}"></div>
+            <div class="field col-4"><label>Interferência funcional / observações</label><textarea name="obs" rows="4">{{ form_data.get('obs','') }}</textarea></div>
+          </div>
+        </section>
+
+        <section class="pcd-panel" data-pcd-panel="visual">
+          <h3>Deficiência visual</h3>
+          <div class="form-grid">
+            <div class="field col-1"><label>Olho direito - acuidade visual</label><input name="olho_d_acuidade" value="{{ form_data.get('olho_d_acuidade','') }}"></div>
+            <div class="field col-1"><label>Olho esquerdo - acuidade visual</label><input name="olho_e_acuidade" value="{{ form_data.get('olho_e_acuidade','') }}"></div>
+            <div class="field col-1"><label>Olho direito - campo visual</label><input name="olho_d_campo" value="{{ form_data.get('olho_d_campo','') }}"></div>
+            <div class="field col-1"><label>Olho esquerdo - campo visual</label><input name="olho_e_campo" value="{{ form_data.get('olho_e_campo','') }}"></div>
+            <div class="field col-1"><label>Olho direito - visão monocular</label><input name="olho_d_visao" value="{{ form_data.get('olho_d_visao','') }}" placeholder="Sim/Não"></div>
+            <div class="field col-1"><label>Olho esquerdo - visão monocular</label><input name="olho_e_visao" value="{{ form_data.get('olho_e_visao','') }}" placeholder="Sim/Não"></div>
+            <div class="field col-4"><label>Interferência funcional / observações</label><textarea name="obs" rows="4">{{ form_data.get('obs','') }}</textarea></div>
+          </div>
+        </section>
+
+        <section class="pcd-panel" data-pcd-panel="intelectual">
+          <h3>Deficiência intelectual/mental</h3>
+          <div class="form-grid">
+            <div class="field col-4"><label>Interferência funcional / observações</label><textarea name="obs" rows="4">{{ form_data.get('obs','') }}</textarea></div>
+          </div>
+        </section>
+
+        <section class="pcd-panel" data-pcd-panel="multipla">
+          <h3>Deficiência múltipla</h3>
+          <div class="form-grid">
+            <div class="field col-4"><label>Descrição das deficiências e interferência funcional</label><textarea name="obs" rows="5">{{ form_data.get('obs','') }}</textarea></div>
+          </div>
+        </section>
+
+        <div class="actions inline-actions">
+          <button class="btn btn--primary" type="submit">Gerar Laudo PCD em Word</button>
+          <a class="btn btn--light" href="{{ url_for('fisico_mental_cadastros') }}">Gerenciar empresas e cargos</a>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+
+<script>
+const pcdForm = document.getElementById('pcdForm');
+const tipoSelect = document.getElementById('tipo_deficiencia');
+const cpfInput = document.getElementById('cpf');
+const empresaSearch = document.getElementById('empresa_search');
+const empresaNome = document.getElementById('empresa_nome');
+const empresaSelect = document.getElementById('empresa_select');
+const empresaEscolhida = document.getElementById('empresaEscolhida');
+const cargoSearch = document.getElementById('cargo_search');
+const cargoNome = document.getElementById('cargo_nome');
+const cargoSelect = document.getElementById('cargo_select');
+const cargoEscolhido = document.getElementById('cargoEscolhido');
+
+function applyCpfMask(value){
+  const digits = String(value || '').replace(/\D/g,'').slice(0,11);
+  return digits.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+}
+cpfInput.addEventListener('input', e => { e.target.value = applyCpfMask(e.target.value); });
+cpfInput.value = applyCpfMask(cpfInput.value);
+
+function togglePcdPanels(){
+  const selected = tipoSelect.value;
+  document.querySelectorAll('.pcd-panel').forEach(panel => {
+    const active = panel.dataset.pcdPanel === selected;
+    panel.style.display = active ? '' : 'none';
+    panel.querySelectorAll('input, textarea, select').forEach(field => {
+      if (field.name === 'obs') field.disabled = !active;
+    });
+  });
+}
+tipoSelect.addEventListener('change', togglePcdPanels);
+togglePcdPanels();
+
+function filterSelect(selectEl, searchText){
+  const term = (searchText || '').toUpperCase();
+  let firstVisible = null;
+  Array.from(selectEl.options).forEach(opt => {
+    const visible = !term || opt.text.toUpperCase().includes(term);
+    opt.hidden = !visible;
+    if (visible && !firstVisible) firstVisible = opt;
+  });
+  return firstVisible;
+}
+
+function bindLookup(searchEl, selectEl, hiddenEl, chipEl, emptyText){
+  searchEl.addEventListener('input', () => {
+    filterSelect(selectEl, searchEl.value);
+    hiddenEl.value = searchEl.value.trim();
+    chipEl.textContent = hiddenEl.value || emptyText;
+  });
+  selectEl.addEventListener('change', () => {
+    const selected = selectEl.options[selectEl.selectedIndex];
+    if (!selected) return;
+    hiddenEl.value = selected.value;
+    searchEl.value = selected.value;
+    chipEl.textContent = selected.value || emptyText;
+  });
+  if (hiddenEl.value) {
+    searchEl.value = hiddenEl.value;
+    chipEl.textContent = hiddenEl.value;
+  }
+}
+bindLookup(empresaSearch, empresaSelect, empresaNome, empresaEscolhida, 'Nenhuma empresa selecionada');
+bindLookup(cargoSearch, cargoSelect, cargoNome, cargoEscolhido, 'Nenhum cargo selecionado');
+
+function csrfHeader(){
+  const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+  return token ? { 'X-CSRF-Token': token } : {};
+}
+
+async function quickAdd(url, name, selectEl, hiddenEl, searchEl, chipEl){
+  const value = (name || '').trim();
+  if (!value) { alert('Digite o nome antes de cadastrar.'); return; }
+  const body = new FormData();
+  body.append('nome', value);
+  const response = await fetch(url, { method: 'POST', body, headers: csrfHeader() });
+  const data = await response.json();
+  if (!response.ok || !data.ok) {
+    alert(data.message || 'Não foi possível cadastrar.');
+    return;
+  }
+  const item = data.item || {};
+  if (item.nome && !Array.from(selectEl.options).some(opt => opt.value === item.nome)) {
+    const opt = document.createElement('option');
+    opt.value = item.nome;
+    opt.textContent = item.nome;
+    selectEl.appendChild(opt);
+  }
+  hiddenEl.value = item.nome || value;
+  searchEl.value = hiddenEl.value;
+  chipEl.textContent = hiddenEl.value;
+  alert(data.message || 'Cadastro realizado.');
+}
+
+document.getElementById('quickAddEmpresa').addEventListener('click', () => {
+  quickAdd("{{ url_for('laudo_pcd_adicionar_empresa_rapido') }}", empresaSearch.value || empresaNome.value, empresaSelect, empresaNome, empresaSearch, empresaEscolhida);
+});
+document.getElementById('quickAddCargo').addEventListener('click', () => {
+  quickAdd("{{ url_for('laudo_pcd_adicionar_cargo_rapido') }}", cargoSearch.value || cargoNome.value, cargoSelect, cargoNome, cargoSearch, cargoEscolhido);
+});
+
+const draftKey = pcdForm.dataset.draftKey;
+function saveDraft(){
+  const data = {};
+  new FormData(pcdForm).forEach((value, key) => { data[key] = value; });
+  data.empresa_search = empresaSearch.value;
+  data.cargo_search = cargoSearch.value;
+  localStorage.setItem(draftKey, JSON.stringify(data));
+}
+function restoreDraft(){
+  if (pcdForm.dataset.hasServerForm === '1') return;
+  try {
+    const data = JSON.parse(localStorage.getItem(draftKey) || '{}');
+    Object.entries(data).forEach(([key, value]) => {
+      const field = pcdForm.elements[key] || document.getElementById(key);
+      if (field && typeof field.value !== 'undefined') field.value = value;
+      else document.querySelectorAll(`[name="${key}"]`).forEach(item => { item.value = value; });
+    });
+    if (data.empresa_nome) { empresaNome.value = data.empresa_nome; empresaSearch.value = data.empresa_search || data.empresa_nome; empresaEscolhida.textContent = data.empresa_nome; }
+    if (data.cargo_nome) { cargoNome.value = data.cargo_nome; cargoSearch.value = data.cargo_search || data.cargo_nome; cargoEscolhido.textContent = data.cargo_nome; }
+    togglePcdPanels();
+  } catch {}
+}
+restoreDraft();
+pcdForm.addEventListener('input', saveDraft);
+pcdForm.addEventListener('change', saveDraft);
+pcdForm.addEventListener('submit', () => {
+  if (!empresaNome.value.trim()) empresaNome.value = empresaSearch.value.trim();
+  if (!cargoNome.value.trim()) cargoNome.value = cargoSearch.value.trim();
+  saveDraft();
+});
+document.getElementById('clearPcdDraft').addEventListener('click', () => {
+  localStorage.removeItem(draftKey);
+  pcdForm.reset();
+  empresaNome.value = '';
+  cargoNome.value = '';
+  empresaEscolhida.textContent = 'Nenhuma empresa selecionada';
+  cargoEscolhido.textContent = 'Nenhum cargo selecionado';
+  togglePcdPanels();
+});
+</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

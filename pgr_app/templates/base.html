@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Automação SST{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">SST</div>
+      <div><strong>Automação SST</strong><span>PGR, PCMSO, LTCAT e AET</span></div>
+    </div>
+    <nav>
+      <a href="/">← Sistema EDGE</a>
+      <a class="{% if request.endpoint in ['cadastro', 'edit_risk'] %}active{% endif %}" href="{{ url_for('cadastro') }}">Riscos</a>
+      <a class="{% if request.endpoint in ['risk_groups', 'edit_risk_group'] %}active{% endif %}" href="{{ url_for('risk_groups') }}">Grupos de riscos</a>
+      <a class="{% if request.endpoint in ['setores', 'edit_sector'] %}active{% endif %}" href="{{ url_for('setores') }}">Setores/Cargos</a>
+      <a class="{% if request.endpoint in ['empresas', 'create_company', 'edit_company'] %}active{% endif %}" href="{{ url_for('empresas') }}">Empresas</a>
+      <a class="{% if request.endpoint in ['exames', 'create_exam', 'edit_exam'] %}active{% endif %}" href="{{ url_for('exames') }}">Exames</a>
+      <a class="{% if request.endpoint == 'modelos_aet' %}active{% endif %}" href="{{ url_for('modelos_aet') }}">Modelos AET/CNAEs</a>
+      <a class="{% if request.endpoint == 'gerar' %}active{% endif %}" href="{{ url_for('gerar') }}">Gerar laudos</a>
+      <a class="{% if request.endpoint in ['importar_laudo_antigo', 'salvar_importacao_laudo_antigo'] %}active{% endif %}" href="{{ url_for('importar_laudo_antigo') }}">Importar antigos</a>
+      <a class="{% if request.endpoint in ['juntar_arquivos'] %}active{% endif %}" href="{{ url_for('juntar_arquivos') }}">Juntar arquivos</a>
+      <a class="{% if request.endpoint == 'recibos_esocial' %}active{% endif %}" href="{{ url_for('recibos_esocial') }}">Recibos eSocial</a>
+    </nav>
+  </aside>
+
+  <main class="content">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-wrap">
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+  <script>window.PGR_BASE_URL = "{{ request.script_root }}";</script>
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

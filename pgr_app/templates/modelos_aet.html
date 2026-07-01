@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Modelos AET por CNAE{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <span class="eyebrow">Base técnica</span>
+    <h1>Modelos padrão de AET por CNAE</h1>
+    <p>Consulte os modelos técnicos usados para pré-preencher a AET conforme CNAE, atividade econômica e dados específicos da empresa.</p>
+  </div>
+  <a class="btn primary" href="{{ url_for('gerar') }}">Gerar laudos</a>
+</section>
+
+<section class="panel">
+  <div class="split header-line">
+    <div>
+      <h2>Como funciona</h2>
+      <p class="muted">Na etapa AET da tela Gerar laudos, clique em <strong>Aplicar sugestões do CNAE</strong>. O sistema compara o CNAE principal, CNAE secundário, descrição da atividade e nome da empresa com os modelos abaixo. As respostas são apenas pré-marcações e podem ser editadas antes de gerar o documento.</p>
+    </div>
+    <span class="pill soft-pill">{{ catalog|length }} CNAEs de referência</span>
+  </div>
+  <input class="search-input" type="search" data-filter-target=".aet-model-card" placeholder="Buscar por CNAE, atividade, setor, risco ou exame...">
+</section>
+
+{% for categoria, modelos in categorias.items() %}
+  <section class="panel model-section">
+    <div class="split header-line">
+      <h2>{{ categoria }}</h2>
+      <span class="pill soft-pill">{{ modelos|length }} modelo(s)</span>
+    </div>
+    <div class="model-grid">
+      {% for modelo in modelos %}
+        <article class="aet-model-card" data-search="{{ (modelo.label ~ ' ' ~ modelo.categoria ~ ' ' ~ (modelo.cnaes_referencia|join(' ')) ~ ' ' ~ (modelo.keywords|join(' ')) ~ ' ' ~ (modelo.setores_sugeridos|join(' ')) ~ ' ' ~ (modelo.riscos_sugeridos|join(' ')) ~ ' ' ~ (modelo.exames_sugeridos|join(' ')))|lower }}">
+          <div class="model-card-head">
+            <div>
+              <strong>{{ modelo.label }}</strong>
+              <span>{{ modelo.cnaes_referencia|join(' · ') }}</span>
+            </div>
+            <span class="pill">AET</span>
+          </div>
+          <div class="model-mini-cols">
+            <div>
+              <h3>Setores sugeridos</h3>
+              <p>{{ modelo.setores_sugeridos|join(', ') }}</p>
+            </div>
+            <div>
+              <h3>Riscos comuns</h3>
+              <p>{{ modelo.riscos_sugeridos|join(', ') }}</p>
+            </div>
+            <div>
+              <h3>Complementares/exames</h3>
+              <p>{{ modelo.exames_sugeridos|join(', ') }}</p>
+            </div>
+          </div>
+          <details>
+            <summary>Ver padrão de preenchimento</summary>
+            {% set setor = modelo.sector %}
+            <div class="model-details">
+              <p><strong>Tipo de atividade:</strong> {{ setor.tipo_atividade }}</p>
+              <p><strong>Postura:</strong> {{ setor.postura|join(', ') }}</p>
+              <p><strong>Exigência física:</strong> {{ setor.exigencia_fisica }} · <strong>Exigência cognitiva:</strong> {{ setor.exigencia_cognitiva }}</p>
+              <p><strong>Organização:</strong> {{ setor.organizacao }}</p>
+              <p><strong>Medidas:</strong> {{ setor.medidas|join(', ') }}</p>
+            </div>
+          </details>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endfor %}
+{% endblock %}

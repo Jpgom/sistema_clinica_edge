@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Cadastrar Exames{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Cadastro</p>
+    <h1>Exames</h1>
+    <p class="muted">Cadastre os exames que poderão entrar no PCMSO por setor.</p>
+  </div>
+  <a class="btn primary" href="{{ url_for('create_exam') }}">Novo exame</a>
+</div>
+
+<div class="table-card">
+  <table>
+    <thead>
+      <tr>
+        <th>Exame</th>
+        <th>Periodicidade</th>
+        <th>Admissional</th>
+        <th>Periódico</th>
+        <th>Retorno</th>
+        <th>Mudança</th>
+        <th>Demissional</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for exam in exams %}
+        <tr>
+          <td>{{ exam.exame }}</td>
+          <td>{{ exam.periodicidade }}</td>
+          <td>{{ exam.admissional }}</td>
+          <td>{{ exam.periodico }}</td>
+          <td>{{ exam.retorno }}</td>
+          <td>{{ exam.mudanca }}</td>
+          <td>{{ exam.demissional }}</td>
+          <td class="actions">
+            <a class="btn small" href="{{ url_for('edit_exam', exam_id=exam.id) }}">Editar</a>
+            <form method="post" action="{{ url_for('delete_exam', exam_id=exam.id) }}" onsubmit="return confirm('Excluir este exame?')">
+              <button class="btn small danger">Excluir</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="empty">Nenhum exame cadastrado.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

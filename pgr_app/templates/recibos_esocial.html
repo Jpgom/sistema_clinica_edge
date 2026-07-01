@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Recibos eSocial{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Conversão</p>
+    <h1>Formatar recibos das empresas</h1>
+    <p class="muted">Envie a planilha RELFUNCGERAL para gerar um PDF em paisagem com todas as colunas na mesma folha.</p>
+  </div>
+</div>
+
+<section class="panel">
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('recibos_esocial') }}" class="grid-form">
+    <label class="span-2">
+      <span>Planilha de recibos RELFUNCGERAL (.xls, .xlsx ou .zip)</span>
+      <input type="file" name="planilha" required accept=".xls,.xlsx">
+    </label>
+
+    <div class="span-2 info-panel soft-note">
+      <strong>Colunas que sairão no PDF</strong>
+      <p class="muted">EVENTO, empresa, NOME, CPF, TIPO, STATUS, DATA, Recibo eSocial e Recibo Sefaz.</p>
+      <p class="muted">A coluna unidade e outras colunas da planilha serão ignoradas. Se o Excel gerar uma pasta _arquivos junto do .xls, compacte o .xls com essa pasta em .zip ou salve como .xlsx antes de enviar.</p>
+    </div>
+
+    <div class="form-actions span-2">
+      <button class="btn primary" type="submit">Formatar e baixar PDF</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

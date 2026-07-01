@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Editar Risco{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="panel-title split">
+    <div>
+      <h2>Editar risco</h2>
+      <p>Altere as informações e salve para atualizar o cadastro.</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('cadastro') }}">Voltar</a>
+  </div>
+  <form method="post" class="form-card">
+    {% include "_form.html" %}
+    <div class="actions end">
+      <button class="btn primary" type="submit">Salvar alterações</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

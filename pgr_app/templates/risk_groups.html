@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Grupos de riscos{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Organização</p>
+    <h1>Grupos de riscos</h1>
+    <p class="muted">Monte pacotes de riscos, como LIMPEZA, ADMINISTRATIVO ou MANUTENÇÃO, para aplicar rapidamente na geração dos laudos.</p>
+  </div>
+  <a class="btn ghost" href="{{ url_for('cadastro') }}">Voltar para riscos</a>
+</div>
+
+<section class="panel">
+  <div class="panel-title split">
+    <div>
+      <h2>Novo grupo de riscos</h2>
+      <p>Selecione todos os riscos que farão parte do grupo. Na tela Gerar laudos, o grupo poderá ser aplicado por setor.</p>
+    </div>
+    <input class="search" id="riskGroupFormSearch" placeholder="Buscar risco para o grupo...">
+  </div>
+
+  <form action="{{ url_for('create_risk_group') }}" method="post" class="risk-group-form">
+    <div class="inline-grid">
+      <label>
+        <span>Nome do grupo</span>
+        <input name="nome" required placeholder="Ex.: LIMPEZA">
+      </label>
+      <label>
+        <span>Descrição opcional</span>
+        <input name="descricao" placeholder="Ex.: Riscos padrão para serviços gerais e higienização">
+      </label>
+    </div>
+    {% if risks %}
+      <div class="risk-group-risk-list" id="riskGroupFormList">
+        {% for risk in risks %}
+          <label class="tiny-check risk-group-risk-option" data-search="{{ (risk.risco ~ ' ' ~ risk.tipo_risco ~ ' ' ~ risk.grau_nivel_risco)|lower }}">
+            <input type="checkbox" name="risk_ids" value="{{ risk.id }}">
+            <span>{{ risk.risco }}</span>
+            <em>{{ risk.tipo_risco }} · {{ risk.grau_nivel_risco }}</em>
+          </label>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty left"><strong>Nenhum risco cadastrado.</strong><p>Cadastre riscos antes de criar grupos.</p></div>
+    {% endif %}
+    <div class="actions end"><button class="btn primary" type="submit">Salvar grupo</button></div>
+  </form>
+</section>
+
+<section class="panel slim-panel">
+  <div class="panel-title split">
+    <div>
+      <h2>Grupos cadastrados</h2>
+      <p>Lista compacta dos grupos prontos para usar na geração dos laudos.</p>
+    </div>
+    <input class="search" id="riskGroupSearch" placeholder="Buscar grupo ou risco...">
+  </div>
+
+  {% if risk_groups %}
+    <div class="compact-list" id="riskGroupList">
+      {% for group in risk_groups %}
+        <article class="compact-row risk-group-row" data-search="{{ (group.nome ~ ' ' ~ group.descricao ~ ' ' ~ group.risk_names|join(' '))|lower }}">
+          <div>
+            <strong>{{ group.nome }}</strong>
+            <span>{{ group.risk_count }} risco(s){% if group.descricao %} · {{ group.descricao }}{% endif %}</span>
+            <p>{{ group.risk_names|join(', ') }}</p>
+          </div>
+          <div class="row-actions">
+            <a class="btn small" href="{{ url_for('edit_risk_group', group_id=group.id) }}">Editar</a>
+            <button class="btn small danger" type="submit" form="delete-risk-group-{{ group.id }}">Excluir</button>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty"><strong>Nenhum grupo de riscos cadastrado ainda.</strong><p>Crie um grupo para acelerar a seleção de riscos por setor.</p></div>
+  {% endif %}
+
+  {% for group in risk_groups %}
+    <form id="delete-risk-group-{{ group.id }}" action="{{ url_for('delete_risk_group', group_id=group.id) }}" method="post" onsubmit="return confirm('Excluir este grupo de riscos?')"></form>
+  {% endfor %}
+</section>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Empresas{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Cadastro</p>
+    <h1>Empresas</h1>
+    <p class="muted">Cadastre os dados completos que serão usados na Identificação da Empresa dos laudos.</p>
+  </div>
+  <a class="btn primary" href="{{ url_for('create_company') }}">Nova empresa</a>
+</div>
+
+<section class="panel slim-panel">
+  <div class="panel-title split">
+    <div>
+      <h2>Empresas cadastradas</h2>
+      <p>Use uma empresa cadastrada na tela Gerar laudos.</p>
+    </div>
+    <input class="search" id="companySearch" placeholder="Buscar empresa ou CNPJ...">
+  </div>
+
+  {% if companies %}
+    <div class="compact-list" id="companyList">
+      {% for company in companies %}
+        <article class="compact-row" data-search="{{ (company.nome ~ ' ' ~ company.cnpj ~ ' ' ~ company.cnae1 ~ ' ' ~ company.endereco)|lower }}">
+          <div>
+            <strong>{{ company.nome }}</strong>
+            <span>{{ company.cnpj }}{% if company.cnae1 %} · CNAE {{ company.cnae1 }}{% endif %}</span>
+          </div>
+          <div class="row-actions">
+            <a class="btn small" href="{{ url_for('edit_company', company_id=company.id) }}">Editar</a>
+            <form method="post" action="{{ url_for('delete_company', company_id=company.id) }}" onsubmit="return confirm('Excluir esta empresa?')">
+              <button class="btn small danger">Excluir</button>
+            </form>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty"><strong>Nenhuma empresa cadastrada.</strong><p>Cadastre a primeira empresa para gerar os laudos completos.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

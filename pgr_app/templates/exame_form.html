@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Exame</p>
+    <h1>{{ title }}</h1>
+    <p class="muted">Os textos preenchidos aqui serão escritos nas colunas de exames recomendados do PCMSO.</p>
+  </div>
+</div>
+
+<form method="post" class="form-grid panel">
+  <label>
+    Exame
+    <input name="exame" value="{{ exam.exame or '' }}" required placeholder="Ex.: Exame clínico">
+  </label>
+  <label>
+    Periodicidade
+    <input name="periodicidade" value="{{ exam.periodicidade or '' }}" placeholder="Ex.: Anual / Semestral / A cada 2 anos">
+  </label>
+  <label>
+    Admissional
+    <input name="admissional" value="{{ exam.admissional or '' }}" placeholder="Ex.: X / Sim / Obrigatório">
+  </label>
+  <label>
+    Periódico
+    <input name="periodico" value="{{ exam.periodico or '' }}" placeholder="Ex.: X / Sim / Obrigatório">
+  </label>
+  <label>
+    Retorno ao trabalho
+    <input name="retorno" value="{{ exam.retorno or '' }}" placeholder="Ex.: X / Quando aplicável">
+  </label>
+  <label>
+    Mudança de risco
+    <input name="mudanca" value="{{ exam.mudanca or '' }}" placeholder="Ex.: X / Quando aplicável">
+  </label>
+  <label>
+    Demissional
+    <input name="demissional" value="{{ exam.demissional or '' }}" placeholder="Ex.: X / Sim / Obrigatório">
+  </label>
+  <div class="form-actions full">
+    <a class="btn" href="{{ url_for('exames') }}">Voltar</a>
+    <button class="btn primary">Salvar</button>
+  </div>
+</form>
+{% endblock %}

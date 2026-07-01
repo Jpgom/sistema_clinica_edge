@@ -13,6 +13,7 @@
       <a class="nav-link active" href="{{ url_for('renumerador') }}">🔢 Renumerador</a>
       <a class="nav-link" href="{{ url_for('esocial') }}">🗂️ E-SOCIAL</a>
       <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
+      <a class="nav-link" href="/pgr/">🧾 PGR / SST</a>
           {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
       {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link" href="{{ url_for('auditoria') }}">📋 Auditoria</a>{% endif %}
       <a class="nav-link" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>

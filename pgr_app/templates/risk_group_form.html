@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+{% set selected = group.risk_ids or [] %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Organização</p>
+    <h1>{{ title }}</h1>
+    <p class="muted">Atualize o nome e os riscos vinculados a este grupo.</p>
+  </div>
+  <a class="btn ghost" href="{{ url_for('risk_groups') }}">Voltar</a>
+</div>
+
+<section class="panel">
+  <div class="panel-title split">
+    <div>
+      <h2>Dados do grupo</h2>
+      <p>Os riscos marcados aqui serão aplicados juntos na tela Gerar laudos.</p>
+    </div>
+    <input class="search" id="riskGroupFormSearch" placeholder="Buscar risco para o grupo...">
+  </div>
+
+  <form method="post" class="risk-group-form">
+    <div class="inline-grid">
+      <label>
+        <span>Nome do grupo</span>
+        <input name="nome" required value="{{ group.nome }}" placeholder="Ex.: LIMPEZA">
+      </label>
+      <label>
+        <span>Descrição opcional</span>
+        <input name="descricao" value="{{ group.descricao }}" placeholder="Ex.: Riscos padrão para serviços gerais e higienização">
+      </label>
+    </div>
+
+    <div class="risk-group-risk-list" id="riskGroupFormList">
+      {% for risk in risks %}
+        <label class="tiny-check risk-group-risk-option" data-search="{{ (risk.risco ~ ' ' ~ risk.tipo_risco ~ ' ' ~ risk.grau_nivel_risco)|lower }}">
+          <input type="checkbox" name="risk_ids" value="{{ risk.id }}" {% if risk.id in selected %}checked{% endif %}>
+          <span>{{ risk.risco }}</span>
+          <em>{{ risk.tipo_risco }} · {{ risk.grau_nivel_risco }}</em>
+        </label>
+      {% endfor %}
+    </div>
+
+    <div class="actions end">
+      <a class="btn ghost" href="{{ url_for('risk_groups') }}">Cancelar</a>
+      <button class="btn primary" type="submit">Salvar alterações</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

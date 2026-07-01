@@ -1,0 +1,534 @@
+{% extends "base.html" %}
+{% block title %}Gerar Laudos{% endblock %}
+
+{% block content %}
+{% set fs = form_state or {} %}
+{% set selected_sector_ids = fs.get('selected_sector_ids', []) %}
+{% set selected_risk_ids_by_sector = fs.get('selected_risk_ids_by_sector', {}) %}
+{% set selected_exam_ids_by_sector = fs.get('selected_exam_ids_by_sector', {}) %}
+{% set selected_risk_group_ids_by_sector = fs.get('selected_risk_group_ids_by_sector', {}) %}
+{% set aet_state = fs.get('aet', {}) %}
+{% set aet_general = aet_state.get('general', {}) %}
+{% set aet_by_sector = aet_state.get('by_sector', {}) %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Geração</p>
+    <h1>Gerar laudos</h1>
+    <p class="muted">Fluxo enxuto: empresa → grupo → setores → riscos → exames → laudo.</p>
+  </div>
+</div>
+
+<form id="pgrSelectionForm" method="post" enctype="multipart/form-data" class="wizard">
+  <div class="wizard-shell">
+    <aside class="wizard-sidebar-progress" aria-label="Etapas da geração">
+      <button type="button" class="wizard-progress-item is-active" data-step-nav="1"><strong>1</strong><span>Empresa</span></button>
+      <button type="button" class="wizard-progress-item" data-step-nav="2"><strong>2</strong><span>Dados</span></button>
+      <button type="button" class="wizard-progress-item" data-step-nav="3"><strong>3</strong><span>Setores</span></button>
+      <button type="button" class="wizard-progress-item" data-step-nav="4"><strong>4</strong><span>Riscos</span></button>
+      <button type="button" class="wizard-progress-item" data-step-nav="5"><strong>5</strong><span>Exames</span></button>
+      <button type="button" class="wizard-progress-item" data-step-nav="6"><strong>6</strong><span>AET</span></button>
+      <button type="button" class="wizard-progress-item" data-step-nav="7"><strong>7</strong><span>Gerar</span></button>
+    </aside>
+    <div class="wizard-work">
+  <section class="panel step-panel" data-wizard-step="1">
+    <div class="step-number">1</div>
+    <div class="step-content">
+      <h2>Empresa</h2>
+      <p class="muted">Selecione uma empresa cadastrada. Os dados serão usados na Identificação da Empresa dos laudos.</p>
+      {% if companies %}
+        <label class="single-line">
+          <span>Empresa cadastrada</span>
+          <select name="company_id" id="companySelect" required>
+            <option value="">Selecione...</option>
+            {% for company in companies %}
+              <option value="{{ company.id }}" {% if fs.get('company_id') == company.id %}selected{% endif %}>{{ company.nome }} · {{ company.cnpj }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      {% else %}
+        <div class="empty left"><strong>Nenhuma empresa cadastrada.</strong><p>Cadastre uma empresa antes de gerar laudos completos.</p><a class="btn primary" href="{{ url_for('create_company') }}">Cadastrar empresa</a></div>
+      {% endif %}
+
+      <div class="saved-config-box imported-model-box">
+        <div class="split header-line compact-header">
+          <div>
+            <strong>Usar dados de laudo antigo importado</strong>
+            <p class="muted small-note">Aplique setores, cargos, riscos e exames extraídos de um PGR/PCMSO/LTCAT antigo nesta empresa selecionada.</p>
+          </div>
+        </div>
+        <div class="inline-grid">
+          <label>
+            <span>Modelo importado</span>
+            <select name="imported_template_id" id="importedTemplateSelect">
+              <option value="">Nenhum modelo importado selecionado</option>
+              {% for tpl in imported_templates %}
+                <option value="{{ tpl.id }}">{{ tpl.nome }} · {{ tpl.sector_count }} setor(es) · {{ tpl.risk_count }} risco(s) · {{ tpl.linked_risk_count }} vínculo(s) · {{ tpl.exam_count }} exame(s)</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            <span>Grupo onde os setores ficarão</span>
+            <select name="imported_template_group_id">
+              <option value="">Criar grupo temporário automático</option>
+              {% for group in groups if not group.is_temporary %}
+                <option value="{{ group.id }}">{{ group.nome }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <div class="actions wrap small-actions">
+          <button class="btn small primary" id="applyImportedTemplateBtn" type="submit" formnovalidate formaction="{{ url_for('apply_imported_template') }}">Aplicar modelo nesta empresa</button>
+        </div>
+      </div>
+
+      <div class="saved-config-box">
+        <div class="split header-line compact-header">
+          <div>
+            <strong>Configuração salva da empresa</strong>
+            <p class="muted small-note">Carregue uma seleção já usada ou salve a seleção atual para gerar novamente no futuro.</p>
+          </div>
+        </div>
+        <div class="inline-grid">
+          <label>
+            <span>Carregar configuração salva</span>
+            <select id="profileSelect" name="profile_id">
+              <option value="">Nenhuma configuração selecionada</option>
+              {% for profile in report_profiles %}
+                <option value="{{ profile.id }}" data-company="{{ profile.company_id }}" {% if fs.get('profile_id') == profile.id %}selected{% endif %}>{{ profile.nome }} · {{ profile.updated_at }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            <span>Nome para salvar a seleção</span>
+            <input name="profile_name" id="profileName" value="{{ fs.get('profile_name', '') }}" placeholder="Ex.: D. Castro - PGR 2026">
+          </label>
+        </div>
+        <div class="actions wrap small-actions">
+          <button class="btn small ghost" type="button" id="loadProfileBtn">Carregar seleção</button>
+          <button class="btn small" type="submit" formaction="{{ url_for('save_report_profile') }}">Salvar seleção da empresa</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel step-panel" data-wizard-step="2">
+    <div class="step-number">2</div>
+    <div class="step-content">
+      <h2>Dados do laudo</h2>
+      <p class="muted">A Data de criação do laudo é obrigatória para finalizar PGR, PCMSO e LTCAT.</p>
+      <div class="inline-grid">
+        <label>
+          <span>Data de criação do laudo</span>
+          <input name="data_criacao_laudo" id="dataCriacaoLaudo" required value="{{ fs.get('data_criacao_laudo', '') }}" placeholder="Ex.: 05/06/2026">
+        </label>
+        <label class="check-card">
+          <input type="checkbox" name="ajuste_psicossocial" id="ajustePsicossocial" value="1" {% if fs.get('ajuste_psicossocial') == '1' %}checked{% endif %}>
+          <span>Apenas ajuste / inclusão de Risco Psicossocial</span>
+        </label>
+      </div>
+      <label class="single-line revision-field" id="revisionField">
+        <span>Data da revisão psicossocial</span>
+        <input name="data_da_revisao" id="dataDaRevisao" value="{{ fs.get('data_da_revisao', '') }}" placeholder="Ex.: 06/2026">
+      </label>
+      <p class="muted small-note">Quando marcada a opção de ajuste, será inserida na capa a linha: “Revisão periódica de inclusão de Risco Psicossocial: data informada”.</p>
+    </div>
+  </section>
+
+  <section class="panel step-panel" data-wizard-step="3">
+    <div class="step-number">3</div>
+    <div class="step-content">
+      <h2>Grupo e setores</h2>
+      <p class="muted">Escolha o grupo para filtrar e marque os setores que farão parte do laudo.</p>
+      <div class="inline-grid">
+        <label>
+          <span>Grupo de setores</span>
+          <select id="groupFilter">
+            <option value="">Todos os grupos</option>
+            {% for group in grouped_sectors %}
+              <option value="{{ group.id }}">{{ group.nome }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>Buscar setor/cargo</span>
+          <input id="pgrSectorSearch" placeholder="Digite para filtrar...">
+        </label>
+      </div>
+      {% if sectors %}
+        <div class="sector-select-list" id="pgrSectorList">
+          {% for sector in sectors %}
+            <label class="list-check sector-option" data-group="{{ sector.grupo_id or '__sem_grupo__' }}" data-search="{{ (sector.grupo_nome ~ ' ' ~ sector.setor ~ ' ' ~ sector.cargos|map(attribute='cargo')|join(' ') ~ ' ' ~ sector.cargos|map(attribute='cbo')|join(' '))|lower }}">
+              <input type="checkbox" name="pgr_sector_ids" value="{{ sector.id }}" {% if sector.id in selected_sector_ids %}checked{% endif %}>
+              <span><strong>{{ sector.setor }}</strong><small>{{ sector.grupo_nome }} · {{ sector.cargos|map(attribute='cargo')|join(', ') }}</small></span>
+            </label>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty left"><strong>Nenhum setor cadastrado.</strong><p>Cadastre setores/cargos antes de gerar laudos.</p><a class="btn primary" href="{{ url_for('setores') }}">Cadastrar setores</a></div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel step-panel" data-wizard-step="4">
+    <div class="step-number">4</div>
+    <div class="step-content">
+      <div class="split header-line">
+        <div>
+          <h2>Riscos por setor</h2>
+          <p class="muted">Use esta seleção para PGR e PCMSO. Na LTCAT, todos os riscos ambientais marcados aqui entram automaticamente.</p>
+        </div>
+        <div class="risk-header-tools">
+          <span class="pill count-pill" id="totalRiskSelected">0 riscos selecionados</span>
+          <button class="btn small primary" type="button" id="openQuickRiskModal">+ Cadastrar risco sem sair</button>
+          <input class="search" id="riskPickerSearch" placeholder="Buscar risco...">
+        </div>
+      </div>
+      {% if risks and sectors %}
+        <div class="accordion-list">
+          {% for sector in sectors %}
+            <details class="sector-picker" data-sector="{{ sector.id }}" data-group="{{ sector.grupo_id or '__sem_grupo__' }}" {% if sector.id in selected_sector_ids %}open{% endif %}>
+              <summary>
+                <strong>{{ sector.setor }}</strong>
+                <small>{{ sector.grupo_nome }} · {{ sector.cargos|length }} cargo(s) · <span class="sector-risk-count" data-risk-count>0 riscos selecionados</span></small>
+              </summary>
+              <div class="picker-topbar">
+                <span class="muted small-note">Selecionados ficam sempre no topo da lista.</span>
+                <span class="pill soft-pill" data-risk-count-badge>0 selecionados</span>
+              </div>
+              {% if risk_groups %}
+                <div class="risk-group-picker">
+                  <div class="risk-group-picker-head">
+                    <strong>Grupos de riscos</strong>
+                    <small>Marque um grupo para aplicar seus riscos neste setor. Depois você ainda pode adicionar/remover riscos isolados.</small>
+                  </div>
+                  <div class="risk-group-chip-list">
+                    {% for group in risk_groups %}
+                      <label class="risk-group-chip" title="{{ group.risk_names|join(', ') }}">
+                        <input class="sector-risk-group-check" type="checkbox" name="sector_risk_group_ids_{{ sector.id }}" value="{{ group.id }}" data-sector="{{ sector.id }}" data-risk-ids="{{ group.risk_ids|join(',') }}" {% if group.id in selected_risk_group_ids_by_sector.get(sector.id, []) %}checked{% endif %}>
+                        <span>{{ group.nome }}</span>
+                        <em>{{ group.risk_count }} riscos</em>
+                      </label>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endif %}
+              <div class="picker-list risk-list-mode" data-risk-list="{{ sector.id }}">
+                {% for risk in risks %}
+                  <label class="tiny-check risk-option risk-list-row {% if risk.id in selected_risk_ids_by_sector.get(sector.id, []) %}is-selected{% endif %}" data-index="{{ loop.index0 }}" data-search="{{ (risk.risco ~ ' ' ~ risk.tipo_risco ~ ' ' ~ risk.grau_nivel_risco)|lower }}">
+                    <input class="pgr-risk-check" type="checkbox" name="sector_risk_ids_{{ sector.id }}" value="{{ risk.id }}" {% if risk.id in selected_risk_ids_by_sector.get(sector.id, []) %}checked{% endif %}>
+                    <span>{{ risk.risco }}</span><em>{{ risk.tipo_risco }} · {{ risk.grau_nivel_risco }}</em>
+                  </label>
+                {% endfor %}
+              </div>
+            </details>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty left"><strong>Cadastre riscos e setores para continuar.</strong></div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel step-panel" data-wizard-step="5">
+    <div class="step-number">5</div>
+    <div class="step-content">
+      <div class="split header-line">
+        <div><h2>Exames por setor</h2><p class="muted">Usado no PCMSO. Marque os exames recomendados para cada setor.</p></div>
+        <div class="risk-header-tools"><button class="btn small ghost" type="button" id="suggestExamsBtn">Sugerir exames pelas regras</button><input class="search" id="examPickerSearch" placeholder="Buscar exame..."></div>
+      </div>
+      <div class="exam-knowledge-box">
+        <strong>Conhecimento técnico integrado</strong>
+        <span>O sistema cruza os riscos selecionados com complementares sugeridos, como: ruído → audiometria; poeiras/fumos → espirometria; químicos → hemograma/TGO/TGP; altura/eletricidade → ECG; psicossocial → anamnese psicossocial/SRQ-20.</span>
+      </div>
+      {% if sectors %}
+        <div class="accordion-list">
+          {% for sector in sectors %}
+            <details class="sector-picker" data-sector="{{ sector.id }}" data-group="{{ sector.grupo_id or '__sem_grupo__' }}" {% if sector.id in selected_sector_ids %}open{% endif %}>
+              <summary><strong>{{ sector.setor }}</strong><small>{{ sector.grupo_nome }}</small></summary>
+              <div class="picker-list">
+                {% for exam in exams %}
+                  <label class="tiny-check exam-option" data-search="{{ (exam.exame ~ ' ' ~ exam.periodicidade)|lower }}">
+                    <input class="pgr-exam-check" type="checkbox" name="sector_exam_ids_{{ sector.id }}" value="{{ exam.id }}" {% if exam.id in selected_exam_ids_by_sector.get(sector.id, []) %}checked{% endif %}>
+                    <span>{{ exam.exame }}</span><em>{{ exam.periodicidade }}</em>
+                  </label>
+                {% else %}
+                  <div class="empty left small-empty">Nenhum exame cadastrado.</div>
+                {% endfor %}
+              </div>
+            </details>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel step-panel aet-panel" data-wizard-step="6">
+    <div class="step-number">6</div>
+    <div class="step-content">
+      <div class="split header-line">
+        <div>
+          <h2>AET - análise ergonômica detalhada</h2>
+          <p class="muted">Preencha os dados por setor. O sistema já puxa empresa, cargos, atividades e riscos ergonômicos/psicossociais selecionados.</p>
+        </div>
+        <span class="pill soft-pill">NR-17</span>
+      </div>
+      <div class="aet-preset-box">
+        <div>
+          <strong>Pré-preenchimento técnico por CNAE</strong>
+          <p class="muted small-note">O sistema usa o CNAE/atividade da empresa para sugerir opções do formulário. Tudo pode ser alterado antes de gerar.</p>
+        </div>
+        <div class="inline-actions">
+          <button class="btn small ghost" type="button" id="applyAetPresetBtn">Aplicar sugestões do CNAE</button>
+          <a class="btn small ghost" href="{{ url_for('modelos_aet') }}" target="_blank">Ver modelos AET/CNAEs</a>
+        </div>
+        <span class="pill soft-pill" id="aetPresetStatus">Aguardando empresa</span>
+      </div>
+      <div class="inline-grid">
+        <label>
+          <span>Tipo de documento</span>
+          {% set aet_tipo_doc = aet_general.get('tipo_documento', '') or aet_general.get('tipo_aet', '') %}
+          <select name="aet_tipo_documento" data-aet-general="tipo_documento">
+            {% for opt in ['AEP - Avaliação Ergonômica Preliminar', 'AET - Análise Ergonômica do Trabalho', 'AET complementar de inclusão de risco psicossocial', 'AET completa com formulário ergonômico'] %}
+              <option value="{{ opt }}" {% if aet_tipo_doc == opt or (not aet_tipo_doc and loop.last) %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+          <input type="hidden" name="aet_tipo" value="{{ aet_general.get('tipo_aet', 'AET completa com formulário ergonômico') or 'AET completa com formulário ergonômico' }}" data-aet-general="tipo_aet">
+        </label>
+        <label>
+          <span>Motivo da análise</span>
+          {% set motivo = aet_general.get('motivo_analise', '') %}
+          <select name="aet_motivo_analise" data-aet-general="motivo_analise">
+            {% for opt in ['Atendimento à NR-17 e integração com o PGR', 'Inclusão de risco psicossocial no PGR', 'Revisão periódica', 'Solicitação da empresa', 'Mudança de processo/setor', 'Queixa ou demanda ergonômica'] %}
+              <option value="{{ opt }}" {% if motivo == opt or (not motivo and loop.first) %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>Condição ergonômica geral</span>
+          {% set condicao = aet_general.get('condicao_ergonomica_geral', '') %}
+          <select name="aet_condicao_ergonomica_geral" data-aet-general="condicao_ergonomica_geral">
+            {% for opt in ['Adequada', 'Adequada com recomendações', 'Parcialmente adequada', 'Necessita intervenção prioritária'] %}
+              <option value="{{ opt }}" {% if condicao == opt or (not condicao and loop.index == 2) %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>Responsável técnico pela AET</span>
+          <input name="aet_responsavel_tecnico" value="{{ aet_general.get('responsavel_tecnico', '') }}" placeholder="Ex.: Genilson Cordovil Alves - CREA ...">
+        </label>
+      </div>
+      <h3 class="mini-heading">Metodologia e fonte dos dados</h3>
+      <div class="aet-method-grid">
+        {% set metodos = aet_general.get('metodologia', []) %}
+        {% for metodo in ['Levantamento documental', 'Análise dos setores e cargos cadastrados', 'Riscos ergonômicos/psicossociais do PGR', 'Relatório Psicossocial/AEP Psicossocial', 'Entrevista/relato dos trabalhadores', 'Observação do posto de trabalho', 'Análise de mobiliário/equipamentos', 'Questionário ergonômico por setor'] %}
+          <label class="tiny-check">
+            <input type="checkbox" name="aet_metodologia" value="{{ metodo }}" {% if metodo in metodos or (not metodos and loop.index <= 4) %}checked{% endif %}>
+            <span>{{ metodo }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      <div class="aet-method-grid compact-methods">
+        {% set origens = aet_general.get('origem_dados', []) %}
+        {% for origem in ['PGR', 'PCMSO', 'LTCAT', 'AEP/Relatório Psicossocial', 'Descrição de cargos', 'Informações fornecidas pela empresa', 'Visita técnica', 'Registros fotográficos'] %}
+          <label class="tiny-check">
+            <input type="checkbox" name="aet_origem_dados" value="{{ origem }}" {% if origem in origens or (not origens and loop.index <= 6) %}checked{% endif %}>
+            <span>{{ origem }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      <div class="grid-form slim-form">
+        <label class="span-2"><span>Objetivo complementar da AET</span><textarea name="aet_objetivo_complementar" rows="2" placeholder="Opcional: detalhe o motivo da AET, revisão ou inclusão psicossocial.">{{ aet_general.get('objetivo_complementar', '') }}</textarea></label>
+        <label class="span-2"><span>Critérios complementares de análise</span><textarea name="aet_criterios_analise" rows="2" placeholder="Opcional: informe método, fonte de dados, visita, entrevista ou documento complementar.">{{ aet_general.get('criterios_analise', '') }}</textarea></label>
+        <label class="span-2"><span>Limitações da análise</span><textarea name="aet_limitacoes_analise" rows="2" placeholder="Ex.: análise baseada em informações documentais e dados fornecidos pela empresa no momento da elaboração.">{{ aet_general.get('limitacoes_analise', '') }}</textarea></label>
+      </div>
+      {% if sectors %}
+        <div class="accordion-list aet-sector-list">
+          {% for sector in sectors %}
+            {% set ad = aet_by_sector.get(sector.id, {}) %}
+            {% set selected_posturas = ad.get('postura_predominante', []) %}
+            <details class="sector-picker aet-sector-picker" data-sector="{{ sector.id }}" data-group="{{ sector.grupo_id or '__sem_grupo__' }}" {% if sector.id in selected_sector_ids %}open{% endif %}>
+              <summary>
+                <strong>{{ sector.setor }}</strong>
+                <small>{{ sector.grupo_nome }} · {{ sector.cargos|map(attribute='cargo')|join(', ') }}</small>
+              </summary>
+              <div class="aet-sector-body">
+                <div class="aet-check-line">
+                  {% for postura in ['Sentado', 'Em pé', 'Alternado', 'Deslocamento frequente', 'Inclinação/flexão de tronco', 'Agachamento eventual', 'Elevação de membros superiores'] %}
+                    <label class="tiny-check"><input type="checkbox" name="aet_postura_{{ sector.id }}" value="{{ postura }}" {% if postura in selected_posturas %}checked{% endif %}><span>{{ postura }}</span></label>
+                  {% endfor %}
+                </div>
+                <div class="inline-grid three-cols">
+                  <label><span>Tipo de atividade predominante</span><select name="aet_tipo_atividade_{{ sector.id }}" data-aet-sector="tipo_atividade"><option value="">A definir</option>{% for opt in ['Administrativa/digitação', 'Atendimento ao público', 'Vendas/organização de mercadorias', 'Limpeza/conservação', 'Operacional/manutenção', 'Portaria/controle de acesso', 'Transporte/deslocamento', 'Mista'] %}<option value="{{ opt }}" {% if ad.get('tipo_atividade') == opt %}selected{% endif %}>{{ opt }}</option>{% endfor %}</select></label>
+                  <label><span>Exigência física</span><select name="aet_exigencia_fisica_{{ sector.id }}" data-aet-sector="exigencia_fisica"><option value="">A definir</option>{% for opt in ['Baixa', 'Moderada', 'Elevada'] %}<option value="{{ opt }}" {% if ad.get('exigencia_fisica') == opt %}selected{% endif %}>{{ opt }}</option>{% endfor %}</select></label>
+                  <label><span>Exigência cognitiva</span><select name="aet_exigencia_cognitiva_{{ sector.id }}" data-aet-sector="exigencia_cognitiva"><option value="">A definir</option>{% for opt in ['Baixa', 'Moderada', 'Elevada'] %}<option value="{{ opt }}" {% if ad.get('exigencia_cognitiva') == opt %}selected{% endif %}>{{ opt }}</option>{% endfor %}</select></label>
+                  <label><span>Levantamento/transporte de cargas</span><select name="aet_levantamento_cargas_{{ sector.id }}"><option value="">A definir</option>{% for opt in ['Não habitual', 'Eventual', 'Intermitente', 'Habitual'] %}<option value="{{ opt }}" {% if ad.get('levantamento_cargas') == opt %}selected{% endif %}>{{ opt }}</option>{% endfor %}</select></label>
+                  <label><span>Movimentos repetitivos</span><select name="aet_movimentos_repetitivos_{{ sector.id }}"><option value="">A definir</option>{% for opt in ['Baixa frequência', 'Moderada frequência', 'Alta frequência'] %}<option value="{{ opt }}" {% if ad.get('movimentos_repetitivos') == opt %}selected{% endif %}>{{ opt }}</option>{% endfor %}</select></label>
+                  <label><span>Atenção/concentração</span><select name="aet_atencao_concentracao_{{ sector.id }}"><option value="">A definir</option>{% for opt in ['Baixa', 'Moderada', 'Elevada'] %}<option value="{{ opt }}" {% if ad.get('atencao_concentracao') == opt %}selected{% endif %}>{{ opt }}</option>{% endfor %}</select></label>
+                  <label><span>Atendimento ao público</span><select name="aet_atendimento_publico_{{ sector.id }}"><option value="">A definir</option>{% for opt in ['Não aplicável', 'Eventual', 'Frequente', 'Contínuo'] %}<option value="{{ opt }}" {% if ad.get('atendimento_publico') == opt %}selected{% endif %}>{{ opt }}</option>{% endfor %}</select></label>
+                  <label><span>Autonomia</span><select name="aet_autonomia_{{ sector.id }}"><option value="">A definir</option>{% for opt in ['Adequada', 'Parcialmente limitada', 'Baixa autonomia'] %}<option value="{{ opt }}" {% if ad.get('autonomia') == opt %}selected{% endif %}>{{ opt }}</option>{% endfor %}</select></label>
+                  <label><span>Metas/prioridades</span><select name="aet_metas_prioridades_{{ sector.id }}"><option value="">A definir</option>{% for opt in ['Compatíveis', 'Demandas variáveis', 'Conflitos de prioridade', 'Metas intensas'] %}<option value="{{ opt }}" {% if ad.get('metas_prioridades') == opt %}selected{% endif %}>{{ opt }}</option>{% endfor %}</select></label>
+                  <label><span>Comunicação</span><select name="aet_comunicacao_{{ sector.id }}"><option value="">A definir</option>{% for opt in ['Adequada', 'Necessita melhoria', 'Risco de conflito/comunicação hostil'] %}<option value="{{ opt }}" {% if ad.get('comunicacao') == opt %}selected{% endif %}>{{ opt }}</option>{% endfor %}</select></label>
+                  <label><span>Prioridade ergonômica</span><select name="aet_prioridade_{{ sector.id }}" data-aet-sector="prioridade"><option value="">Automática</option>{% for opt in ['Baixa', 'Média', 'Alta', 'Crítica'] %}<option value="{{ opt }}" {% if ad.get('prioridade') == opt %}selected{% endif %}>{{ opt }}</option>{% endfor %}</select></label>
+                </div>
+                <div class="aet-method-grid compact-methods">
+                  {% set fatores_org = ad.get('fatores_organizacionais', []) %}
+                  {% for opt in ['Atendimento ao público', 'Atenção contínua', 'Pressão por demanda', 'Baixa autonomia', 'Comunicação', 'Conflitos de prioridade', 'Deslocamentos no setor', 'Postura em pé', 'Trabalho sentado', 'Manuseio de materiais'] %}
+                    <label class="tiny-check"><input type="checkbox" name="aet_fatores_organizacionais_{{ sector.id }}" value="{{ opt }}" {% if opt in fatores_org %}checked{% endif %} data-aet-sector-list="fatores"><span>{{ opt }}</span></label>
+                  {% endfor %}
+                </div>
+                <div class="aet-method-grid compact-methods">
+                  {% set medidas_rec = ad.get('medidas_recomendadas', []) %}
+                  {% for opt in ['Alternância postural', 'Pausas breves', 'Rodízio de tarefas', 'Ajuste de mobiliário', 'Organização do posto', 'Ferramentas adequadas', 'Melhoria de comunicação', 'Definição de prioridades', 'Orientação NR-17', 'Acompanhamento psicossocial'] %}
+                    <label class="tiny-check"><input type="checkbox" name="aet_medidas_recomendadas_{{ sector.id }}" value="{{ opt }}" {% if opt in medidas_rec %}checked{% endif %} data-aet-sector-list="medidas"><span>{{ opt }}</span></label>
+                  {% endfor %}
+                </div>
+                <div class="grid-form slim-form">
+                  <label><span>Ritmo de trabalho</span><input name="aet_ritmo_trabalho_{{ sector.id }}" data-aet-sector="ritmo_trabalho" value="{{ ad.get('ritmo_trabalho', '') }}" placeholder="Ex.: contínuo, por demanda, com atendimento ao público"></label>
+                  <label><span>Pausas/recuperação</span><input name="aet_pausas_{{ sector.id }}" data-aet-sector="pausas" value="{{ ad.get('pausas', '') }}" placeholder="Ex.: pausas informais, pausas programadas, intervalo legal"></label>
+                  <label><span>Mobiliário/posto</span><input name="aet_mobiliario_{{ sector.id }}" data-aet-sector="mobiliario" value="{{ ad.get('mobiliario', '') }}" placeholder="Ex.: adequado, parcialmente adequado, a avaliar"></label>
+                  <label><span>Condições ambientais</span><input name="aet_ambiente_{{ sector.id }}" data-aet-sector="ambiente" value="{{ ad.get('ambiente', '') }}" placeholder="Iluminação, ventilação, ruído, conforto térmico"></label>
+                  <label><span>Organização do trabalho</span><input name="aet_organizacao_{{ sector.id }}" data-aet-sector="organizacao" value="{{ ad.get('organizacao', '') }}" placeholder="Autonomia, comunicação, metas, prioridades"></label>
+                  <label><span>Equipamentos/ferramentas</span><input name="aet_equipamentos_{{ sector.id }}" data-aet-sector="equipamentos" value="{{ ad.get('equipamentos', '') }}" placeholder="Equipamentos usados no setor"></label>
+                  <label class="span-2"><span>Queixas/observações ergonômicas</span><textarea name="aet_queixas_{{ sector.id }}" rows="2" placeholder="Opcional: dores, fadiga, reclamações, desconfortos ou achados do setor.">{{ ad.get('queixas', '') }}</textarea></label>
+                  <label class="span-2"><span>Observações técnicas complementares</span><textarea name="aet_observacoes_{{ sector.id }}" rows="2" placeholder="Opcional: observações do avaliador.">{{ ad.get('observacoes', '') }}</textarea></label>
+                  <label class="span-2"><span>Recomendações manuais do setor</span><textarea name="aet_recomendacoes_{{ sector.id }}" rows="2" placeholder="Opcional: será somado às recomendações automáticas dos riscos.">{{ ad.get('recomendacoes', '') }}</textarea></label>
+                  <label><span>Prazo das ações</span><input name="aet_prazo_{{ sector.id }}" data-aet-sector="prazo" value="{{ ad.get('prazo', '') }}" placeholder="Ex.: 30 dias, 60 dias, contínuo"></label>
+                  <label><span>Responsável pelas ações</span><input name="aet_responsavel_{{ sector.id }}" data-aet-sector="responsavel" value="{{ ad.get('responsavel', '') }}" placeholder="Ex.: Empresa / Administração"></label>
+                  <label class="span-2"><span>Conclusão do setor</span><textarea name="aet_conclusao_setor_{{ sector.id }}" rows="2" placeholder="Opcional: se ficar em branco, o sistema gera automaticamente conforme os riscos.">{{ ad.get('conclusao_setor', '') }}</textarea></label>
+                </div>
+              </div>
+            </details>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <label class="single-line"><span>Conclusão geral manual da AET</span><textarea name="aet_conclusao_geral" rows="3" placeholder="Opcional: se ficar em branco, o sistema gera a conclusão conforme os riscos e formulários.">{{ aet_general.get('conclusao_geral_manual', '') }}</textarea></label>
+    </div>
+  </section>
+
+  <section class="panel info-panel ltcat-auto-panel" data-wizard-step="7">
+    <div>
+      <strong>LTCAT automática</strong>
+      <p class="muted">Ao gerar a LTCAT, todos os riscos ambientais selecionados em cada setor entram automaticamente: FÍSICO, QUÍMICO e BIOLÓGICO. Se o setor não tiver risco ambiental marcado, será gerado como AUSÊNCIA DE RISCOS.</p>
+    </div>
+  </section>
+
+  <section class="panel step-panel merge-panel" data-wizard-step="7">
+    <div class="step-number">7</div>
+    <div class="step-content">
+      <h2>Juntar PGR + AET + Relatório Psicossocial</h2>
+      <p class="muted">Use quando terminar o PGR desta empresa e quiser gerar um único Word com PGR, página de link para AET, AET gerada pelo sistema, página de link para o psicossocial e o relatório psicossocial em PDF preservado no Word.</p>
+      <div class="inline-grid">
+        <label>
+          <span>AET externa em Word (.docx) - opcional</span>
+          <input type="file" name="aet_docx" accept=".docx">
+          <small>Se não enviar, o sistema gera a AET automaticamente pelos formulários preenchidos.</small>
+        </label>
+        <label>
+          <span>Relatório Psicossocial em PDF</span>
+          <input type="file" name="psicossocial_pdf" accept=".pdf">
+        </label>
+        <label>
+          <span>Mês da inclusão por extenso (opcional)</span>
+          <input name="mes_extenso" placeholder="Ex.: JUNHO">
+        </label>
+      </div>
+      <p class="muted small-note">Se o mês ficar em branco, o sistema usa a Data de criação do laudo para preencher as páginas intermediárias.</p>
+    </div>
+  </section>
+
+  <section class="panel sticky-generate" data-wizard-step="7">
+    <div>
+      <strong>Gerar documentos</strong>
+      <span>Os laudos serão gerados conforme a empresa, setores, riscos e exames selecionados. A última seleção da empresa fica salva automaticamente ao gerar um laudo completo.</span>
+    </div>
+    <div class="actions">
+      <button class="btn primary" type="submit" formaction="{{ url_for('generate_complete_pgr') }}">PGR completo</button>
+      <button class="btn primary third" type="submit" formaction="{{ url_for('generate_complete_pcmso') }}">PCMSO completo</button>
+      <button class="btn primary danger-alt" type="submit" formaction="{{ url_for('generate_complete_ltcat') }}">LTCAT completo</button>
+      <button class="btn primary accent" type="submit" formaction="{{ url_for('generate_complete_aet') }}">AET completa</button>
+      <button class="btn primary success" type="submit" formaction="{{ url_for('generate_company_zip_package') }}">Pacote ZIP</button>
+      <button class="btn primary dark" type="submit" data-ajax-download="true" data-processing-text="Juntando arquivos... aguarde" formaction="{{ url_for('generate_pgr_aet_psychosocial') }}">PGR + AET + Psicossocial</button>
+    </div>
+    <div class="ajax-download-status sticky-status" data-ajax-status aria-live="polite"></div>
+  </section>
+
+  <details class="panel optional-tools" data-wizard-step="7">
+    <summary class="panel-summary"><span>Exportações avulsas</span><small>Para conferência técnica dos blocos isolados</small></summary>
+    <div class="actions wrap">
+      <button class="btn ghost" type="submit" formaction="{{ url_for('generate_action_plan') }}">Plano de Ação</button>
+      <button class="btn ghost" type="submit" formaction="{{ url_for('generate_risco_pgr') }}">Inventário/Risco PGR</button>
+      <button class="btn ghost" type="submit" formaction="{{ url_for('generate_riscos_pcmso') }}">Riscos/Exames PCMSO</button>
+      <button class="btn ghost" type="submit" formaction="{{ url_for('generate_relacao_funcao_atividade') }}">Relação Função x Atividade</button>
+      <button class="btn ghost" type="submit" formaction="{{ url_for('generate_descritivo_setor') }}">Descritivo Setor</button>
+    </div>
+  </details>
+    </div>
+  </div>
+</form>
+
+<script type="application/json" id="aetPresetsData">{{ aet_presets|tojson }}</script>
+<script type="application/json" id="companiesData">{{ companies|tojson }}</script>
+<script type="application/json" id="reportProfilesData">{{ report_profiles|tojson }}</script>
+<script type="application/json" id="importedTemplatesData">{{ imported_templates|tojson }}</script>
+
+<div class="modal-backdrop" id="quickRiskModal" aria-hidden="true">
+  <div class="modal-card quick-risk-modal" role="dialog" aria-modal="true" aria-labelledby="quickRiskTitle">
+    <div class="modal-head">
+      <div>
+        <p class="eyebrow">Cadastro rápido</p>
+        <h2 id="quickRiskTitle">Cadastrar risco sem sair da geração</h2>
+        <p class="muted">Após salvar, o risco aparece imediatamente nas listas dos setores sem apagar suas seleções.</p>
+      </div>
+      <button class="btn small ghost" type="button" id="closeQuickRiskModal">Fechar</button>
+    </div>
+
+    <form id="quickRiskForm" class="quick-risk-form">
+      <div class="quick-risk-errors" id="quickRiskErrors" aria-live="polite"></div>
+
+      <details class="mini-section" open>
+        <summary>1. Dados principais</summary>
+        <div class="grid-form modal-grid">
+          <label class="span-2"><span>Perigo / Risco</span><input name="risco" required placeholder="Ex.: Ruído contínuo ou intermitente"></label>
+          <label><span>Tipo de Risco</span><select name="tipo_risco" required><option value="">Selecione...</option>{% for option in options.tipos_risco %}<option value="{{ option }}">{{ option }}</option>{% endfor %}</select></label>
+          <label><span>Grau de Severidade</span><select name="grau_severidade" required><option value="">Selecione...</option>{% for option in options.severidades %}<option value="{{ option }}">{{ option }}</option>{% endfor %}</select></label>
+          <label><span>Grau de Possibilidade</span><select name="grau_possibilidade" required><option value="">Selecione...</option>{% for option in options.possibilidades %}<option value="{{ option }}">{{ option }}</option>{% endfor %}</select></label>
+          <label><span>Grau de Nível de Risco</span><select name="grau_nivel_risco" required><option value="">Selecione...</option>{% for option in options.niveis_risco %}<option value="{{ option }}">{{ option }}</option>{% endfor %}</select></label>
+        </div>
+      </details>
+
+      <details class="mini-section" open>
+        <summary>2. PGR e plano de ação</summary>
+        <div class="grid-form modal-grid">
+          <label class="span-2"><span>Ações Preventiva / Corretiva</span><textarea name="acoes" required rows="4" placeholder="Descreva as ações.&#10;TREINAMENTO DE NR – XX"></textarea></label>
+          <label class="span-2"><span>Indicador de Efetividade</span><textarea name="indicador" required rows="3" placeholder="Ex.: Inspeções registradas, ausência de ocorrências e colaboradores orientados."></textarea></label>
+          <label class="span-2"><span>Descrição do agente</span><input name="descricao_agente" placeholder="Se ficar em branco, usa o Perigo/Risco"></label>
+          <label class="span-2"><span>Possíveis lesões ou agravos à saúde</span><textarea name="possiveis_lesoes" required rows="3"></textarea></label>
+          <label class="span-2"><span>Fontes ou circunstâncias</span><textarea name="fontes_circunstancias" required rows="3">Durante o processo de trabalho.</textarea></label>
+          <label><span>EPI</span><textarea name="epis" required rows="3"></textarea></label>
+          <label><span>EPC</span><textarea name="epcs" required rows="3"></textarea></label>
+        </div>
+      </details>
+
+      <details class="mini-section">
+        <summary>3. Dados para LTCAT</summary>
+        <div class="grid-form modal-grid">
+          <label><span>Meio de propagação / via de exposição</span><input name="ltcat_meio_propagacao"></label>
+          <label><span>Periodicidade / jornada de exposição</span><input name="ltcat_periodicidade_jornada" value="Mensal (<= 4 horas < 10% jornada)"></label>
+          <label><span>Insalubridade</span><input name="ltcat_insalubridade" value="Não"></label>
+          <label><span>Grau de insalubridade</span><input name="ltcat_grau_insalubridade" value="Não aplicável"></label>
+          <label><span>Aposentadoria especial</span><input name="ltcat_aposentadoria_especial" value="Não"></label>
+          <label class="span-2"><span>Enquadramento técnico</span><textarea name="ltcat_enquadramento_tecnico" rows="3"></textarea></label>
+          <label class="span-2"><span>Parecer previdenciário</span><textarea name="ltcat_parecer_previdenciario" rows="3"></textarea></label>
+        </div>
+      </details>
+
+      <div class="modal-actions">
+        <label class="quick-auto-select"><input type="checkbox" id="quickRiskAutoSelect" checked> <span>Já marcar este risco nos setores selecionados</span></label>
+        <button class="btn ghost" type="button" id="cancelQuickRiskModal">Cancelar</button>
+        <button class="btn primary" type="submit" id="saveQuickRiskBtn">Salvar risco e continuar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

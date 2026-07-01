@@ -1,0 +1,147 @@
+<div class="form-section">
+  <div>
+    <h3>Informações gerais</h3>
+    <p>O nome do risco será usado no Plano de Ação e no PGR completo.</p>
+  </div>
+  <div class="grid-form">
+    <label class="span-2">
+      <span>Perigo / Risco</span>
+      <input name="risco" required value="{{ risk.risco if risk else '' }}" placeholder="Ex.: Queda de mesmo nível">
+    </label>
+  </div>
+</div>
+
+<div class="form-section">
+  <div>
+    <h3>Dados para Plano de Ação</h3>
+    <p>A coluna GES será preenchida pelo setor selecionado. Os prazos serão preenchidos automaticamente pela vigência do PGR; se o risco for ERGONÔMICO PSICOSSOCIAL, usarão 30 DIAS e 180 DIAS.</p>
+  </div>
+  <div class="grid-form">
+    <label class="span-2">
+      <span>Ações Preventiva / Corretiva</span>
+      <textarea name="acoes" required rows="5" placeholder="Descreva as medidas preventivas/corretivas.&#10;TREINAMENTO DE NR – XX">{{ risk.acoes if risk else '' }}</textarea>
+    </label>
+
+    <label class="span-2">
+      <span>Indicador de Efetividade</span>
+      <textarea name="indicador" required rows="3" placeholder="Ex.: Ausência de acidentes, inspeções registradas e colaboradores orientados.">{{ risk.indicador if risk else '' }}</textarea>
+    </label>
+  </div>
+</div>
+
+<div class="form-section">
+  <div>
+    <h3>Dados para Risco PGR</h3>
+    <p>Esses dados serão usados no inventário de riscos do PGR completo.</p>
+  </div>
+  <div class="grid-form">
+    <label>
+      <span>Tipo de Risco</span>
+      <select name="tipo_risco" required>
+        <option value="">Selecione...</option>
+        {% for option in options.tipos_risco %}
+          <option value="{{ option }}" {% if risk and risk.tipo_risco == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Descrição do agente</span>
+      <input name="descricao_agente" value="{{ risk.descricao_agente if risk else '' }}" placeholder="Se ficar em branco, usa o Perigo/Risco">
+    </label>
+
+    <label class="span-2">
+      <span>Possíveis lesões ou agravos à saúde</span>
+      <textarea name="possiveis_lesoes" required rows="3" placeholder="Ex.: Escoriações, contusões, entorses ou fraturas.">{{ risk.possiveis_lesoes if risk else '' }}</textarea>
+    </label>
+
+    <label class="span-2">
+      <span>Fontes ou circunstâncias</span>
+      <textarea name="fontes_circunstancias" required rows="3" placeholder="Durante o processo de trabalho.">{{ risk.fontes_circunstancias if risk else 'Durante o processo de trabalho.' }}</textarea>
+    </label>
+
+    <label>
+      <span>EPI</span>
+      <textarea name="epis" required rows="3" placeholder="Ex.: Calçado de segurança.">{{ risk.epis if risk else '' }}</textarea>
+    </label>
+
+    <label>
+      <span>EPC</span>
+      <textarea name="epcs" required rows="3" placeholder="Ex.: Sinalização, organização do ambiente e proteção coletiva aplicável.">{{ risk.epcs if risk else '' }}</textarea>
+    </label>
+
+    <label>
+      <span>Grau de Severidade</span>
+      <select name="grau_severidade" required>
+        <option value="">Selecione...</option>
+        {% for option in options.severidades %}
+          <option value="{{ option }}" {% if risk and risk.grau_severidade == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      <span>Grau de Possibilidade</span>
+      <select name="grau_possibilidade" required>
+        <option value="">Selecione...</option>
+        {% for option in options.possibilidades %}
+          <option value="{{ option }}" {% if risk and risk.grau_possibilidade == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="span-2">
+      <span>Grau de Nível de Risco</span>
+      <select name="grau_nivel_risco" required>
+        <option value="">Selecione...</option>
+        {% for option in options.niveis_risco %}
+          <option value="{{ option }}" {% if risk and risk.grau_nivel_risco == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+</div>
+
+<div class="form-section">
+  <div>
+    <h3>Dados para LTCAT</h3>
+    <p>Esses campos serão usados somente na LTCAT. No laudo entram apenas riscos FÍSICO, QUÍMICO e BIOLÓGICO; os demais tipos não serão impressos no bloco técnico da LTCAT.</p>
+  </div>
+  <div class="grid-form">
+    <label>
+      <span>Meio de propagação / via de exposição</span>
+      <input name="ltcat_meio_propagacao" value="{{ risk.ltcat_meio_propagacao if risk else '' }}" placeholder="Ex.: Ar, contato direto, superfície, ambiente de trabalho">
+    </label>
+
+    <label>
+      <span>Periodicidade / jornada de exposição</span>
+      <input name="ltcat_periodicidade_jornada" value="{{ risk.ltcat_periodicidade_jornada if risk else 'Mensal (<= 4 horas < 10% jornada)' }}" placeholder="Ex.: Habitual e intermitente / Mensal / Diário">
+    </label>
+
+    <label>
+      <span>Insalubridade</span>
+      <input name="ltcat_insalubridade" value="{{ risk.ltcat_insalubridade if risk else 'Não' }}" placeholder="Ex.: Sim / Não">
+    </label>
+
+    <label>
+      <span>Grau de insalubridade</span>
+      <input name="ltcat_grau_insalubridade" value="{{ risk.ltcat_grau_insalubridade if risk else 'Não aplicável' }}" placeholder="Ex.: Mínimo / Médio / Máximo / Não aplicável">
+    </label>
+
+    <label>
+      <span>Aposentadoria especial</span>
+      <input name="ltcat_aposentadoria_especial" value="{{ risk.ltcat_aposentadoria_especial if risk else 'Não' }}" placeholder="Ex.: Sim / Não">
+    </label>
+
+    <label class="span-2">
+      <span>Enquadramento técnico</span>
+      <textarea name="ltcat_enquadramento_tecnico" rows="3" placeholder="Parecer técnico sobre o enquadramento do risco para LTCAT.">{{ risk.ltcat_enquadramento_tecnico if risk else '' }}</textarea>
+    </label>
+
+    <label class="span-2">
+      <span>Parecer previdenciário</span>
+      <textarea name="ltcat_parecer_previdenciario" rows="3" placeholder="Parecer previdenciário relacionado ao risco.">{{ risk.ltcat_parecer_previdenciario if risk else '' }}</textarea>
+    </label>
+  </div>
+</div>
+

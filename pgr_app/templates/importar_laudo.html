@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Importar laudo antigo{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Importação inteligente</p>
+    <h1>Importar PGR, PCMSO ou LTCAT antigo</h1>
+    <p class="muted">Envie um Word ou PDF antigo para o sistema tentar extrair empresa, CNPJ, setores, riscos e exames. Revise tudo antes de salvar.</p>
+  </div>
+</div>
+
+<section class="panel import-smart-panel">
+  <h2>1. Ler arquivo antigo</h2>
+  <form method="post" enctype="multipart/form-data" class="inline-import smart-import-form">
+    <label>
+      <span>Arquivo antigo (.docx ou .pdf)</span>
+      <input type="file" name="arquivo" accept=".docx,.pdf" required>
+      <small>Use preferencialmente o laudo original em Word. PDF também funciona, mas pode extrair menos campos.</small>
+    </label>
+    <button class="btn primary" type="submit">Ler arquivo</button>
+  </form>
+</section>
+
+
+{% if imported_templates %}
+<section class="panel imported-models-manager">
+  <div class="split header-line">
+    <div>
+      <h2>Modelos importados salvos</h2>
+      <p class="muted">Esses modelos guardam setores, cargos, riscos, vínculos por setor e exames para aplicar em qualquer empresa nova.</p>
+    </div>
+    <form method="post" action="{{ url_for('delete_all_imported_templates') }}" onsubmit="return confirm('Apagar todos os modelos importados? Os riscos, setores e exames cadastrados manualmente serão preservados.');">
+      <button class="btn small danger" type="submit">Apagar todos os modelos importados</button>
+    </form>
+  </div>
+  <div class="compact-list">
+    {% for tpl in imported_templates %}
+      <div class="compact-row imported-template-row">
+        <div>
+          <strong>{{ tpl.nome }}</strong>
+          <small>{{ tpl.source_company }}{% if tpl.source_cnpj %} · {{ tpl.source_cnpj }}{% endif %}</small>
+          <small>{{ tpl.sector_count }} setor(es) · {{ tpl.risk_count }} risco(s) · {{ tpl.linked_risk_count }} vínculo(s) risco/setor · {{ tpl.exam_count }} exame(s)</small>
+        </div>
+        <form method="post" action="{{ url_for('delete_imported_template', template_id=tpl.id) }}" onsubmit="return confirm('Apagar este modelo importado? Os cadastros manuais serão preservados.');">
+          <button class="btn small danger" type="submit">Excluir modelo</button>
+        </form>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if extracted %}
+<section class="panel">
+  <h2>2. Revisar e salvar no sistema</h2>
+  <p class="muted">Os dados abaixo são sugestões. Edite antes de salvar para evitar cadastro errado.</p>
+  <form method="post" action="{{ url_for('salvar_importacao_laudo_antigo') }}" class="grid-form">
+    <input type="hidden" name="draft_id" value="{{ draft_id }}">
+    <label class="span-2">
+      <span>Nome do modelo reutilizável</span>
+      <input name="template_name" value="Modelo importado - {{ extracted.get('empresa','Laudo antigo') }}" placeholder="Ex.: Modelo Administrativo D. Castro">
+      <small>Esse modelo guardará setores, cargos, riscos e exames para aplicar depois em qualquer empresa.</small>
+    </label>
+    <label>
+      <span>Empresa de origem do arquivo</span>
+      <input name="empresa" value="{{ extracted.get('empresa','') }}" placeholder="Razão social">
+    </label>
+    <label>
+      <span>CNPJ</span>
+      <input name="cnpj" value="{{ extracted.get('cnpj','') }}" placeholder="00.000.000/0000-00">
+    </label>
+    <label>
+      <span>Endereço</span>
+      <input name="endereco" value="{{ extracted.get('endereco','') }}" placeholder="Endereço completo">
+    </label>
+    <label>
+      <span>Bairro / Cidade</span>
+      <input name="bairro_cidade" value="{{ extracted.get('bairro_cidade','') }}" placeholder="Bairro / Cidade">
+    </label>
+    <label>
+      <span>CEP</span>
+      <input name="cep" value="{{ extracted.get('cep','') }}" placeholder="00.000-000">
+    </label>
+    <label>
+      <span>CNAE principal</span>
+      <input name="cnae1" value="{{ extracted.get('cnae1','') }}" placeholder="00.00-0-00">
+    </label>
+    <label>
+      <span>Descrição da atividade</span>
+      <input name="descricao1" value="{{ extracted.get('descricao1','') }}" placeholder="Descrição da atividade principal">
+    </label>
+    <label>
+      <span>Grau de risco</span>
+      <input name="grau1" value="{{ extracted.get('grau1','') }}" placeholder="1, 2, 3 ou 4">
+    </label>
+    <label>
+      <span>CNAE secundário</span>
+      <input name="cnae2" value="{{ extracted.get('cnae2','') }}" placeholder="Opcional">
+    </label>
+    <label>
+      <span>Descrição secundária</span>
+      <input name="descricao2" value="{{ extracted.get('descricao2','') }}" placeholder="Opcional">
+    </label>
+    <label>
+      <span>Grau secundário</span>
+      <input name="grau2" value="{{ extracted.get('grau2','') }}" placeholder="Opcional">
+    </label>
+    <label>
+      <span>Funcionários</span>
+      <input name="funcionarios" value="{{ extracted.get('funcionarios','') }}" placeholder="Quantidade">
+    </label>
+    <label>
+      <span>Vigência inicial</span>
+      <input name="data_atual" value="{{ extracted.get('data_atual','') }}" placeholder="MM/AAAA">
+    </label>
+    <label>
+      <span>Vigência final</span>
+      <input name="data_final" value="{{ extracted.get('data_final','') }}" placeholder="MM/AAAA">
+    </label>
+    <label>
+      <span>E-mail</span>
+      <input name="email" value="{{ extracted.get('email','') }}" placeholder="email@empresa.com">
+    </label>
+    <label>
+      <span>Fone</span>
+      <input name="fone" value="{{ extracted.get('fone','') }}" placeholder="(00) 0000-0000">
+    </label>
+    <label>
+      <span>Grupo preferencial para setores quando aplicar o modelo</span>
+      <select name="grupo_id">
+        <option value="">Sem grupo</option>
+        {% for group in groups %}
+          <option value="{{ group.id }}">{{ group.nome }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="span-2">
+      <span>Setores encontrados</span>
+      <textarea name="setores_extraidos" rows="7" placeholder="Um setor por linha">{{ extracted.get('setores', [])|join('\n') }}</textarea>
+      <small>Quando o arquivo antigo possui tabela de Relação Função x Atividade, os cargos, CBOs, quantidades e descrições são salvos automaticamente junto com estes setores.</small>
+    </label>
+    <label class="span-2">
+      <span>Riscos encontrados ou reconhecidos</span>
+      <textarea name="riscos_extraidos" rows="9" placeholder="Um risco por linha">{{ extracted.get('riscos', [])|join('\n') }}</textarea>
+      <small>Riscos novos entram como cadastro provisório para revisão técnica.</small>
+    </label>
+    {% if extracted.get('sector_risk_summary') %}
+    <div class="span-2 import-summary-box">
+      <strong>Riscos por setor encontrados no inventário</strong>
+      <p class="muted small-note">Esses vínculos serão guardados no modelo e aplicados automaticamente na empresa nova.</p>
+      <div class="mini-list">
+        {% for setor, qtd in extracted.get('sector_risk_summary', {}).items() %}
+          <span class="pill-soft">{{ setor }} · {{ qtd }} risco(s)</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    <label class="span-2">
+      <span>Exames encontrados</span>
+      <textarea name="exames_extraidos" rows="6" placeholder="Um exame por linha">{{ extracted.get('exames', [])|join('\n') }}</textarea>
+    </label>
+    <div class="span-2 actions">
+      <button class="btn primary" type="submit">Salvar como modelo reutilizável</button>
+      <a class="btn ghost" href="{{ url_for('importar_laudo_antigo') }}">Cancelar</a>
+    </div>
+  </form>
+</section>
+
+<details class="panel optional-tools">
+  <summary class="panel-summary"><span>Prévia do texto extraído</span><small>Use para conferir se o arquivo foi lido corretamente</small></summary>
+  <pre class="text-preview">{{ extracted.get('texto_preview','') }}</pre>
+</details>
+{% endif %}
+{% endblock %}

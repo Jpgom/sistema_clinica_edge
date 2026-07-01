@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Juntar arquivos{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Anexos</p>
+    <h1>Juntar PGR + AET + Relatório Psicossocial</h1>
+    <p class="muted">Envie os arquivos avulsos para gerar um único documento Word final. Relatórios psicossociais grandes podem levar alguns minutos, sem precisar clicar de novo.</p>
+  </div>
+</div>
+
+<section class="panel">
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('merge_files_avulso') }}" class="grid-form" data-ajax-download="true">
+    <label>
+      <span>Empresa cadastrada</span>
+      <select name="company_id" id="joinCompanySelect">
+        <option value="">Não usar cadastro</option>
+        {% for company in companies %}
+          <option value="{{ company.id }}" data-name="{{ company.nome }}">{{ company.nome }} · {{ company.cnpj }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>Empresa para as páginas intermediárias</span>
+      <input name="empresa_avulsa" id="joinCompanyName" placeholder="Ex.: VF LTDA">
+    </label>
+    <label>
+      <span>Data de criação do laudo</span>
+      <input name="data_criacao_laudo" value="{{ today }}" placeholder="Ex.: 05/06/2026">
+    </label>
+    <label>
+      <span>Mês por extenso (opcional)</span>
+      <input name="mes_extenso" placeholder="Ex.: JUNHO">
+    </label>
+
+    <label>
+      <span>PGR em Word (.docx)</span>
+      <input type="file" name="pgr_docx" required accept=".docx">
+    </label>
+    <label>
+      <span>AET em Word (.docx)</span>
+      <input type="file" name="aet_docx" required accept=".docx">
+    </label>
+    <label>
+      <span>Relatório Psicossocial em PDF</span>
+      <input type="file" name="psicossocial_pdf" required accept=".pdf">
+    </label>
+
+    <div class="span-2 info-panel soft-note">
+      <strong>Ordem final do Word</strong>
+      <p class="muted">PGR → página de link PGR/AET → AET → página de link AET/Psicossocial → Relatório Psicossocial preservado como páginas do PDF dentro do Word.</p>
+    </div>
+
+    <div class="form-actions span-2">
+      <button class="btn primary" type="submit" data-processing-text="Juntando arquivos... aguarde">Juntar e baixar Word</button>
+      <div class="ajax-download-status" data-ajax-status aria-live="polite"></div>
+    </div>
+  </form>
+</section>
+{% endblock %}

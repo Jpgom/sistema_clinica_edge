@@ -1,0 +1,57 @@
+<div class="form-section">
+  <div>
+    <h3>Setor</h3>
+    <p>Escolha um grupo para manter os setores organizados por empresa, unidade, área ou tipo de documento.</p>
+  </div>
+  <div class="grid-form">
+    <label>
+      <span>Grupo do setor</span>
+      <select name="grupo_id">
+        <option value="">Sem grupo</option>
+        {% for group in groups %}
+          <option value="{{ group.id }}" {% if sector and sector.grupo_id == group.id %}selected{% endif %}>{{ group.nome }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>Nome do setor</span>
+      <input name="setor" required value="{{ sector.setor if sector else '' }}" placeholder="Ex.: Administrativo">
+    </label>
+  </div>
+</div>
+
+<div class="form-section">
+  <div>
+    <h3>Cargos do setor</h3>
+    <p>Se houver mais de um cargo no mesmo setor, eles sairão um abaixo do outro sem espaçamento.</p>
+  </div>
+  <div>
+    <div class="cargo-list" id="cargoList">
+      {% set cargos = sector.cargos if sector and sector.cargos else [None] %}
+      {% for cargo in cargos %}
+        <div class="cargo-row">
+          <label>
+            <span>Cargo</span>
+            <input name="cargo_nome[]" required value="{{ cargo.cargo if cargo else '' }}" placeholder="Ex.: Auxiliar Administrativo">
+          </label>
+          <label>
+            <span>CBO</span>
+            <input name="cargo_cbo[]" required value="{{ cargo.cbo if cargo else '' }}" placeholder="Ex.: 4110-05">
+          </label>
+          <label>
+            <span>Nº funcionários</span>
+            <input name="cargo_nfunc[]" required value="{{ cargo.n_func if cargo else '' }}" placeholder="Ex.: 3">
+          </label>
+          <label class="span-3">
+            <span>Descrição da atividade</span>
+            <textarea name="cargo_descricao[]" required rows="3" placeholder="Descreva as atividades principais do cargo.">{{ cargo.descricao if cargo else '' }}</textarea>
+          </label>
+          <div class="cargo-actions">
+            <button class="btn small ghost" type="button" onclick="removeCargoRow(this)">Remover cargo</button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    <button class="btn ghost" type="button" onclick="addCargoRow()">+ Adicionar outro cargo</button>
+  </div>
+</div>

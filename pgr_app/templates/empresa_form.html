@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Empresa</p>
+    <h1>{{ title }}</h1>
+    <p class="muted">Esses campos alimentam a tabela Identificação da Empresa nos laudos. No PCMSO serão usados apenas os campos existentes no modelo.</p>
+  </div>
+  <a class="btn ghost" href="{{ url_for('empresas') }}">Voltar</a>
+</div>
+
+<form method="post" class="panel form-card compact-form">
+  <div class="grid-form">
+    <label class="span-2"><span>Empresa</span><input name="nome" required value="{{ company.nome or company.empresa or '' }}"></label>
+    <label><span>CNPJ</span><input name="cnpj" required value="{{ company.cnpj or '' }}"></label>
+    <label><span>Funcionários</span><input name="funcionarios" value="{{ company.funcionarios or '' }}" placeholder="Se vazio, pode ser calculado pelos cargos selecionados"></label>
+    <label><span>Data atual / início da vigência</span><input name="data_atual" value="{{ company.data_atual or '' }}" placeholder="Ex.: 06/2026 ou 01/06/2026"></label>
+    <label><span>Data final da vigência</span><input name="data_final" value="{{ company.data_final or '' }}" placeholder="Ex.: 06/2027 ou 01/06/2027"></label>
+    <label class="span-2"><span>Endereço</span><input name="endereco" value="{{ company.endereco or '' }}"></label>
+    <label><span>Bairro / Cidade</span><input name="bairro_cidade" value="{{ company.bairro_cidade or '' }}"></label>
+    <label><span>CEP</span><input name="cep" value="{{ company.cep or '' }}"></label>
+    <label><span>CNAE principal</span><input name="cnae1" value="{{ company.cnae1 or company.cnae or '' }}"></label>
+    <label><span>Grau de risco</span><input name="grau1" inputmode="numeric" pattern="[0-9]*" value="{{ company.grau1 or company.grau_risco or '' }}" placeholder="Ex.: 1, 2, 3 ou 4"><small>Somente número.</small></label>
+    <label class="span-2"><span>Descrição da atividade principal</span><input name="descricao1" value="{{ company.descricao1 or company.descricao_atividade or '' }}"></label>
+    <label><span>CNAE secundário</span><input name="cnae2" value="{{ company.cnae2 or company.cnae_secundario or '' }}"></label>
+    <label><span>Grau de risco secundário</span><input name="grau2" inputmode="numeric" pattern="[0-9]*" value="{{ company.grau2 or company.grau_risco_secundario or '' }}" placeholder="Ex.: 1, 2, 3 ou 4"><small>Somente número.</small></label>
+    <label class="span-2"><span>Descrição da atividade secundária</span><input name="descricao2" value="{{ company.descricao2 or company.descricao_atividade_secundaria or '' }}"></label>
+    <label><span>E-mail</span><input name="email" value="{{ company.email or '' }}"></label>
+    <label><span>Fone</span><input name="fone" value="{{ company.fone or '' }}"></label>
+    <label><span>Data da avaliação / criação do laudo</span><input name="data_avaliacao" value="{{ company.data_avaliacao or '' }}" placeholder="Opcional"></label>
+  </div>
+  <div class="form-actions full">
+    <a class="btn" href="{{ url_for('empresas') }}">Cancelar</a>
+    <button class="btn primary">Salvar empresa</button>
+  </div>
+</form>
+{% endblock %}

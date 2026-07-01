@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Setores e Cargos{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Cadastro</p>
+    <h1>Setores e cargos</h1>
+    <p class="muted">Organize setores por grupos. Clique no grupo para ver os setores cadastrados.</p>
+  </div>
+</div>
+
+<section class="panel split-panel">
+  <div>
+    <h2>Grupos</h2>
+    <p class="muted">Use grupos por empresa, unidade ou área.</p>
+    <form action="{{ url_for('create_group') }}" method="post" class="inline-create">
+      <input name="nome_grupo" placeholder="Ex.: Unidade Matriz / Empresa X" required>
+      <button class="btn primary" type="submit">Criar</button>
+    </form>
+  </div>
+  <div>
+    <h2>Novo setor</h2>
+    <p class="muted">Cadastre o setor dentro de um grupo e adicione os cargos.</p>
+    <form action="{{ url_for('create_sector') }}" method="post" class="form-card compact-form">
+      {% set sector = None %}
+      {% include "_setor_form.html" %}
+      <div class="actions end"><button class="btn primary" type="submit">Cadastrar setor</button></div>
+    </form>
+  </div>
+</section>
+
+<section class="panel import-panel">
+  <div class="panel-title split">
+    <div>
+      <h2>Importar setores por Excel</h2>
+      <p>Selecione primeiro o grupo onde os setores serão cadastrados, baixe o modelo e importe a planilha preenchida.</p>
+    </div>
+    <a class="btn small" href="{{ url_for('download_sector_import_template') }}">Baixar modelo Excel</a>
+  </div>
+  <form action="{{ url_for('import_sectors') }}" method="post" enctype="multipart/form-data" class="inline-import">
+    <select name="grupo_id_importacao" required>
+      <option value="">Selecione o grupo de destino</option>
+      {% for group in groups %}
+        <option value="{{ group.id }}">{{ group.nome }}</option>
+      {% endfor %}
+    </select>
+    <input type="file" name="arquivo" accept=".xlsx" required>
+    <button class="btn primary" type="submit">Importar setores</button>
+  </form>
+  <p class="hint">Cada linha representa um cargo. Para mais de um cargo no mesmo setor, repita o nome do setor em novas linhas.</p>
+</section>
+
+<section class="panel slim-panel">
+  <div class="panel-title split">
+    <div>
+      <h2>Setores cadastrados</h2>
+      <p>Os setores ficam recolhidos por grupo para facilitar quando houver muitos cadastros.</p>
+    </div>
+    <div class="panel-actions">
+      <input class="search" id="sectorGroupSearch" placeholder="Buscar grupo, setor ou cargo...">
+      {% if sectors %}<button class="btn small danger" type="submit" form="delete-all-sectors">Apagar todos os setores</button>{% endif %}
+    </div>
+  </div>
+
+  {% if grouped_sectors %}
+    <div class="group-list" id="sectorGroupList">
+      {% for group in grouped_sectors %}
+        <details class="group-box" data-search="{{ (group.nome ~ ' ' ~ group.sectors|map(attribute='setor')|join(' ') ~ ' ' ~ group.sectors|map(attribute='cargos')|join(' '))|lower }}">
+          <summary>
+            <span><strong>{{ group.nome }}</strong><small>{{ group.sectors|length }} setor(es)</small></span>
+            {% if group.id != '__sem_grupo__' %}
+              <form class="inline-form" action="{{ url_for('delete_group', group_id=group.id) }}" method="post" onclick="event.stopPropagation()" onsubmit="return confirm('Excluir este grupo? Os setores serão mantidos sem grupo.')">
+                <button class="btn tiny danger" type="submit">Excluir grupo</button>
+              </form>
+            {% endif %}
+          </summary>
+          <div class="compact-list nested-list">
+            {% for item in group.sectors %}
+              <article class="compact-row sector-row" data-search="{{ (item.grupo_nome ~ ' ' ~ item.setor ~ ' ' ~ item.cargos|map(attribute='cargo')|join(' ') ~ ' ' ~ item.cargos|map(attribute='cbo')|join(' '))|lower }}">
+                <div>
+                  <strong>{{ item.setor }}</strong>
+                  <span>{{ item.cargos|length }} cargo(s): {{ item.cargos|map(attribute='cargo')|join(', ') }}</span>
+                </div>
+                <div class="row-actions">
+                  <a class="btn small" href="{{ url_for('edit_sector', sector_id=item.id) }}">Editar</a>
+                  <button class="btn small danger" type="submit" form="delete-sector-{{ item.id }}">Excluir</button>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        </details>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty"><strong>Nenhum setor cadastrado ainda.</strong><p>Cadastre um grupo e o primeiro setor acima.</p></div>
+  {% endif %}
+
+  {% for item in sectors %}
+    <form id="delete-sector-{{ item.id }}" action="{{ url_for('delete_sector', sector_id=item.id) }}" method="post" onsubmit="return confirm('Excluir este setor?')"></form>
+  {% endfor %}
+  <form id="delete-all-sectors" action="{{ url_for('delete_all_sectors') }}" method="post" onsubmit="return confirm('Apagar TODOS os setores e cargos cadastrados? Os riscos serão mantidos.')"></form>
+</section>
+{% endblock %}

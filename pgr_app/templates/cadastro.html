@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block title %}Cadastrar Riscos{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Cadastro</p>
+    <h1>Riscos</h1>
+    <p class="muted">Cadastre uma vez e reutilize no PGR, PCMSO e LTCAT.</p>
+  </div>
+  <a class="btn primary" href="{{ url_for('risk_groups') }}">Criar grupos de riscos</a>
+</div>
+
+<details class="panel collapsible-open" open>
+  <summary class="panel-summary"><span>Novo risco</span><small>Clique para abrir ou recolher o formulário</small></summary>
+  <form action="{{ url_for('create_risk') }}" method="post" class="form-card">
+    {% set risk = None %}
+    {% include "_form.html" %}
+    <div class="actions end"><button class="btn primary" type="submit">Cadastrar risco</button></div>
+  </form>
+</details>
+
+<section class="panel import-panel">
+  <div class="panel-title split">
+    <div>
+      <h2>Importar riscos por Excel</h2>
+      <p>Baixe o modelo, preencha uma linha por risco e envie para cadastrar vários de uma vez.</p>
+    </div>
+    <a class="btn small" href="{{ url_for('download_risk_import_template') }}">Baixar modelo Excel</a>
+  </div>
+  <form action="{{ url_for('import_risks') }}" method="post" enctype="multipart/form-data" class="inline-import">
+    <input type="file" name="arquivo" accept=".xlsx" required>
+    <button class="btn primary" type="submit">Importar riscos</button>
+  </form>
+  <p class="hint">Duplicidades pelo mesmo nome de risco serão ignoradas. Preencha os campos obrigatórios do modelo.</p>
+</section>
+
+{% if risks %}
+<details class="panel collapsible-open bulk-risk-panel">
+  <summary class="panel-summary"><span>Editar vários riscos de uma só vez</span><small>Selecione os riscos na lista e marque quais campos serão aplicados</small></summary>
+  <form id="bulkRiskEditForm" action="{{ url_for('bulk_edit_risks') }}" method="post" class="form-card bulk-edit-form">
+    <div class="bulk-alert">
+      <strong>Atenção:</strong> somente os campos com a opção <strong>Aplicar</strong> marcada serão alterados nos riscos selecionados.
+      Campos sem marcação serão ignorados.
+    </div>
+
+    <div class="bulk-toolbar">
+      <div>
+        <strong id="bulkRiskCount">0 risco(s) selecionado(s)</strong>
+        <span class="muted">Use a busca para filtrar e selecionar somente os riscos desejados.</span>
+      </div>
+      <div class="actions">
+        <button class="btn small ghost" type="button" id="selectVisibleRisksBtn">Selecionar visíveis</button>
+        <button class="btn small ghost" type="button" id="clearBulkRisksBtn">Limpar seleção</button>
+      </div>
+    </div>
+
+    <div class="bulk-field-grid">
+      <label class="bulk-field span-2">
+        <span><input type="checkbox" name="bulk_apply_fields" value="acoes"> Aplicar Ações Preventiva / Corretiva</span>
+        <textarea name="bulk_acoes" rows="4" placeholder="Descreva as medidas que serão copiadas para todos os riscos selecionados.&#10;TREINAMENTO DE NR – XX"></textarea>
+      </label>
+
+      <label class="bulk-field span-2">
+        <span><input type="checkbox" name="bulk_apply_fields" value="indicador"> Aplicar Indicador de Efetividade</span>
+        <textarea name="bulk_indicador" rows="3" placeholder="Ex.: Ausência de ocorrências, inspeções registradas e colaboradores orientados."></textarea>
+      </label>
+
+      <label class="bulk-field">
+        <span><input type="checkbox" name="bulk_apply_fields" value="tipo_risco"> Aplicar Tipo de Risco</span>
+        <select name="bulk_tipo_risco">
+          <option value="">Selecione...</option>
+          {% for option in options.tipos_risco %}
+            <option value="{{ option }}">{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label class="bulk-field">
+        <span><input type="checkbox" name="bulk_apply_fields" value="descricao_agente"> Aplicar Descrição do agente</span>
+        <input name="bulk_descricao_agente" placeholder="Ex.: Agente/fator de risco presente na atividade.">
+      </label>
+
+      <label class="bulk-field span-2">
+        <span><input type="checkbox" name="bulk_apply_fields" value="possiveis_lesoes"> Aplicar Possíveis lesões ou agravos à saúde</span>
+        <textarea name="bulk_possiveis_lesoes" rows="3" placeholder="Ex.: Desconfortos, lesões, adoecimento ou agravos compatíveis com o risco."></textarea>
+      </label>
+
+      <label class="bulk-field span-2">
+        <span><input type="checkbox" name="bulk_apply_fields" value="fontes_circunstancias"> Aplicar Fontes ou circunstâncias</span>
+        <textarea name="bulk_fontes_circunstancias" rows="3" placeholder="Ex.: Durante o processo de trabalho."></textarea>
+      </label>
+
+      <label class="bulk-field">
+        <span><input type="checkbox" name="bulk_apply_fields" value="epis"> Aplicar EPI</span>
+        <textarea name="bulk_epis" rows="3" placeholder="Ex.: Calçado de segurança, luvas, óculos, protetor auditivo."></textarea>
+      </label>
+
+      <label class="bulk-field">
+        <span><input type="checkbox" name="bulk_apply_fields" value="epcs"> Aplicar EPC</span>
+        <textarea name="bulk_epcs" rows="3" placeholder="Ex.: Sinalização, proteção coletiva, organização do ambiente."></textarea>
+      </label>
+
+      <label class="bulk-field">
+        <span><input type="checkbox" name="bulk_apply_fields" value="grau_severidade"> Aplicar Grau de Severidade</span>
+        <select name="bulk_grau_severidade">
+          <option value="">Selecione...</option>
+          {% for option in options.severidades %}
+            <option value="{{ option }}">{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label class="bulk-field">
+        <span><input type="checkbox" name="bulk_apply_fields" value="grau_possibilidade"> Aplicar Grau de Possibilidade</span>
+        <select name="bulk_grau_possibilidade">
+          <option value="">Selecione...</option>
+          {% for option in options.possibilidades %}
+            <option value="{{ option }}">{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label class="bulk-field">
+        <span><input type="checkbox" name="bulk_apply_fields" value="grau_nivel_risco"> Aplicar Grau de Nível de Risco</span>
+        <select name="bulk_grau_nivel_risco">
+          <option value="">Selecione...</option>
+          {% for option in options.niveis_risco %}
+            <option value="{{ option }}">{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label class="bulk-field">
+        <span><input type="checkbox" name="bulk_apply_fields" value="ltcat_meio_propagacao"> Aplicar LTCAT - Meio de propagação</span>
+        <input name="bulk_ltcat_meio_propagacao" placeholder="Ex.: Ar, contato direto, superfície, ambiente de trabalho">
+      </label>
+
+      <label class="bulk-field">
+        <span><input type="checkbox" name="bulk_apply_fields" value="ltcat_periodicidade_jornada"> Aplicar LTCAT - Periodicidade / jornada</span>
+        <input name="bulk_ltcat_periodicidade_jornada" placeholder="Ex.: Habitual e intermitente / Mensal / Diário">
+      </label>
+
+      <label class="bulk-field">
+        <span><input type="checkbox" name="bulk_apply_fields" value="ltcat_insalubridade"> Aplicar LTCAT - Insalubridade</span>
+        <input name="bulk_ltcat_insalubridade" placeholder="Ex.: Sim / Não">
+      </label>
+
+      <label class="bulk-field">
+        <span><input type="checkbox" name="bulk_apply_fields" value="ltcat_grau_insalubridade"> Aplicar LTCAT - Grau de insalubridade</span>
+        <input name="bulk_ltcat_grau_insalubridade" placeholder="Ex.: Mínimo / Médio / Máximo / Não aplicável">
+      </label>
+
+      <label class="bulk-field">
+        <span><input type="checkbox" name="bulk_apply_fields" value="ltcat_aposentadoria_especial"> Aplicar LTCAT - Aposentadoria especial</span>
+        <input name="bulk_ltcat_aposentadoria_especial" placeholder="Ex.: Sim / Não">
+      </label>
+
+      <label class="bulk-field span-2">
+        <span><input type="checkbox" name="bulk_apply_fields" value="ltcat_enquadramento_tecnico"> Aplicar LTCAT - Enquadramento técnico</span>
+        <textarea name="bulk_ltcat_enquadramento_tecnico" rows="3" placeholder="Parecer técnico sobre o enquadramento do risco para LTCAT."></textarea>
+      </label>
+
+      <label class="bulk-field span-2">
+        <span><input type="checkbox" name="bulk_apply_fields" value="ltcat_parecer_previdenciario"> Aplicar LTCAT - Parecer previdenciário</span>
+        <textarea name="bulk_ltcat_parecer_previdenciario" rows="3" placeholder="Parecer previdenciário relacionado ao risco."></textarea>
+      </label>
+    </div>
+
+    <div class="actions end">
+      <button class="btn primary" type="submit">Aplicar nos riscos selecionados</button>
+    </div>
+  </form>
+</details>
+{% endif %}
+
+<section class="panel slim-panel">
+  <div class="panel-title split">
+    <div>
+      <h2>Riscos cadastrados</h2>
+      <p>Marque os riscos que deseja alterar em massa ou edite individualmente.</p>
+    </div>
+    <input class="search" id="riskSearch" placeholder="Buscar risco, tipo ou ação...">
+  </div>
+
+  {% if risks %}
+    <div class="compact-list" id="riskList">
+      {% for item in risks %}
+        <article class="compact-row risk-row" data-search="{{ (item.risco ~ ' ' ~ item.acoes ~ ' ' ~ item.tipo_risco ~ ' ' ~ item.grau_severidade ~ ' ' ~ item.grau_possibilidade ~ ' ' ~ item.grau_nivel_risco)|lower }}">
+          <label class="bulk-risk-check">
+            <input type="checkbox" name="bulk_risk_ids" value="{{ item.id }}" form="bulkRiskEditForm" data-bulk-risk-name="{{ item.risco }}">
+            <span>Selecionar</span>
+          </label>
+          <div>
+            <strong>{{ item.risco }}</strong>
+            <span>{{ item.tipo_risco or 'Sem tipo' }} · {{ item.grau_nivel_risco or 'Sem nível' }}{% if item.tipo_risco in ['FÍSICO','QUÍMICO','BIOLÓGICO'] %} · LTCAT{% endif %}</span>
+          </div>
+          <p>{{ item.acoes }}</p>
+          <div class="row-actions">
+            <a class="btn small" href="{{ url_for('edit_risk', risk_id=item.id) }}">Editar</a>
+            <button class="btn small danger" type="submit" form="delete-{{ item.id }}">Excluir</button>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty"><strong>Nenhum risco cadastrado ainda.</strong><p>Cadastre o primeiro risco acima.</p></div>
+  {% endif %}
+
+  {% for item in risks %}
+    <form id="delete-{{ item.id }}" action="{{ url_for('delete_risk', risk_id=item.id) }}" method="post" onsubmit="return confirm('Excluir este risco?')"></form>
+  {% endfor %}
+</section>
+{% endblock %}

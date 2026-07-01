@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -2803,6 +2804,246 @@ def _sorted_imported_laudo_templates() -> list[dict[str, Any]]:
     return [item.to_dict() for item in ImportedLaudoTemplate.query.order_by(ImportedLaudoTemplate.updated_at.desc()).all()]
 
 
+
+def _imported_template_components(state: dict[str, Any]) -> dict[str, Any]:
+    """Normaliza os dados de um modelo importado para prévia/confirmação."""
+    state = state or {}
+    sectors_data = state.get("setores_cargos") or []
+    if not sectors_data:
+        sectors_data = [{"setor": name, "cargos": []} for name in (state.get("setores") or [])]
+    if not isinstance(sectors_data, list):
+        sectors_data = []
+
+    sector_risks_state = state.get("sector_risks") or {}
+    if not isinstance(sector_risks_state, dict):
+        sector_risks_state = {}
+
+    risk_details = state.get("riscos_detalhados") or []
+    if not isinstance(risk_details, list):
+        risk_details = []
+    risk_names = state.get("riscos") or []
+    if not isinstance(risk_names, list):
+        risk_names = []
+
+    details_by_norm = {_simple_norm(str(item.get("risco", ""))): item for item in risk_details if isinstance(item, dict) and item.get("risco")}
+    merged_risk_details: list[dict[str, Any]] = []
+    seen_risks: set[str] = set()
+    for item in risk_details:
+        if not isinstance(item, dict):
+            continue
+        key = _simple_norm(str(item.get("risco", "")))
+        if key and key not in seen_risks:
+            merged_risk_details.append(copy.deepcopy(item))
+            seen_risks.add(key)
+    for _sector_name, sector_risk_items in sector_risks_state.items():
+        if not isinstance(sector_risk_items, list):
+            continue
+        for item in sector_risk_items:
+            if not isinstance(item, dict):
+                continue
+            key = _simple_norm(str(item.get("risco", "")))
+            if key and key not in seen_risks:
+                merged_risk_details.append(copy.deepcopy(item))
+                seen_risks.add(key)
+                details_by_norm[key] = item
+    for name in risk_names:
+        key = _simple_norm(name)
+        if key and key not in seen_risks:
+            merged_risk_details.append(copy.deepcopy(details_by_norm.get(key) or {"risco": name}))
+            seen_risks.add(key)
+
+    sector_rows: list[dict[str, Any]] = []
+    seen_sectors: set[str] = set()
+    for item in sectors_data:
+        if not isinstance(item, dict):
+            continue
+        setor = str(item.get("setor", "")).strip()
+        key = _simple_norm(setor)
+        if key and key not in seen_sectors:
+            sector_rows.append(copy.deepcopy(item))
+            seen_sectors.add(key)
+    # Setores que aparecem apenas na relação risco/setor também precisam aparecer na confirmação.
+    for sector_name in sector_risks_state.keys():
+        key = _simple_norm(sector_name)
+        if key and key not in seen_sectors:
+            sector_rows.append({"setor": sector_name, "cargos": []})
+            seen_sectors.add(key)
+
+    exams = _unique_clean_lines([str(item) for item in (state.get("exames") or [])])
+    return {
+        "sectors": sector_rows,
+        "risks": merged_risk_details,
+        "exams": exams,
+        "sector_risks": sector_risks_state,
+    }
+
+
+def _existing_import_sector(setor_name: str, group_id: str | None = None) -> Sector | None:
+    setor_name = re.sub(r"\s+", " ", str(setor_name or "").strip()).upper()
+    if not setor_name:
+        return None
+    query = Sector.query.filter(db.func.lower(Sector.setor) == setor_name.lower())
+    if group_id:
+        query = query.filter(Sector.group_id == group_id)
+    else:
+        query = query.filter((Sector.group_id == None) | (Sector.group_id == ""))  # noqa: E711
+    return query.first()
+
+
+def _existing_import_risk(risk_name: str) -> Risk | None:
+    risk_name = re.sub(r"\s+", " ", str(risk_name or "").strip())
+    if not risk_name:
+        return None
+    return Risk.query.filter(db.func.lower(Risk.risco) == risk_name.lower()).first()
+
+
+def _existing_import_exam(exam_name: str) -> Exam | None:
+    exam_name = re.sub(r"\s+", " ", str(exam_name or "").strip())
+    if not exam_name:
+        return None
+    return Exam.query.filter(db.func.lower(Exam.exame) == exam_name.lower()).first()
+
+
+def _imported_template_confirmation_preview(template: ImportedLaudoTemplate, group_id: str | None = None) -> dict[str, Any]:
+    components = _imported_template_components(template.state or {})
+    sectors_preview: list[dict[str, Any]] = []
+    risks_preview: list[dict[str, Any]] = []
+    exams_preview: list[dict[str, Any]] = []
+
+    for idx, item in enumerate(components["sectors"]):
+        setor = re.sub(r"\s+", " ", str(item.get("setor", "")).strip()).upper()
+        existing = None if not group_id else _existing_import_sector(setor, group_id=group_id)
+        cargos = item.get("cargos") or []
+        cargo_count = len(cargos) if isinstance(cargos, list) else 0
+        sectors_preview.append({
+            "idx": idx,
+            "key": _simple_norm(setor),
+            "name": setor,
+            "cargo_count": cargo_count,
+            "existing": bool(existing),
+            "existing_label": existing.setor if existing else "",
+            "status": "Já existe" if existing else ("Novo no grupo selecionado" if group_id else "Novo em grupo temporário"),
+        })
+
+    for idx, item in enumerate(components["risks"]):
+        risco = re.sub(r"\s+", " ", str(item.get("risco", "")).strip())
+        existing = _existing_import_risk(risco)
+        risks_preview.append({
+            "idx": idx,
+            "key": _simple_norm(risco),
+            "name": risco,
+            "tipo_risco": (item.get("tipo_risco") or "ERGONÔMICO").strip().upper(),
+            "possiveis_lesoes": item.get("possiveis_lesoes") or "",
+            "acoes": item.get("acoes") or "",
+            "existing": bool(existing),
+            "existing_label": existing.risco if existing else "",
+            "status": "Já existe" if existing else "Novo cadastro",
+        })
+
+    for idx, exam_name in enumerate(components["exams"]):
+        exam_name = re.sub(r"\s+", " ", str(exam_name or "").strip())
+        existing = _existing_import_exam(exam_name)
+        exams_preview.append({
+            "idx": idx,
+            "key": _simple_norm(exam_name),
+            "name": exam_name,
+            "existing": bool(existing),
+            "existing_label": existing.exame if existing else "",
+            "status": "Já existe" if existing else "Novo cadastro",
+        })
+
+    return {
+        "sectors": sectors_preview,
+        "risks": risks_preview,
+        "exams": exams_preview,
+        "sector_risk_links": sum(len(v) for v in (components["sector_risks"] or {}).values() if isinstance(v, list)),
+        "new_sector_count": sum(1 for item in sectors_preview if not item["existing"]),
+        "new_risk_count": sum(1 for item in risks_preview if not item["existing"]),
+        "new_exam_count": sum(1 for item in exams_preview if not item["existing"]),
+    }
+
+
+def _filtered_import_state_from_confirmation(template: ImportedLaudoTemplate) -> dict[str, Any]:
+    """Monta um state filtrado/editado com base na tela de confirmação."""
+    components = _imported_template_components(template.state or {})
+    state = copy.deepcopy(template.state or {})
+
+    enabled_sector_indices = {int(v) for v in request.form.getlist("sector_enabled") if str(v).isdigit()}
+    enabled_risk_indices = {int(v) for v in request.form.getlist("risk_enabled") if str(v).isdigit()}
+    enabled_exam_indices = {int(v) for v in request.form.getlist("exam_enabled") if str(v).isdigit()}
+
+    selected_sectors: list[dict[str, Any]] = []
+    selected_sector_name_by_key: dict[str, str] = {}
+    for idx, item in enumerate(components["sectors"]):
+        if idx not in enabled_sector_indices:
+            continue
+        original_name = re.sub(r"\s+", " ", str(item.get("setor", "")).strip()).upper()
+        edited_name = re.sub(r"\s+", " ", _field(f"sector_name_{idx}") or original_name).strip().upper()
+        if not edited_name:
+            continue
+        new_item = copy.deepcopy(item)
+        new_item["setor"] = edited_name
+        selected_sectors.append(new_item)
+        selected_sector_name_by_key[_simple_norm(original_name)] = edited_name
+
+    selected_risks: list[dict[str, Any]] = []
+    selected_risk_detail_by_key: dict[str, dict[str, Any]] = {}
+    for idx, item in enumerate(components["risks"]):
+        if idx not in enabled_risk_indices:
+            continue
+        original_name = re.sub(r"\s+", " ", str(item.get("risco", "")).strip())
+        edited_name = re.sub(r"\s+", " ", _field(f"risk_name_{idx}") or original_name).strip()
+        if not edited_name or _is_noise_import_risk_name(edited_name):
+            continue
+        detail = copy.deepcopy(item)
+        detail["risco"] = edited_name
+        tipo = _field(f"risk_tipo_{idx}")
+        if tipo:
+            detail["tipo_risco"] = tipo.strip().upper()
+        possiveis = _field(f"risk_possiveis_lesoes_{idx}")
+        if possiveis:
+            detail["possiveis_lesoes"] = possiveis
+        acoes = _field(f"risk_acoes_{idx}")
+        if acoes:
+            detail["acoes"] = acoes
+        selected_risks.append(detail)
+        selected_risk_detail_by_key[_simple_norm(original_name)] = detail
+
+    selected_exams: list[str] = []
+    for idx, exam_name in enumerate(components["exams"]):
+        if idx not in enabled_exam_indices:
+            continue
+        edited_exam = re.sub(r"\s+", " ", _field(f"exam_name_{idx}") or exam_name).strip()
+        if edited_exam:
+            selected_exams.append(edited_exam)
+    selected_exams = _unique_clean_lines(selected_exams)
+
+    selected_sector_risks: dict[str, list[dict[str, Any]]] = {}
+    original_sector_risks = components.get("sector_risks") or {}
+    if isinstance(original_sector_risks, dict):
+        for original_sector_name, sector_risk_items in original_sector_risks.items():
+            sector_key = _simple_norm(original_sector_name)
+            edited_sector_name = selected_sector_name_by_key.get(sector_key)
+            if not edited_sector_name or not isinstance(sector_risk_items, list):
+                continue
+            filtered_items: list[dict[str, Any]] = []
+            for detail in sector_risk_items:
+                if not isinstance(detail, dict):
+                    continue
+                risk_key = _simple_norm(str(detail.get("risco", "")))
+                if risk_key in selected_risk_detail_by_key:
+                    filtered_items.append(copy.deepcopy(selected_risk_detail_by_key[risk_key]))
+            if filtered_items:
+                selected_sector_risks[edited_sector_name] = filtered_items
+
+    state["setores_cargos"] = selected_sectors
+    state["setores"] = [item.get("setor", "") for item in selected_sectors if item.get("setor")]
+    state["riscos_detalhados"] = selected_risks
+    state["riscos"] = [item.get("risco", "") for item in selected_risks if item.get("risco")]
+    state["exames"] = selected_exams
+    state["sector_risks"] = selected_sector_risks
+    return state
+
 def _upsert_import_risk(detail: dict[str, Any] | None, fallback_name: str = "") -> Risk | None:
     detail = detail or {}
     name = re.sub(r"\s+", " ", str(detail.get("risco") or fallback_name or "").strip())
@@ -2893,8 +3134,8 @@ def _upsert_import_sector(item: dict[str, Any], group_id: str | None = None) -> 
     return sector
 
 
-def _apply_imported_template_to_company(template: ImportedLaudoTemplate, company_id: str, group_id: str | None = None) -> ReportProfile:
-    state = template.state or {}
+def _apply_imported_template_to_company(template: ImportedLaudoTemplate, company_id: str, group_id: str | None = None, state_override: dict[str, Any] | None = None) -> ReportProfile:
+    state = (template.state or {}) if state_override is None else (state_override or {})
     sectors_data = state.get("setores_cargos") or []
     if not sectors_data:
         sectors_data = [{"setor": name, "cargos": []} for name in (state.get("setores") or [])]
@@ -3502,6 +3743,7 @@ def gerar():
 
 @app.post("/aplicar-modelo-importado")
 def apply_imported_template():
+    """Abre uma confirmação antes de criar riscos, exames ou setores vindos do laudo antigo."""
     company_id = _field("company_id")
     template_id = _field("imported_template_id")
     group_id = _field("imported_template_group_id") or None
@@ -3516,6 +3758,52 @@ def apply_imported_template():
     if not template:
         flash("Selecione um modelo importado de laudo antigo para aplicar.", "error")
         return _render_gerar_with_current_form()
+
+    selected_group = db.session.get(SectorGroup, group_id) if group_id else None
+    preview = _imported_template_confirmation_preview(template, group_id=group_id)
+    flash("Revise os itens extraídos antes de cadastrar ou aplicar no laudo. Nada foi cadastrado ainda.", "success")
+    return render_template(
+        "confirmar_modelo_importado.html",
+        company=company.to_dict(),
+        template=template.to_dict(),
+        template_model=template,
+        group_id=group_id or "",
+        selected_group=selected_group.to_dict() if selected_group else None,
+        preview=preview,
+        options=FORM_OPTIONS,
+    )
+
+
+@app.post("/aplicar-modelo-importado/confirmar")
+def confirm_apply_imported_template():
+    company_id = _field("company_id")
+    template_id = _field("imported_template_id")
+    group_id = _field("imported_template_group_id") or None
+    company = db.session.get(Company, company_id) if company_id else None
+    template = db.session.get(ImportedLaudoTemplate, template_id) if template_id else None
+    if not company or not template:
+        flash("Não foi possível confirmar a aplicação. Selecione novamente empresa e modelo importado.", "error")
+        return redirect(url_for("gerar"))
+
+    filtered_state = _filtered_import_state_from_confirmation(template)
+    selected_sector_total = len(filtered_state.get("setores_cargos") or [])
+    selected_risk_total = len(filtered_state.get("riscos_detalhados") or [])
+    selected_exam_total = len(filtered_state.get("exames") or [])
+    if not selected_sector_total:
+        flash("Selecione pelo menos um setor antes de confirmar a aplicação do modelo.", "error")
+        preview = _imported_template_confirmation_preview(template, group_id=group_id)
+        selected_group = db.session.get(SectorGroup, group_id) if group_id else None
+        return render_template(
+            "confirmar_modelo_importado.html",
+            company=company.to_dict(),
+            template=template.to_dict(),
+            template_model=template,
+            group_id=group_id or "",
+            selected_group=selected_group.to_dict() if selected_group else None,
+            preview=preview,
+            options=FORM_OPTIONS,
+        )
+
     temp_group = None
     if not group_id:
         # Quando o usuário não escolhe um grupo fixo, os setores importados vão para
@@ -3523,16 +3811,23 @@ def apply_imported_template():
         # evita poluir os grupos permanentes de setores.
         temp_group = _create_temp_import_group(company, template)
         group_id = temp_group.id
-    profile = _apply_imported_template_to_company(template, company_id, group_id=group_id)
+
+    profile = _apply_imported_template_to_company(template, company_id, group_id=group_id, state_override=filtered_state)
     if temp_group:
         state = dict(profile.state or {})
         state["temporary_sector_group_id"] = temp_group.id
         state["temporary_sector_group_name"] = temp_group.nome
         profile.state = state
         db.session.commit()
-        flash("Modelo importado aplicado em grupo temporário. Ele fica disponível para esta geração e será removido automaticamente depois.", "success")
+        flash(
+            f"Modelo confirmado e aplicado em grupo temporário: {selected_sector_total} setor(es), {selected_risk_total} risco(s) e {selected_exam_total} exame(s) selecionado(s).",
+            "success",
+        )
     else:
-        flash("Modelo importado aplicado à empresa. Os setores, cargos, riscos e exames foram carregados para revisão antes de gerar os laudos.", "success")
+        flash(
+            f"Modelo confirmado e aplicado à empresa: {selected_sector_total} setor(es), {selected_risk_total} risco(s) e {selected_exam_total} exame(s) selecionado(s).",
+            "success",
+        )
     return redirect(url_for("gerar", profile_id=profile.id))
 
 

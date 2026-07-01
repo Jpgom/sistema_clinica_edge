@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Confirmar importação{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Confirmação obrigatória</p>
+    <h1>Revisar antes de cadastrar</h1>
+    <p class="muted">Confira, edite e marque somente os setores, riscos e exames que devem ser usados. Nada é cadastrado até você confirmar.</p>
+  </div>
+</div>
+
+<section class="panel import-confirm-summary">
+  <div class="split header-line">
+    <div>
+      <h2>Modelo importado</h2>
+      <p class="muted"><strong>{{ template.nome }}</strong> será aplicado em <strong>{{ company.nome }}</strong>.</p>
+      <p class="muted small-note">
+        Grupo dos setores:
+        {% if selected_group %}<strong>{{ selected_group.nome }}</strong>{% else %}<strong>grupo temporário automático</strong>{% endif %}
+      </p>
+    </div>
+    <div class="mini-list">
+      <span class="pill-soft">{{ preview.new_sector_count }} setor(es) novo(s)</span>
+      <span class="pill-soft">{{ preview.new_risk_count }} risco(s) novo(s)</span>
+      <span class="pill-soft">{{ preview.new_exam_count }} exame(s) novo(s)</span>
+      <span class="pill-soft">{{ preview.sector_risk_links }} vínculo(s) risco/setor</span>
+    </div>
+  </div>
+  <p class="muted small-note">
+    Itens já existentes serão apenas reutilizados. Itens novos só serão criados se permanecerem marcados e você clicar em <strong>Confirmar e aplicar</strong>.
+  </p>
+</section>
+
+<form method="post" action="{{ url_for('confirm_apply_imported_template') }}" class="grid-form import-confirm-form">
+  <input type="hidden" name="company_id" value="{{ company.id }}">
+  <input type="hidden" name="imported_template_id" value="{{ template.id }}">
+  <input type="hidden" name="imported_template_group_id" value="{{ group_id }}">
+
+  <section class="panel span-2">
+    <div class="split header-line">
+      <div>
+        <h2>1. Setores/Cargos</h2>
+        <p class="muted">Edite o nome do setor e desmarque o que não deve entrar na geração.</p>
+      </div>
+    </div>
+    {% if preview.sectors %}
+      <div class="table-wrap">
+        <table class="data-table compact-table">
+          <thead>
+            <tr>
+              <th>Usar</th>
+              <th>Setor</th>
+              <th>Cargos</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sector in preview.sectors %}
+              <tr>
+                <td><input type="checkbox" name="sector_enabled" value="{{ sector.idx }}" checked></td>
+                <td><input name="sector_name_{{ sector.idx }}" value="{{ sector.name }}" placeholder="Nome do setor"></td>
+                <td>{{ sector.cargo_count }} cargo(s)</td>
+                <td><span class="pill-soft">{{ sector.status }}</span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty left"><strong>Nenhum setor encontrado.</strong><p>Volte ao modelo importado e revise a extração.</p></div>
+    {% endif %}
+  </section>
+
+  <section class="panel span-2">
+    <div class="split header-line">
+      <div>
+        <h2>2. Riscos</h2>
+        <p class="muted">Marque apenas os riscos que devem ser cadastrados/reutilizados. Você pode corrigir o nome, tipo, possíveis lesões e ações antes de confirmar.</p>
+      </div>
+    </div>
+    {% if preview.risks %}
+      <div class="import-card-list">
+        {% for risk in preview.risks %}
+          <div class="import-review-card">
+            <label class="check-card inline-check">
+              <input type="checkbox" name="risk_enabled" value="{{ risk.idx }}" checked>
+              <span><strong>Usar este risco</strong> <small>{{ risk.status }}</small></span>
+            </label>
+            <div class="inline-grid">
+              <label>
+                <span>Nome do risco</span>
+                <input name="risk_name_{{ risk.idx }}" value="{{ risk.name }}" placeholder="Nome do risco">
+              </label>
+              <label>
+                <span>Tipo de risco</span>
+                <select name="risk_tipo_{{ risk.idx }}">
+                  {% for tipo in options.tipos_risco %}
+                    <option value="{{ tipo }}" {% if tipo == risk.tipo_risco %}selected{% endif %}>{{ tipo }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+            </div>
+            <label>
+              <span>Possíveis lesões ou agravos</span>
+              <textarea name="risk_possiveis_lesoes_{{ risk.idx }}" rows="2" placeholder="Pode deixar vazio para usar o padrão do sistema">{{ risk.possiveis_lesoes }}</textarea>
+            </label>
+            <label>
+              <span>Ações preventivas/corretivas</span>
+              <textarea name="risk_acoes_{{ risk.idx }}" rows="2" placeholder="Pode deixar vazio para usar o padrão do sistema">{{ risk.acoes }}</textarea>
+            </label>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty left"><strong>Nenhum risco encontrado.</strong><p>Você pode confirmar apenas setores e exames se desejar.</p></div>
+    {% endif %}
+  </section>
+
+  <section class="panel span-2">
+    <div class="split header-line">
+      <div>
+        <h2>3. Exames</h2>
+        <p class="muted">Edite o nome e desmarque exames que não devem ser cadastrados/reutilizados.</p>
+      </div>
+    </div>
+    {% if preview.exams %}
+      <div class="table-wrap">
+        <table class="data-table compact-table">
+          <thead>
+            <tr>
+              <th>Usar</th>
+              <th>Exame</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for exam in preview.exams %}
+              <tr>
+                <td><input type="checkbox" name="exam_enabled" value="{{ exam.idx }}" checked></td>
+                <td><input name="exam_name_{{ exam.idx }}" value="{{ exam.name }}" placeholder="Nome do exame"></td>
+                <td><span class="pill-soft">{{ exam.status }}</span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty left"><strong>Nenhum exame encontrado.</strong><p>O modelo será aplicado sem exames importados.</p></div>
+    {% endif %}
+  </section>
+
+  <div class="span-2 actions wrap">
+    <button class="btn primary" type="submit" onclick="return confirm('Confirmar a aplicação do modelo com os itens marcados? Somente os itens selecionados serão cadastrados ou reutilizados.');">Confirmar e aplicar</button>
+    <a class="btn ghost" href="{{ url_for('gerar') }}">Cancelar e voltar</a>
+  </div>
+</form>
+{% endblock %}

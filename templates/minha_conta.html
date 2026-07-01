@@ -14,6 +14,7 @@
     <div class="brand"><img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho"><div>EDGE<small>Segurança</small></div></div>
     <div class="nav-card">
       <a class="nav-link" href="{{ url_for('home') }}">🏠 Início</a>
+      <a class="nav-link" href="{{ url_for('atestado_medico') }}">🧾 Atestado Médico</a>
       <a class="nav-link active" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
       {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
       {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link" href="{{ url_for('auditoria') }}">📋 Auditoria</a>{% endif %}

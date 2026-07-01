@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f5f7fb">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}"></head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho">
+      <div>EDGE<small>Atestado Médico</small></div>
+    </div>
+    <div class="nav-card">
+      <a class="nav-link" href="{{ url_for('home') }}">🏠 Início</a>
+      <a class="nav-link active" href="{{ url_for('atestado_medico') }}">🧾 Atestado Médico</a>
+      <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
+      <a class="nav-link" href="{{ url_for('laudo_pcd') }}">♿ Laudo PCD</a>
+      <a class="nav-link" href="{{ url_for('relatorios') }}">📊 Relatórios</a>
+      <a class="nav-link" href="{{ url_for('encaminhamentos') }}">📄 Encaminhamentos</a>
+      <a class="nav-link" href="{{ url_for('encaminhamento_especialista') }}">📝 Enc. individual</a>
+      <a class="nav-link" href="{{ url_for('renumerador') }}">🔢 Renumerador</a>
+      <a class="nav-link" href="{{ url_for('esocial') }}">🗂️ E-SOCIAL</a>
+      <a class="nav-link" href="/pgr/">🧾 PGR / SST</a>
+      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
+      {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link" href="{{ url_for('auditoria') }}">📋 Auditoria</a>{% endif %}
+      <a class="nav-link" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}">🚪 Sair</a>
+    </div>
+  </aside>
+
+  <main class="main-area">
+    <div class="topbar compact-topbar">
+      <div class="page-title">
+        <h1>Atestado Médico</h1>
+        <p>Preencha os dados do paciente para gerar o atestado no modelo da EDGE.</p>
+      </div>
+    </div>
+
+    <section class="content-card" id="formulario">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <div class="section-head">
+        <div>
+          <h2>Criar atestado</h2>
+          <p>Campos do modelo: Nome, data, dias, CID e cidade/UF.</p>
+        </div>
+      </div>
+
+      <form action="{{ url_for('atestado_medico_gerar') }}" method="post" id="atestadoForm">
+        <div class="form-grid">
+          <div class="field col-2">
+            <label for="nome">Nome do paciente</label>
+            <input id="nome" name="nome" type="text" required placeholder="Nome completo do paciente" value="{{ form_data.get('nome','') }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="data">Data do atendimento</label>
+            <input id="data" name="data" type="date" required value="{{ form_data.get('data', today) }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="dias">Quantidade de dias</label>
+            <input id="dias" name="dias" type="number" min="1" step="1" required placeholder="Ex.: 3" value="{{ form_data.get('dias','') }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="cid">CID</label>
+            <input id="cid" name="cid" type="text" required placeholder="Ex.: M22.4" value="{{ form_data.get('cid','') }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="cidade_uf">Cidade/UF</label>
+            <select id="cidade_uf" name="cidade_uf" required>
+              <option value="">Selecione</option>
+              {% for key, label in cidades.items() %}
+                <option value="{{ key }}" {% if form_data.get('cidade_uf','') == key %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="field col-1">
+            <label for="formato">Formato de saída</label>
+            <select id="formato" name="formato">
+              <option value="docx" {% if form_data.get('formato','docx') == 'docx' %}selected{% endif %}>Word (.docx)</option>
+              <option value="pdf" {% if form_data.get('formato','') == 'pdf' %}selected{% endif %}>PDF</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="actions inline-actions">
+          <button class="btn btn--primary" type="submit">Gerar atestado</button>
+          <a class="btn btn--light" href="{{ url_for('home') }}">Voltar ao início</a>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -23,6 +23,7 @@
       <a class="nav-link" href="{{ url_for('esocial') }}">🗂️ E-SOCIAL</a>
       <a class="nav-link" href="{{ url_for('laudo_pcd') }}">♿ Laudo PCD</a>
       <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
+      <a class="nav-link" href="{{ url_for('atestado_medico') }}">🧾 Atestado Médico</a>
       <a class="nav-link" href="/pgr/">🧾 PGR / SST</a>
           {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
       {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link" href="{{ url_for('auditoria') }}">📋 Auditoria</a>{% endif %}
@@ -41,6 +42,7 @@
       <div class="feature-card" data-icon="🗂️"><h3>E-SOCIAL</h3><p>Conferência e geração por empresa.</p><a class="btn btn--primary" href="{{ url_for('esocial') }}">Abrir</a></div>
       <div class="feature-card" data-icon="♿"><h3>Laudo PCD</h3><p>Laudos por deficiência física, auditiva, visual, intelectual/mental ou múltipla.</p><a class="btn btn--primary" href="{{ url_for('laudo_pcd') }}">Abrir</a></div>
       <div class="feature-card" data-icon="🩺"><h3>Físico e Mental</h3><p>Atestados rápidos com cadastros reutilizáveis.</p><a class="btn btn--primary" href="{{ url_for('fisico_mental') }}">Abrir</a></div>
+      <div class="feature-card" data-icon="🧾"><h3>Atestado Médico</h3><p>Geração de atestado com Nome, data, dias, CID e cidade/UF.</p><a class="btn btn--primary" href="{{ url_for('atestado_medico') }}">Abrir</a></div>
       <div class="feature-card" data-icon="🧾"><h3>PGR / SST</h3><p>Cadastros de riscos, setores, empresas e geração de PGR, PCMSO, LTCAT e AET.</p><a class="btn btn--primary" href="/pgr/">Abrir</a></div>
     </section>
   </main>

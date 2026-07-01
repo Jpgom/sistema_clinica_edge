@@ -54,6 +54,7 @@ ESOCIAL_MONTHS = {
     "OUTUBRO": "OUTUBRO", "NOVEMBRO": "NOVEMBRO", "DEZEMBRO": "DEZEMBRO",
 }
 FISICO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ATESTADO_FISICO_MENTAL_TEMPLATE.docx")
+ATESTADO_MEDICO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ATESTADO_MEDICO_TEMPLATE.docx")
 PCD_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "MODELO LAUDO PCD.docx")
 ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE.docx")
 BASE_DIR = os.path.dirname(__file__)
@@ -1933,6 +1934,131 @@ def fisico_gerar():
                 return send_file(io.BytesIO(payload), as_attachment=True, download_name=f'{filename_base}.pdf', mimetype='application/pdf')
             except Exception as exc:
                 flash(f'Não foi possível gerar PDF agora: {exc}. O arquivo foi enviado em Word.', 'error')
+        payload = Path(docx_path).read_bytes()
+        return send_file(io.BytesIO(payload), as_attachment=True, download_name=f'{filename_base}.docx', mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+
+# =========================
+# ATESTADO MÉDICO
+# =========================
+ATESTADO_CIDADES = {
+    'BELEM-PA': 'BELÉM-PA',
+    'MACAPA-AP': 'MACAPÁ-AP',
+}
+
+
+def atestado_render_home(form_data=None):
+    form_data = form_data or {}
+    return render_template(
+        'atestado_medico.html',
+        title='Atestado Médico',
+        today=form_data.get('data') or datetime.today().strftime('%Y-%m-%d'),
+        cidades=ATESTADO_CIDADES,
+        form_data=form_data,
+    )
+
+
+def atestado_format_date(raw_date: str) -> str:
+    if raw_date:
+        try:
+            dt = datetime.strptime(raw_date, '%Y-%m-%d').date()
+        except Exception:
+            dt = datetime.today().date()
+    else:
+        dt = datetime.today().date()
+    return dt.strftime('%d/%m/%Y')
+
+
+def atestado_docx_escape(value: str) -> str:
+    value = '' if value is None else str(value)
+    lines = value.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    escaped = [line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;') for line in lines]
+    return '</w:t><w:br/><w:t>'.join(escaped)
+
+
+def atestado_placeholder_pattern(placeholder: str) -> str:
+    return r'(?:<[^>]+>)*'.join(re.escape(ch) for ch in placeholder)
+
+
+def atestado_replace_placeholder(xml: str, placeholder: str, value: str) -> str:
+    pattern = atestado_placeholder_pattern(placeholder)
+    return re.sub(pattern, lambda _match: atestado_docx_escape(value), xml)
+
+
+def atestado_replace_docx_placeholders(template_path: str, output_path: str, replacements: dict[str, str]) -> None:
+    """Substitui os campos do modelo preservando layout, imagens, tabelas e rodapé."""
+    xml_targets = ('word/document.xml', 'word/header', 'word/footer')
+    with zipfile.ZipFile(template_path, 'r') as zin:
+        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if item.filename == 'word/document.xml' or item.filename.startswith(xml_targets[1]) or item.filename.startswith(xml_targets[2]):
+                    try:
+                        xml = data.decode('utf-8')
+                    except UnicodeDecodeError:
+                        zout.writestr(item, data)
+                        continue
+                    for placeholder, value in replacements.items():
+                        xml = atestado_replace_placeholder(xml, placeholder, value)
+                    data = xml.encode('utf-8')
+                zout.writestr(item, data)
+
+
+@app.route('/atestado-medico', methods=['GET'])
+def atestado_medico():
+    return atestado_render_home()
+
+
+@app.route('/atestado-medico/gerar', methods=['POST'])
+def atestado_medico_gerar():
+    form_data = request.form.to_dict(flat=True)
+    nome = fisico_clean_text(request.form.get('nome', ''))
+    data_atestado = request.form.get('data', '')
+    dias = (request.form.get('dias') or '').strip()
+    cid = fisico_clean_text(request.form.get('cid', ''))
+    cidade_key = request.form.get('cidade_uf', '')
+    formato = (request.form.get('formato', 'docx') or 'docx').lower()
+
+    if not nome or not data_atestado or not dias or not cid or not cidade_key:
+        flash('Preencha nome, data, quantidade de dias, CID e cidade/UF.', 'error')
+        return atestado_render_home(form_data)
+
+    if cidade_key not in ATESTADO_CIDADES:
+        flash('Selecione uma cidade válida: BELÉM-PA ou MACAPÁ-AP.', 'error')
+        return atestado_render_home(form_data)
+
+    if not dias.isdigit() or int(dias) <= 0:
+        flash('Informe a quantidade de dias usando apenas números.', 'error')
+        return atestado_render_home(form_data)
+
+    data_formatada = atestado_format_date(data_atestado)
+    cidade_uf = ATESTADO_CIDADES[cidade_key]
+    replacements = {
+        '{{Nome}}': nome,
+        '{{data}}': data_formatada,
+        '{{dias}}': str(int(dias)),
+        '{{cid}}': cid,
+        '{{cidade-uf}}': cidade_uf,
+    }
+
+    filename_base = sanitize_filename(f'ATESTADO MEDICO - {nome}')
+    with tempfile.TemporaryDirectory() as tmpdir:
+        docx_path = os.path.join(tmpdir, f'{filename_base}.docx')
+        try:
+            atestado_replace_docx_placeholders(ATESTADO_MEDICO_TEMPLATE_PATH, docx_path, replacements)
+        except Exception:
+            logger.exception('Erro ao gerar atestado médico')
+            flash('Não foi possível gerar o atestado. Confira os dados e tente novamente.', 'error')
+            return atestado_render_home(form_data)
+
+        if formato == 'pdf':
+            try:
+                pdf_path = fisico_convert_to_pdf(docx_path, tmpdir)
+                payload = Path(pdf_path).read_bytes()
+                return send_file(io.BytesIO(payload), as_attachment=True, download_name=f'{filename_base}.pdf', mimetype='application/pdf')
+            except Exception as exc:
+                flash(f'Não foi possível gerar PDF agora: {exc}. O arquivo foi enviado em Word.', 'error')
+
         payload = Path(docx_path).read_bytes()
         return send_file(io.BytesIO(payload), as_attachment=True, download_name=f'{filename_base}.docx', mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 

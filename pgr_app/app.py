@@ -463,7 +463,8 @@ FORM_OPTIONS = {
     "niveis_risco": list(NIVEL_RISCO_COLORS.keys()),
 }
 
-TIPOS_RISCO_LTCAT = {"FÍSICO", "QUÍMICO", "BIOLÓGICO"}
+TIPOS_RISCO_LTCAT = {"FÍSICO", "QUÍMICO", "BIOLÓGICO", "FISICO", "QUIMICO", "BIOLOGICO"}
+TIPOS_RISCO_LTCAT_KEYS = {"FISICO", "QUIMICO", "BIOLOGICO"}
 
 # Presets técnicos de AET por CNAE/atividade.
 # Usados para pré-marcar o formulário da AET conforme CNAE/atividade da empresa.
@@ -1269,6 +1270,16 @@ def _simple_norm(value: str) -> str:
     return "".join(ch for ch in value if not unicodedata.combining(ch))
 
 
+def _risk_type_key(value: Any) -> str:
+    """Normaliza o tipo do risco para comparações sem depender de acento."""
+    raw = _simple_norm(str(value or "")).upper()
+    return re.sub(r"[^A-Z0-9]+", " ", raw).strip()
+
+
+def _is_ltcat_environmental_type(value: Any) -> bool:
+    return _risk_type_key(value) in TIPOS_RISCO_LTCAT_KEYS
+
+
 
 
 def _cell_text(cell) -> str:
@@ -1799,7 +1810,7 @@ def _build_generation_preview(groups: list[dict[str, Any]], company: dict[str, s
     total_risks = sum(len(group.get("risks", [])) for group in groups)
     total_exams = sum(len(group.get("exams", [])) for group in groups)
     psychosocial = sum(1 for group in groups for risk in group.get("risks", []) if str(risk.get("tipo_risco", "")).strip().upper() == "ERGONÔMICO PSICOSSOCIAL")
-    environmental = sum(1 for group in groups for risk in group.get("risks", []) if str(risk.get("tipo_risco", "")).strip().upper() in TIPOS_RISCO_LTCAT)
+    environmental = sum(1 for group in groups for risk in group.get("risks", []) if _is_ltcat_environmental_type(risk.get("tipo_risco", "")))
     warnings = []
     if not groups:
         warnings.append("Nenhum setor selecionado.")
@@ -3674,7 +3685,7 @@ def _gerar_context(form_state: dict[str, Any] | None = None) -> dict[str, Any]:
     today = datetime.now().strftime("%m/%Y")
     next_year = datetime.now().replace(year=datetime.now().year + 1).strftime("%m/%Y")
     risks = _sorted_risks()
-    ltcat_risks = [risk for risk in risks if str(risk.get("tipo_risco", "")).strip().upper() in TIPOS_RISCO_LTCAT]
+    ltcat_risks = [risk for risk in risks if _is_ltcat_environmental_type(risk.get("tipo_risco", ""))]
     return {
         "risks": risks,
         "ltcat_risks": ltcat_risks,
@@ -4349,7 +4360,7 @@ def _selected_sector_ltcat_groups() -> tuple[list[dict[str, Any]], list[str]]:
         selected_risks = [risks[risk_id] for risk_id in risk_ids if risk_id in risks]
         selected_risks = [
             risk for risk in selected_risks
-            if str(risk.get("tipo_risco", "")).strip().upper() in TIPOS_RISCO_LTCAT
+            if _is_ltcat_environmental_type(risk.get("tipo_risco", ""))
         ]
         groups.append({"sector": sector, "risks": selected_risks, "exams": []})
 

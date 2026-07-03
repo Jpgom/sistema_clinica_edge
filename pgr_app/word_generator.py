@@ -1665,7 +1665,8 @@ def generate_complete_pcmso_docx(
 # LTCAT COMPLETO
 # ---------------------------------------------------------------------------
 
-TIPOS_RISCO_LTCAT = {"FÍSICO", "QUÍMICO", "BIOLÓGICO"}
+TIPOS_RISCO_LTCAT = {"FÍSICO", "QUÍMICO", "BIOLÓGICO", "FISICO", "QUIMICO", "BIOLOGICO"}
+TIPOS_RISCO_LTCAT_KEYS = {"FISICO", "QUIMICO", "BIOLOGICO"}
 DEFAULT_LTCAT_ENQUADRAMENTO = (
     "Considerando a atividade que pode causar é recomendado adotar medidas preventivas "
     "até que as avaliações quantitativas sejam realizadas."
@@ -1674,6 +1675,48 @@ DEFAULT_LTCAT_PARECER = (
     "Considerando a atividade que pode causar é recomendado adotar medidas preventivas "
     "até que as avaliações quantitativas sejam realizadas."
 )
+
+
+def _ltcat_text(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def _ltcat_normalize_text(value: Any) -> str:
+    normalized = unicodedata.normalize("NFKD", _ltcat_text(value))
+    without_accents = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return re.sub(r"\s+", " ", without_accents).strip().upper()
+
+
+def _ltcat_risk_type_key(value: Any) -> str:
+    return re.sub(r"[^A-Z0-9]+", " ", _ltcat_normalize_text(value)).strip()
+
+
+def _is_ltcat_environmental_type(value: Any) -> bool:
+    return _ltcat_risk_type_key(value) in TIPOS_RISCO_LTCAT_KEYS
+
+
+def _ltcat_all_table_text(table) -> str:
+    return "\n".join(cell.text for row in table.rows for cell in row.cells)
+
+
+def _ltcat_is_absence_template_table(table) -> bool:
+    raw = _ltcat_all_table_text(table)
+    norm = _ltcat_normalize_text(raw)
+    has_sector_cargos = "{{SETOR}}" in raw and "{{CARGOS}}" in raw
+    has_absence_message = any(phrase in norm for phrase in (
+        "AUSENCIA DE RISCOS",
+        "NAO FOI CONSTATADA EXPOSICAO",
+        "NAO HA ELEMENTOS TECNICOS",
+        "NAO CARACTERIZAM EXPOSICAO OCUPACIONAL",
+    ))
+    return has_sector_cargos and has_absence_message
+
+
+def _ltcat_is_risk_template_table(table) -> bool:
+    raw = _ltcat_all_table_text(table)
+    return "{{SETOR}}" in raw and "{{CARGOS}}" in raw and (
+        "{{TIPO DE RISCO}}" in raw or ("{{risco}}" in raw and "{{meiodepropagacao}}" in raw)
+    )
 
 
 def _ltcat_table_has_text(table, text: str) -> bool:
@@ -1995,40 +2038,50 @@ def _ltcat_fill_risk_table(table, sector: Mapping[str, Any], risks: list[Mapping
 
 
 def _ltcat_fill_riscos_area(doc: Document, groups: list[Mapping[str, Any]], data_avaliacao: str) -> None:
-    absence_tables = [t for t in doc.tables if _ltcat_table_has_text(t, "AUSÊNCIA DE RISCOS") and _ltcat_table_has_text(t, "{{SETOR}}")]
-    risk_tables = [t for t in doc.tables if _ltcat_table_has_text(t, "{{meiodepropagacao}}") and _ltcat_table_has_text(t, "{{graudeinsalubridade}}")]
-    if not absence_tables or not risk_tables:
+    # O modelo atual de LTCAT não possui mais o texto literal "AUSÊNCIA DE RISCOS";
+    # ele traz uma tabela com {{SETOR}}, {{CARGOS}} e um parecer de ausência.
+    # A detecção antiga dependia daquele texto literal e por isso deixava os
+    # placeholders no documento, sem inserir os riscos selecionados por setor.
+    absence_tables = [t for t in doc.tables if _ltcat_is_absence_template_table(t)]
+    risk_tables = [t for t in doc.tables if _ltcat_is_risk_template_table(t)]
+    if not risk_tables:
         return
-    absence_anchor = absence_tables[0]
+
     risk_anchor = risk_tables[0]
-    absence_template = deepcopy(absence_anchor._tbl)
+    absence_anchor = absence_tables[0] if absence_tables else risk_anchor
+    insertion_anchor = absence_anchor
+    absence_template = deepcopy(absence_anchor._tbl) if absence_tables else None
     risk_template = deepcopy(risk_anchor._tbl)
 
     _ltcat_remove_inventory_heading_paragraphs(doc)
-    _ltcat_insert_inventory_heading_before(absence_anchor)
+    _ltcat_insert_inventory_heading_before(insertion_anchor)
 
     for index, group in enumerate(groups):
         sector = group["sector"]
         if index > 0:
-            _ltcat_insert_page_break_before(absence_anchor)
+            _ltcat_insert_page_break_before(insertion_anchor)
         raw_risks = group.get("risks") or []
         risks = [_ltcat_risk_from_common(risk) for risk in raw_risks]
-        risks = [risk for risk in risks if _normalize_option(risk.get("tipo_risco")) in TIPOS_RISCO_LTCAT]
+        risks = [risk for risk in risks if _is_ltcat_environmental_type(risk.get("tipo_risco"))]
         if risks:
             new_tbl = deepcopy(risk_template)
-            _ltcat_insert_tbl_before(absence_anchor, new_tbl)
+            _ltcat_insert_tbl_before(insertion_anchor, new_tbl)
             table = Table(new_tbl, doc)
             _ltcat_fill_risk_table(table, sector, risks, data_avaliacao)
-        else:
+        elif absence_template is not None:
             new_tbl = deepcopy(absence_template)
-            _ltcat_insert_tbl_before(absence_anchor, new_tbl)
+            _ltcat_insert_tbl_before(insertion_anchor, new_tbl)
             table = Table(new_tbl, doc)
             _ltcat_replace_in_table(table, {
                 "{{SETOR}}": str(sector.get("setor", "")),
                 "{{CARGOS}}": _ltcat_sector_cargos_text(sector),
             })
-    _ltcat_remove_table(absence_anchor)
-    _ltcat_remove_table(risk_anchor)
+    if absence_tables:
+        _ltcat_remove_table(absence_anchor)
+    if risk_anchor is not absence_anchor:
+        _ltcat_remove_table(risk_anchor)
+    elif not absence_tables:
+        _ltcat_remove_table(risk_anchor)
 
 
 def _ltcat_fill_signature(doc: Document, company: Mapping[str, str]) -> None:

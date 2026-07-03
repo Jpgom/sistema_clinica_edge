@@ -4,6 +4,7 @@ from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timedelta
 from difflib import SequenceMatcher
+from copy import deepcopy
 
 import pandas as pd
 from werkzeug.utils import secure_filename
@@ -23,6 +24,7 @@ from docx.oxml import OxmlElement
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+from lxml import etree
 
 try:
     import psycopg2
@@ -57,6 +59,7 @@ FISICO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ATESTADO_FISICO_
 ATESTADO_MEDICO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ATESTADO_MEDICO_TEMPLATE.docx")
 PCD_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "MODELO LAUDO PCD.docx")
 ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE.docx")
+ENCAMINHAMENTO_COMPLEMENTARES_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTO_COMPLEMENTARES_TEMPLATE.docx")
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.environ.get("RENDER_DISK_PATH") or os.environ.get("DATA_DIR") or BASE_DIR
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -2736,6 +2739,252 @@ def relatorios():
 
         return send_file(caminho_zip, as_attachment=True, download_name=f"Arquivos_{nome_mes(mes)}.zip")
     return render_template("relatorios.html")
+
+
+# =========================
+# ENCAMINHAMENTO DE EXAMES COMPLEMENTARES
+# =========================
+ENCAMINHAMENTO_COMPLEMENTARES_LOCAIS = {
+    'belem': {
+        'label': 'BELÉM',
+        'cidade_uf': 'BELÉM, PA',
+        'endereco': 'TRAVESSA DO CHACO, Nº2546, MARCO, BELÉM-PA',
+    },
+    'macapa': {
+        'label': 'MACAPÁ',
+        'cidade_uf': 'MACAPÁ, AP',
+        'endereco': 'AV. FELICIANO COELHO, N° 327 - BAIRRO DO TREM - EM FRENTE A AUTO ESCOLA SÃO CRISTOVÃO, MACAPÁ-AP',
+    },
+}
+
+
+def encaminhamento_complementares_get_local(value: str) -> dict | None:
+    return ENCAMINHAMENTO_COMPLEMENTARES_LOCAIS.get((value or '').strip().lower())
+
+
+def encaminhamento_complementares_render(form_data=None, exames=None):
+    if form_data is None:
+        form_data = {}
+    if exames is None:
+        exames = [''] * 5
+    return render_template(
+        'encaminhamento_complementares.html',
+        title='Encaminhamento de Exames Complementares',
+        form_data=form_data,
+        exames=exames,
+        locais_exame=ENCAMINHAMENTO_COMPLEMENTARES_LOCAIS,
+        today=datetime.today().strftime('%Y-%m-%d'),
+    )
+
+
+def encaminhamento_complementares_exam_values(raw_values) -> list[str]:
+    exames = []
+    for value in raw_values:
+        clean = encaminhamento_clean_text(value, upper=True)
+        if clean:
+            exames.append(clean)
+    return exames
+
+
+def encaminhamento_complementares_iter_tables(container):
+    for table in getattr(container, 'tables', []):
+        yield table
+        for row in table.rows:
+            for cell in row.cells:
+                yield from encaminhamento_complementares_iter_tables(cell)
+
+
+def encaminhamento_complementares_iter_paragraphs(container):
+    for paragraph in getattr(container, 'paragraphs', []):
+        yield paragraph
+    for table in getattr(container, 'tables', []):
+        for row in table.rows:
+            for cell in row.cells:
+                yield from encaminhamento_complementares_iter_paragraphs(cell)
+
+
+def encaminhamento_complementares_replace_runs(paragraph, replacements: dict[str, str]):
+    for run in paragraph.runs:
+        if not run.text:
+            continue
+        new_text = run.text
+        for placeholder, value in replacements.items():
+            new_text = new_text.replace(placeholder, value)
+        run.text = new_text
+
+    # Fallback para placeholders quebrados em vários runs pelo Word.
+    full_text = paragraph.text
+    if any(placeholder in full_text for placeholder in replacements):
+        for placeholder, value in replacements.items():
+            full_text = full_text.replace(placeholder, value)
+        if paragraph.runs:
+            first = paragraph.runs[0]
+            for run in paragraph.runs[1:]:
+                run.text = ''
+            first.text = full_text
+        else:
+            paragraph.add_run(full_text)
+
+
+def encaminhamento_complementares_set_cell_text(cell, text: str):
+    if not cell.paragraphs:
+        paragraph = cell.add_paragraph()
+    else:
+        paragraph = cell.paragraphs[0]
+    for run in paragraph.runs:
+        run.text = ''
+    if paragraph.runs:
+        run = paragraph.runs[0]
+    else:
+        run = paragraph.add_run()
+    run.text = text
+    run.bold = True
+    run.font.name = 'Arial'
+    run.font.size = Pt(10)
+
+
+def encaminhamento_complementares_is_exam_table(table) -> bool:
+    for row in table.rows:
+        for cell in row.cells:
+            if '{{EXAME' in cell.text:
+                return True
+    return False
+
+
+def encaminhamento_complementares_apply_exam_rows(table, exames: list[str]):
+    if not exames:
+        return
+    # Se houver mais exames do que linhas no modelo, cria linhas novas copiando o padrão da última linha.
+    while len(table.rows) < len(exames):
+        table._tbl.append(deepcopy(table.rows[-1]._tr))
+    # Se houver menos exames, remove as linhas excedentes para que a tabela tenha exatamente a quantidade informada.
+    while len(table.rows) > len(exames):
+        table._tbl.remove(table.rows[-1]._tr)
+    for idx, exame in enumerate(exames):
+        encaminhamento_complementares_set_cell_text(table.rows[idx].cells[0], exame)
+
+
+def encaminhamento_complementares_set_texts_in_element(element, placeholder: str, value: str):
+    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+    for text_node in element.xpath('.//w:t', namespaces=ns):
+        if text_node.text and placeholder in text_node.text:
+            text_node.text = text_node.text.replace(placeholder, value)
+
+
+def encaminhamento_complementares_replace_xml_placeholders(root, replacements: dict[str, str]) -> None:
+    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+    for text_node in root.xpath('.//w:t', namespaces=ns):
+        if not text_node.text:
+            continue
+        for placeholder, value in replacements.items():
+            text_node.text = text_node.text.replace(placeholder, value)
+
+
+def encaminhamento_complementares_apply_exam_rows_xml(root, exames: list[str]) -> None:
+    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+    rows = list(root.xpath('.//w:tr[.//w:t[contains(., "{{EXAME")]]', namespaces=ns))
+    for row in rows:
+        # Processa somente as linhas internas da tabela de exames. As linhas externas
+        # também enxergam o texto da tabela aninhada, por isso são ignoradas aqui.
+        if row.xpath('.//w:tr', namespaces=ns):
+            continue
+        row_text = ''.join(text_node.text or '' for text_node in row.xpath('.//w:t', namespaces=ns))
+        match = re.search(r'\{\{EXAME(\d+)\}\}', row_text)
+        if not match:
+            continue
+        exam_number = int(match.group(1))
+        parent = row.getparent()
+        placeholder = f'{{{{EXAME{exam_number}}}}}'
+        exam_index = exam_number - 1
+
+        if exam_number == 5 and len(exames) > 5:
+            insert_at = parent.index(row)
+            parent.remove(row)
+            for offset, exame in enumerate(exames[4:]):
+                cloned = deepcopy(row)
+                encaminhamento_complementares_set_texts_in_element(cloned, placeholder, exame)
+                parent.insert(insert_at + offset, cloned)
+        elif exam_index < len(exames):
+            encaminhamento_complementares_set_texts_in_element(row, placeholder, exames[exam_index])
+        else:
+            parent.remove(row)
+
+def gerar_encaminhamento_complementares_docx(nome: str, cpf: str, data_doc: str, exames: list[str], local_exame_key: str, output_path: str):
+    local = encaminhamento_complementares_get_local(local_exame_key)
+    if not local:
+        raise ValueError('Local do exame inválido.')
+    if not exames:
+        raise ValueError('Informe pelo menos um exame.')
+
+    replacements = {
+        '{{NOME}}': encaminhamento_clean_text(nome, upper=True),
+        '{{CPF}}': encaminhamento_clean_text(cpf),
+        '{{CIDADE, UF}}': local['cidade_uf'],
+        '{{DATA}}': encaminhamento_format_date(data_doc),
+        '{{ENDEREÇO}}': local['endereco'],
+    }
+
+    parser = etree.XMLParser(remove_blank_text=False, recover=False)
+    with zipfile.ZipFile(ENCAMINHAMENTO_COMPLEMENTARES_TEMPLATE_PATH, 'r') as zin, zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == 'word/document.xml':
+                root = etree.fromstring(data, parser=parser)
+                encaminhamento_complementares_apply_exam_rows_xml(root, exames)
+                encaminhamento_complementares_replace_xml_placeholders(root, replacements)
+                data = etree.tostring(root, xml_declaration=True, encoding='UTF-8', standalone='yes')
+            zout.writestr(item, data)
+
+
+@app.route('/encaminhamento-complementares', methods=['GET'])
+def encaminhamento_complementares():
+    return encaminhamento_complementares_render()
+
+
+@app.route('/encaminhamento-complementares/gerar', methods=['POST'])
+def encaminhamento_complementares_gerar():
+    nome = encaminhamento_clean_text(request.form.get('nome', ''), upper=True)
+    cpf = encaminhamento_clean_text(request.form.get('cpf', ''))
+    data_documento = request.form.get('data_documento', '')
+    local_exame_key = request.form.get('local_exame', '')
+    exames_raw = request.form.getlist('exames')
+    exames = encaminhamento_complementares_exam_values(exames_raw)
+    form_data = request.form.to_dict()
+
+    if not nome or not cpf or not data_documento or not local_exame_key:
+        flash('Preencha nome, CPF, data e local do exame.', 'error')
+        return encaminhamento_complementares_render(form_data, exames_raw or [''] * 5)
+    if not encaminhamento_complementares_get_local(local_exame_key):
+        flash('Selecione um local do exame válido.', 'error')
+        return encaminhamento_complementares_render(form_data, exames_raw or [''] * 5)
+    if not exames:
+        flash('Informe pelo menos um exame.', 'error')
+        return encaminhamento_complementares_render(form_data, exames_raw or [''] * 5)
+    if len(exames) > 5:
+        flash('Informe no máximo 5 exames por encaminhamento, conforme o modelo do documento.', 'error')
+        return encaminhamento_complementares_render(form_data, exames_raw or [''] * 5)
+    try:
+        datetime.strptime(data_documento, '%Y-%m-%d')
+    except ValueError:
+        flash('Data inválida.', 'error')
+        return encaminhamento_complementares_render(form_data, exames_raw or [''] * 5)
+
+    filename_base = sanitize_filename(f'ENCAMINHAMENTO COMPLEMENTARES - {nome}')
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_path = os.path.join(tmpdir, f'{filename_base}.docx')
+        try:
+            gerar_encaminhamento_complementares_docx(nome, cpf, data_documento, exames, local_exame_key, output_path)
+        except Exception:
+            logger.exception('Erro ao gerar encaminhamento de exames complementares')
+            flash('Não foi possível gerar o encaminhamento. Confira os dados e tente novamente.', 'error')
+            return encaminhamento_complementares_render(form_data, exames_raw or [''] * 5)
+        payload = Path(output_path).read_bytes()
+        return send_file(
+            io.BytesIO(payload),
+            as_attachment=True,
+            download_name=f'{filename_base}.docx',
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        )
 
 @app.route("/encaminhamentos", methods=["GET", "POST"])
 def encaminhamentos():

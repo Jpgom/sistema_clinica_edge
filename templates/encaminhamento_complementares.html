@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f5f7fb">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho">
+      <div>EDGE<small>Exames complementares</small></div>
+    </div>
+    <div class="nav-card">
+      <a class="nav-link" href="{{ url_for('home') }}">🏠 Início</a>
+      <a class="nav-link" href="{{ url_for('relatorios') }}">📊 Relatórios</a>
+      <a class="nav-link" href="{{ url_for('encaminhamentos') }}">📄 Encaminhamentos em lote</a>
+      <a class="nav-link" href="{{ url_for('encaminhamento_especialista') }}">📝 Encaminhamento individual</a>
+      <a class="nav-link active" href="{{ url_for('encaminhamento_complementares') }}">🧪 Enc. complementares</a>
+      <a class="nav-link" href="{{ url_for('encaminhamento_especialista_cadastros') }}">⚙️ Cadastros de encaminhamento</a>
+      <a class="nav-link" href="{{ url_for('renumerador') }}">🔢 Renumerador</a>
+      <a class="nav-link" href="{{ url_for('esocial') }}">🗂️ E-SOCIAL</a>
+      <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
+      <a class="nav-link" href="{{ url_for('atestado_medico') }}">🧾 Atestado Médico</a>
+      <a class="nav-link" href="/pgr/">🧾 PGR / SST</a>
+      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
+      {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link" href="{{ url_for('auditoria') }}">📋 Auditoria</a>{% endif %}
+      <a class="nav-link" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}">🚪 Sair</a>
+    </div>
+  </aside>
+
+  <main class="main-area">
+    <div class="topbar compact-topbar">
+      <div class="page-title">
+        <h1>Encaminhamento de exames complementares</h1>
+        <p>Preencha os dados do funcionário, informe os exames e gere o Word no modelo da EDGE.</p>
+      </div>
+    </div>
+
+    <section class="content-card" id="formulario">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <div class="section-head">
+        <div>
+          <h2>Criar encaminhamento</h2>
+          <p>A tabela de exames será gerada somente com a quantidade preenchida. Se houver 2 exames, o documento terá apenas 2 linhas.</p>
+        </div>
+      </div>
+
+      <form action="{{ url_for('encaminhamento_complementares_gerar') }}" method="post" id="encaminhamentoComplementaresForm">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="form-grid">
+          <div class="field col-2">
+            <label for="nome">Funcionário</label>
+            <input id="nome" name="nome" type="text" required placeholder="Nome completo do funcionário" value="{{ form_data.get('nome','') }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="cpf">CPF</label>
+            <input id="cpf" name="cpf" type="text" required maxlength="14" placeholder="000.000.000-00" value="{{ form_data.get('cpf','') }}">
+          </div>
+
+          <div class="field col-1">
+            <label for="data_documento">Data</label>
+            <input id="data_documento" name="data_documento" type="date" required value="{{ form_data.get('data_documento', today) }}">
+          </div>
+
+          <div class="field col-2">
+            <label for="local_exame">Local do exame</label>
+            <select id="local_exame" name="local_exame" required>
+              <option value="">Selecione o local</option>
+              {% for key, local in locais_exame.items() %}
+                <option value="{{ key }}" {% if form_data.get('local_exame') == key %}selected{% endif %}>{{ local['label'] }}</option>
+              {% endfor %}
+            </select>
+            <small>O sistema preencherá automaticamente cidade/UF e endereço conforme o local escolhido.</small>
+          </div>
+        </div>
+
+        <div class="section-head" style="margin-top:22px">
+          <div>
+            <h2>Exames</h2>
+            <p>Informe até 5 exames. Linhas vazias serão ignoradas no documento final.</p>
+          </div>
+          <button class="btn btn--light" type="button" id="addExamBtn">Adicionar exame</button>
+        </div>
+
+        <div id="examesContainer" class="form-grid">
+          {% for exame in exames %}
+          <div class="field col-2 exam-row">
+            <label>Exame {{ loop.index }}</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input name="exames" type="text" placeholder="Ex.: HEMOGRAMA COMPLETO" value="{{ exame }}">
+              <button class="btn btn--light remove-exam" type="button" aria-label="Remover exame">Remover</button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="info-box" style="margin-top:18px">
+          <strong>Preenchimento automático pelo local do exame:</strong><br>
+          BELÉM — BELÉM, PA / TRAVESSA DO CHACO, Nº2546, MARCO, BELÉM-PA<br>
+          MACAPÁ — MACAPÁ, AP / AV. FELICIANO COELHO, N° 327 - BAIRRO DO TREM - EM FRENTE A AUTO ESCOLA SÃO CRISTOVÃO, MACAPÁ-AP
+        </div>
+
+        <div class="actions inline-actions">
+          <button class="btn btn--primary" type="submit">Gerar Word</button>
+          <a class="btn btn--light" href="{{ url_for('home') }}">Voltar ao início</a>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+<script>
+const cpfInput = document.getElementById('cpf');
+function applyCpfMask(value){
+  const digits = value.replace(/\D/g,'').slice(0,11);
+  return digits
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+}
+cpfInput.addEventListener('input', e => { e.target.value = applyCpfMask(e.target.value); });
+cpfInput.value = applyCpfMask(cpfInput.value);
+
+const container = document.getElementById('examesContainer');
+const addBtn = document.getElementById('addExamBtn');
+function updateExamLabels(){
+  container.querySelectorAll('.exam-row').forEach((row, index) => {
+    const label = row.querySelector('label');
+    if(label) label.textContent = `Exame ${index + 1}`;
+  });
+}
+function attachRemoveButtons(){
+  container.querySelectorAll('.remove-exam').forEach(button => {
+    button.onclick = () => {
+      const rows = container.querySelectorAll('.exam-row');
+      if(rows.length <= 1){
+        const input = button.closest('.exam-row').querySelector('input');
+        if(input) input.value = '';
+        return;
+      }
+      button.closest('.exam-row').remove();
+      updateExamLabels();
+    };
+  });
+}
+addBtn.addEventListener('click', () => {
+  const rows = container.querySelectorAll('.exam-row');
+  if(rows.length >= 5){
+    alert('O modelo permite até 5 exames por encaminhamento.');
+    return;
+  }
+  const row = document.createElement('div');
+  row.className = 'field col-2 exam-row';
+  row.innerHTML = `
+    <label>Exame</label>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input name="exames" type="text" placeholder="Ex.: HEMOGRAMA COMPLETO" value="">
+      <button class="btn btn--light remove-exam" type="button" aria-label="Remover exame">Remover</button>
+    </div>`;
+  container.appendChild(row);
+  updateExamLabels();
+  attachRemoveButtons();
+  row.querySelector('input').focus();
+});
+attachRemoveButtons();
+updateExamLabels();
+</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

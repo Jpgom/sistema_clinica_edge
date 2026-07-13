@@ -556,6 +556,20 @@ def _insert_page_break_before_previous_paragraph(element, text_marker: str) -> N
 # PLANO DE AÇÃO
 # ---------------------------------------------------------------------------
 
+def _plano_perigo_text(risk: Mapping[str, Any]) -> str:
+    """Monta o texto da coluna PERIGO com tipo de risco e nome do risco.
+
+    Padrão solicitado: primeiro o tipo de risco, uma linha em branco e,
+    abaixo, o nome do risco/perigo. Se um dos campos estiver vazio, mostra
+    somente o campo disponível.
+    """
+    tipo = _normalize_option(risk.get("tipo_risco"))
+    nome = str(risk.get("risco", "") or "").strip()
+    if tipo and nome:
+        return f"{tipo}\n\n{nome}"
+    return tipo or nome
+
+
 def _fill_plano_row(row_xml, risk: Mapping[str, Any], setor: str = "", data_atual: str = "", data_final: str = "") -> None:
     cells = row_xml.findall(qn("w:tc"))
     if len(cells) >= 7:
@@ -572,7 +586,7 @@ def _fill_plano_row(row_xml, risk: Mapping[str, Any], setor: str = "", data_atua
         prazo_reavaliacao = "180 DIAS" if is_psychosocial else (data_final or "")
 
         _set_cell_text_with_font(cells[0], setor, font_name="Arial Narrow", font_size_pt=10, font_color="000000", bold=False, align="center", vertical_align="center")
-        _set_cell_text(cells[1], risk.get("risco", ""))
+        _set_cell_text(cells[1], _plano_perigo_text(risk))
         _set_cell_text(cells[2], risk.get("acoes", ""))
         # cells[3] mantém o responsável fixo do modelo: ADMINISTRAÇÃO.
         # Alguns modelos do PGR completo têm uma célula extra/mesclada antes dos prazos.
@@ -588,7 +602,7 @@ def _fill_plano_row(row_xml, risk: Mapping[str, Any], setor: str = "", data_atua
 
     replacements = {
         "{{SETOR}}": setor,
-        "{{risco}}": risk.get("risco", ""),
+        "{{risco}}": _plano_perigo_text(risk),
         "{{AÇÕES PREVENTIVA / CORRETIVA}}": risk.get("acoes", ""),
         "{{INDICADOR DE EFETIVIDADE}}": risk.get("indicador", ""),
     }
@@ -974,7 +988,7 @@ def generate_relacao_funcao_atividade_docx(
         _fill_relacao_table(new_table, sector, data_atual, data_final)
         _insert_before_section_or_end(body, new_table)
         if index < len(sectors) - 1:
-            _insert_before_section_or_end(body, _blank_paragraph())
+            _insert_before_section_or_end(body, _page_break_paragraph())
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1216,7 +1230,7 @@ def _build_relacao_elements(template_table_xml, sectors: list[Mapping[str, Any]]
         _fill_relacao_table(new_table, sector, data_atual, data_final)
         elements.append(new_table)
         if index < len(sectors) - 1:
-            elements.append(_blank_paragraph())
+            elements.append(_page_break_paragraph())
     return elements
 
 
@@ -1936,7 +1950,7 @@ def _ltcat_fill_relacao_funcoes(doc: Document, sectors: list[Mapping[str, Any]],
         table = Table(new_tbl, doc)
         _fill_relacao_table(table._tbl, sector, data_atual, data_final)
         if index < len(sectors) - 1:
-            _ltcat_insert_blank_before(anchor)
+            _ltcat_insert_page_break_before(anchor)
     _ltcat_remove_table(anchor)
 
 
@@ -2251,13 +2265,16 @@ def generate_aet_docx(groups: list[Mapping[str, Any]], output_path: Path, empres
     add_text("A análise considera a relação função x atividade, os riscos ergonômicos e psicossociais vinculados aos setores, as possíveis fontes ou circunstâncias de exposição, os agravos esperados e as medidas preventivas/corretivas indicadas. Quando necessário, recomenda-se complementação por observação presencial, entrevistas, registros fotográficos e análise detalhada da tarefa.")
 
     add_heading("RELAÇÃO FUNÇÃO X ATIVIDADE")
-    rel = doc.add_table(rows=1, cols=5)
-    rel.style = "Table Grid"
     headers = ["SETOR", "CARGO", "CBO", "Nº FUNC.", "DESCRIÇÃO DA ATIVIDADE"]
-    for i, h in enumerate(headers):
-        rel.rows[0].cells[i].text = h
-    for group in groups:
+    for group_index, group in enumerate(groups):
+        if group_index > 0:
+            doc.add_page_break()
+            add_heading("RELAÇÃO FUNÇÃO X ATIVIDADE")
         sector = group.get("sector", {})
+        rel = doc.add_table(rows=1, cols=5)
+        rel.style = "Table Grid"
+        for i, h in enumerate(headers):
+            rel.rows[0].cells[i].text = h
         cargos = sector.get("cargos", []) or []
         if not cargos:
             row = rel.add_row().cells
@@ -2273,7 +2290,7 @@ def generate_aet_docx(groups: list[Mapping[str, Any]], output_path: Path, empres
             row[2].text = str(cargo.get("cbo", ""))
             row[3].text = str(cargo.get("n_func", ""))
             row[4].text = str(cargo.get("descricao", ""))
-    set_table_font(rel)
+        set_table_font(rel)
 
     doc.add_page_break()
     add_heading("ANÁLISE ERGONÔMICA POR SETOR")
@@ -2811,17 +2828,18 @@ def generate_aet_docx(groups: list[Mapping[str, Any]], output_path: Path, empres
     )
 
     doc.add_page_break()
-    add_heading("RELAÇÃO FUNÇÃO X ATIVIDADE")
-    rel = doc.add_table(rows=1, cols=5)
-    
-    try:
-        rel.style = "Table Grid"
-    except KeyError:
-        pass
     headers = ["SETOR", "CARGO", "CBO", "Nº FUNC.", "DESCRIÇÃO DA ATIVIDADE"]
-    for i, h in enumerate(headers):
-        rel.rows[0].cells[i].text = h
-    for sector in sectors:
+    for sector_index, sector in enumerate(sectors):
+        if sector_index > 0:
+            doc.add_page_break()
+        add_heading("RELAÇÃO FUNÇÃO X ATIVIDADE")
+        rel = doc.add_table(rows=1, cols=5)
+        try:
+            rel.style = "Table Grid"
+        except KeyError:
+            pass
+        for i, h in enumerate(headers):
+            rel.rows[0].cells[i].text = h
         cargos = sector.get("cargos", []) or []
         if not cargos:
             row = rel.add_row().cells
@@ -2833,7 +2851,7 @@ def generate_aet_docx(groups: list[Mapping[str, Any]], output_path: Path, empres
             row[2].text = str(cargo.get("cbo", ""))
             row[3].text = str(cargo.get("n_func", ""))
             row[4].text = str(cargo.get("descricao", ""))
-    set_table_font(rel)
+        set_table_font(rel)
 
     add_heading("6. ANÁLISE DA ATIVIDADE REAL")
     add_text(

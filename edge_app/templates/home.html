@@ -26,6 +26,7 @@
       <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
       <a class="nav-link" href="{{ url_for('atestado_medico') }}">🧾 Atestado Médico</a>
       <a class="nav-link" href="/pgr/">🧾 PGR / SST</a>
+      <a class="nav-link" href="/pgr/complementar-laudos">🛠️ Complementar laudos</a>
           {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
       {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link" href="{{ url_for('auditoria') }}">📋 Auditoria</a>{% endif %}
       <a class="nav-link" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
@@ -46,6 +47,7 @@
       <div class="feature-card" data-icon="🩺"><h3>Físico e Mental</h3><p>Atestados rápidos com cadastros reutilizáveis.</p><a class="btn btn--primary" href="{{ url_for('fisico_mental') }}">Abrir</a></div>
       <div class="feature-card" data-icon="🧾"><h3>Atestado Médico</h3><p>Geração de atestado com Nome, data, dias, CID e cidade/UF.</p><a class="btn btn--primary" href="{{ url_for('atestado_medico') }}">Abrir</a></div>
       <div class="feature-card" data-icon="🧾"><h3>PGR / SST</h3><p>Cadastros de riscos, setores, empresas e geração de PGR, PCMSO, LTCAT e AET.</p><a class="btn btn--primary" href="/pgr/">Abrir</a></div>
+      <div class="feature-card" data-icon="🛠️"><h3>Complementar laudos</h3><p>Suba PGR, PCMSO e LTCAT prontos para inserir riscos e exames faltantes.</p><a class="btn btn--primary" href="/pgr/complementar-laudos">Abrir</a></div>
     </section>
   </main>
 </div>

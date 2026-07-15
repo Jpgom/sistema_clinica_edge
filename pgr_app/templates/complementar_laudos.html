@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Complementar laudos prontos{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Complementação</p>
+    <h1>Complementar PGR, PCMSO e LTCAT prontos</h1>
+    <p class="muted">Envie os laudos em Word e escolha os riscos e exames que precisam ser acrescentados. O sistema devolve um ZIP com os documentos complementados.</p>
+  </div>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="panel grid-form">
+  <h2>1. Laudos prontos</h2>
+  <p class="muted">Envie somente arquivos <strong>.docx</strong>. Você pode enviar um, dois ou os três laudos.</p>
+  <div class="inline-grid three-cols">
+    <label>
+      <span>PGR pronto (.docx)</span>
+      <input type="file" name="pgr_docx" accept=".docx">
+    </label>
+    <label>
+      <span>PCMSO pronto (.docx)</span>
+      <input type="file" name="pcmso_docx" accept=".docx">
+    </label>
+    <label>
+      <span>LTCAT pronto (.docx)</span>
+      <input type="file" name="ltcat_docx" accept=".docx">
+    </label>
+  </div>
+
+  <h2>2. Onde será incluído</h2>
+  <div class="inline-grid">
+    <label>
+      <span>Setor / GES onde o risco ou exame será incluído</span>
+      <input name="setor" required placeholder="Ex.: ADMINISTRATIVO, COZINHA, PRODUÇÃO">
+    </label>
+    <label>
+      <span>Cargos / funções relacionados</span>
+      <input name="cargos" placeholder="Ex.: AUXILIAR ADMINISTRATIVO, COZINHEIRO">
+    </label>
+  </div>
+  <div class="inline-grid">
+    <label>
+      <span>Data da complementação / implantação</span>
+      <input name="data_inicio" value="{{ today }}" placeholder="Ex.: 15/07/2026">
+    </label>
+    <label>
+      <span>Prazo de reavaliação</span>
+      <input name="data_reavaliacao" placeholder="Ex.: 180 DIAS ou 15/01/2027">
+    </label>
+  </div>
+
+  <h2>3. Riscos a adicionar</h2>
+  {% if risks %}
+    <div class="split header-line compact-header">
+      <div>
+        <strong>Riscos cadastrados no sistema</strong>
+        <p class="muted small-note">Marque os riscos que deverão entrar nos laudos enviados.</p>
+      </div>
+    </div>
+    <div class="risk-group-risk-list">
+      {% for risk in risks %}
+        <label class="list-check risk-group-risk-option">
+          <input type="checkbox" name="risk_ids" value="{{ risk.id }}">
+          <span>{{ risk.risco }}</span>
+          <em>{{ risk.tipo_risco }}</em>
+        </label>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty left"><strong>Nenhum risco cadastrado.</strong><p>Você ainda pode preencher riscos manuais no campo abaixo.</p></div>
+  {% endif %}
+
+  <label>
+    <span>Riscos manuais, um por linha</span>
+    <textarea name="riscos_manuais" rows="7" placeholder="Formato recomendado: TIPO DE RISCO | NOME DO RISCO | DESCRIÇÃO DO AGENTE | POSSÍVEIS LESÕES | FONTES/CIRCUNSTÂNCIAS | AÇÕES | INDICADOR | EPI | EPC
+Ex.: ERGONÔMICO PSICOSSOCIAL | Sobrecarga mental | Exigência de atenção contínua e pressão por prazos | Estresse, fadiga e ansiedade | Durante atividades administrativas | Organizar demandas e orientar lideranças | Registros de acompanhamento e feedback | Não aplicável | Organização do trabalho"></textarea>
+  </label>
+  <p class="muted small-note">Para LTCAT, se quiser detalhar mais, depois do EPC você pode continuar com: severidade | possibilidade | nível | meio de propagação | insalubridade | grau | aposentadoria especial | enquadramento | parecer | periodicidade/jornada.</p>
+
+  <h2>4. Exames a adicionar</h2>
+  {% if exams %}
+    <div class="split header-line compact-header">
+      <div>
+        <strong>Exames cadastrados no sistema</strong>
+        <p class="muted small-note">Os exames entram principalmente no PCMSO. No PGR eles ficam como referência de atualização do PCMSO.</p>
+      </div>
+    </div>
+    <div class="risk-group-risk-list">
+      {% for exam in exams %}
+        <label class="list-check risk-group-risk-option">
+          <input type="checkbox" name="exam_ids" value="{{ exam.id }}">
+          <span>{{ exam.exame }}</span>
+          <em>{{ exam.periodicidade or 'Conforme PCMSO' }}</em>
+        </label>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty left"><strong>Nenhum exame cadastrado.</strong><p>Você ainda pode preencher exames manuais no campo abaixo.</p></div>
+  {% endif %}
+
+  <label>
+    <span>Exames manuais, um por linha</span>
+    <textarea name="exames_manuais" rows="5" placeholder="Formato: EXAME | PERIODICIDADE | ADMISSIONAL | PERIÓDICO | RETORNO | MUDANÇA | DEMISSIONAL
+Ex.: HEMOGRAMA COMPLETO | ANUAL | Sim | Sim | Conforme avaliação médica | Conforme avaliação médica | Sim"></textarea>
+  </label>
+
+  <div class="soft-note">
+    <strong>Como o sistema aplica:</strong>
+    <p class="muted">No PGR, ele cria complemento de inventário de riscos e plano de ação, além de tentar inserir os riscos na tabela de plano de ação existente. No PCMSO, ele cria complemento de riscos e exames e tenta acrescentar os exames na tabela existente. No LTCAT, ele cria complemento técnico dos riscos informados para revisão do responsável técnico.</p>
+  </div>
+
+  <div class="actions">
+    <button class="btn primary" type="submit">Complementar laudos e baixar ZIP</button>
+  </div>
+</form>
+{% endblock %}

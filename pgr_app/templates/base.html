@@ -22,6 +22,7 @@
       <a class="{% if request.endpoint == 'modelos_aet' %}active{% endif %}" href="{{ url_for('modelos_aet') }}">Modelos AET/CNAEs</a>
       <a class="{% if request.endpoint == 'gerar' %}active{% endif %}" href="{{ url_for('gerar') }}">Gerar laudos</a>
       <a class="{% if request.endpoint in ['importar_laudo_antigo', 'salvar_importacao_laudo_antigo', 'apply_imported_template', 'confirm_apply_imported_template'] %}active{% endif %}" href="{{ url_for('importar_laudo_antigo') }}">Importar antigos</a>
+      <a class="{% if request.endpoint == 'complementar_laudos' %}active{% endif %}" href="{{ url_for('complementar_laudos') }}">Complementar laudos</a>
       <a class="{% if request.endpoint in ['juntar_arquivos'] %}active{% endif %}" href="{{ url_for('juntar_arquivos') }}">Juntar arquivos</a>
       <a class="{% if request.endpoint == 'recibos_esocial' %}active{% endif %}" href="{{ url_for('recibos_esocial') }}">Recibos eSocial</a>
     </nav>

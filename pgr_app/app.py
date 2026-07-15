@@ -17,6 +17,12 @@ from urllib.parse import quote
 from flask import Flask, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
+from docx import Document
+from docx.shared import Inches, Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+from docx.oxml.ns import qn
+import unicodedata
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Text, inspect, text
 
@@ -3862,10 +3868,13 @@ def delete_report_profile(profile_id: str):
     return redirect(url_for("gerar"))
 
 
+
 # ---------------------------------------------------------------------------
 # COMPLEMENTAÇÃO DE LAUDOS PRONTOS - PGR / PCMSO / LTCAT
 # ---------------------------------------------------------------------------
 COMPLEMENTAR_DOCX_EXTENSIONS = {".docx"}
+PSICOSSOCIAL_LABEL = "ERGONÔMICO PSICOSSOCIAL"
+PRAZO_VIGENCIA_LAUDO = "VIGÊNCIA DO LAUDO"
 
 
 def _complementar_clean(value: Any, upper: bool = False) -> str:
@@ -3876,6 +3885,12 @@ def _complementar_clean(value: Any, upper: bool = False) -> str:
 def _complementar_multiline(value: Any) -> str:
     lines = [re.sub(r"\s+", " ", line).strip() for line in str(value or "").splitlines()]
     return "\n".join(line for line in lines if line)
+
+
+def _complementar_norm(value: Any) -> str:
+    text_value = unicodedata.normalize("NFKD", str(value or ""))
+    text_value = "".join(ch for ch in text_value if not unicodedata.combining(ch))
+    return re.sub(r"\s+", " ", text_value.upper()).strip()
 
 
 def _complementar_save_uploaded_docx(file_storage, tmpdir: Path, label: str) -> Path | None:
@@ -3897,6 +3912,16 @@ def _complementar_docx_output_name(original_path: Path, suffix: str = "COMPLEMEN
     return f"{stem}_{suffix}.docx"
 
 
+def _complementar_is_psychosocial(risk: Mapping[str, Any] | dict[str, Any]) -> bool:
+    return _complementar_norm(risk.get("tipo_risco")) == _complementar_norm(PSICOSSOCIAL_LABEL)
+
+
+def _complementar_prazos(risk: Mapping[str, Any] | dict[str, Any], fallback_impl: str = "", fallback_reav: str = "") -> tuple[str, str]:
+    if _complementar_is_psychosocial(risk):
+        return "30 DIAS", "180 DIAS"
+    return fallback_impl or PRAZO_VIGENCIA_LAUDO, fallback_reav or PRAZO_VIGENCIA_LAUDO
+
+
 def _complementar_risk_defaults(data: dict[str, Any]) -> dict[str, Any]:
     risk = dict(data or {})
     risk["risco"] = _complementar_clean(risk.get("risco"), upper=False)
@@ -3905,7 +3930,7 @@ def _complementar_risk_defaults(data: dict[str, Any]) -> dict[str, Any]:
     risk["possiveis_lesoes"] = _complementar_multiline(risk.get("possiveis_lesoes") or "Possíveis desconfortos, lesões ou agravos relacionados à exposição ocupacional.")
     risk["fontes_circunstancias"] = _complementar_multiline(risk.get("fontes_circunstancias") or "Durante o processo de trabalho.")
     risk["acoes"] = _complementar_multiline(risk.get("acoes") or "Manter medidas preventivas, orientar os trabalhadores e acompanhar a eficácia dos controles adotados.")
-    risk["indicador"] = _complementar_multiline(risk.get("indicador") or "Registro de orientações, inspeções, acompanhamento ocupacional e evidências de implantação das medidas.")
+    risk["indicador"] = _complementar_multiline(risk.get("indicador") or "Registros de orientação, acompanhamento ocupacional, inspeções e evidências de implantação das medidas preventivas.")
     risk["epis"] = _complementar_multiline(risk.get("epis") or "Conforme avaliação da atividade e necessidade operacional.")
     risk["epcs"] = _complementar_multiline(risk.get("epcs") or "Medidas administrativas, organização do trabalho, sinalização e controles coletivos aplicáveis.")
     risk["grau_severidade"] = _complementar_clean(risk.get("grau_severidade") or "MODERADA", upper=True)
@@ -3916,7 +3941,7 @@ def _complementar_risk_defaults(data: dict[str, Any]) -> dict[str, Any]:
     risk["ltcat_insalubridade"] = _complementar_clean(risk.get("ltcat_insalubridade") or "Não", upper=False)
     risk["ltcat_grau_insalubridade"] = _complementar_clean(risk.get("ltcat_grau_insalubridade") or "Não aplicável", upper=False)
     risk["ltcat_aposentadoria_especial"] = _complementar_clean(risk.get("ltcat_aposentadoria_especial") or "Não", upper=False)
-    risk["ltcat_enquadramento_tecnico"] = _complementar_multiline(risk.get("ltcat_enquadramento_tecnico") or "Recomenda-se avaliação técnica complementar quando aplicável, especialmente para agentes que exijam quantificação ambiental.")
+    risk["ltcat_enquadramento_tecnico"] = _complementar_multiline(risk.get("ltcat_enquadramento_tecnico") or "Sem enquadramento automático; manter avaliação técnica conforme legislação aplicável e evidências do ambiente de trabalho.")
     risk["ltcat_parecer_previdenciario"] = _complementar_multiline(risk.get("ltcat_parecer_previdenciario") or "Sem caracterização automática de aposentadoria especial sem avaliação técnica específica e enquadramento normativo aplicável.")
     return risk
 
@@ -3931,6 +3956,64 @@ def _complementar_exam_defaults(data: dict[str, Any]) -> dict[str, Any]:
     exam["mudanca"] = _complementar_clean(exam.get("mudanca") or "Conforme avaliação médica", upper=False)
     exam["demissional"] = _complementar_clean(exam.get("demissional") or "Sim", upper=False)
     return exam
+
+
+def _complementar_sector_cargos_text(sector: dict[str, Any]) -> str:
+    cargos = sector.get("cargos") or []
+    names: list[str] = []
+    if isinstance(cargos, list):
+        for cargo in cargos:
+            if isinstance(cargo, dict):
+                nome = _complementar_clean(cargo.get("cargo"), upper=True)
+                cbo = _complementar_clean(cargo.get("cbo"), upper=True)
+                n_func = _complementar_clean(cargo.get("n_func"))
+                if nome and cbo:
+                    item = f"{nome} - CBO: {cbo}"
+                else:
+                    item = nome or cbo
+                if n_func:
+                    item = f"{item} ({n_func})"
+                if item:
+                    names.append(item)
+            elif cargo:
+                names.append(_complementar_clean(cargo, upper=True))
+    return "; ".join(names)
+
+
+def _complementar_selected_sectors_from_form() -> list[dict[str, str]]:
+    selected_ids = request.form.getlist("sector_ids")
+    sectors: list[dict[str, str]] = []
+    if selected_ids:
+        db_sectors = Sector.query.filter(Sector.id.in_(selected_ids)).all()
+        order = {sector_id: index for index, sector_id in enumerate(selected_ids)}
+        db_sectors.sort(key=lambda item: order.get(item.id, 999999))
+        for sector in db_sectors:
+            sector_dict = sector.to_dict()
+            sectors.append({
+                "setor": _complementar_clean(sector_dict.get("setor"), upper=True),
+                "cargos": _complementar_sector_cargos_text(sector_dict),
+            })
+
+    manual_text = request.form.get("setores_manuais", "")
+    for line in manual_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = [part.strip() for part in re.split(r"\s*\|\s*", line, maxsplit=1)]
+        setor = _complementar_clean(parts[0], upper=True)
+        cargos = _complementar_clean(parts[1], upper=True) if len(parts) > 1 else ""
+        if setor:
+            sectors.append({"setor": setor, "cargos": cargos})
+
+    seen: set[str] = set()
+    unique: list[dict[str, str]] = []
+    for sector in sectors:
+        key = _complementar_norm(sector.get("setor"))
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(sector)
+    return unique
 
 
 def _complementar_selected_risks_from_form() -> list[dict[str, Any]]:
@@ -3978,7 +4061,7 @@ def _complementar_selected_risks_from_form() -> list[dict[str, Any]]:
     seen: set[tuple[str, str]] = set()
     unique: list[dict[str, Any]] = []
     for risk in risks:
-        key = (_complementar_clean(risk.get("tipo_risco"), upper=True), _complementar_clean(risk.get("risco"), upper=True))
+        key = (_complementar_norm(risk.get("tipo_risco")), _complementar_norm(risk.get("risco")))
         if key in seen or not key[1]:
             continue
         seen.add(key)
@@ -4016,7 +4099,7 @@ def _complementar_selected_exams_from_form() -> list[dict[str, Any]]:
     seen: set[str] = set()
     unique: list[dict[str, Any]] = []
     for exam in exams:
-        key = _complementar_clean(exam.get("exame"), upper=True)
+        key = _complementar_norm(exam.get("exame"))
         if key in seen or not key:
             continue
         seen.add(key)
@@ -4038,28 +4121,41 @@ def _complementar_set_cell(cell, value: Any, bold: bool = False, size: int = 8, 
         paragraph = cell.add_paragraph()
     else:
         paragraph = cell.paragraphs[0]
-    for run in paragraph.runs:
-        run.text = ""
-    run = paragraph.runs[0] if paragraph.runs else paragraph.add_run()
-    run.text = text_value
-    run.bold = bold
-    run.font.name = "Arial Narrow"
-    run.font.size = Pt(size)
+    for extra in cell.paragraphs[1:]:
+        p = extra._element
+        p.getparent().remove(p)
+    paragraph.clear()
+    lines = text_value.split("\n") if text_value else [""]
+    for idx, line in enumerate(lines):
+        if idx:
+            paragraph.add_run().add_break()
+        run = paragraph.add_run(line)
+        run.bold = bold
+        run.font.name = "Arial Narrow"
+        run.font.size = Pt(size)
     if align == "center":
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     elif align == "right":
         paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     else:
         paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    paragraph.paragraph_format.space_after = Pt(0)
+    paragraph.paragraph_format.space_before = Pt(0)
     cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
 
 
 def _complementar_style_table(table, font_size: int = 8) -> None:
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER
-    table.style = "Table Grid"
+    try:
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.style = "Table Grid"
+    except Exception:
+        pass
     for row_index, row in enumerate(table.rows):
         for cell in row.cells:
-            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            try:
+                cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            except Exception:
+                pass
             for paragraph in cell.paragraphs:
                 paragraph.paragraph_format.space_after = Pt(0)
                 paragraph.paragraph_format.space_before = Pt(0)
@@ -4114,13 +4210,19 @@ def _complementar_table_text(table) -> str:
     return "\n".join(cell.text for row in table.rows for cell in row.cells)
 
 
-def _complementar_find_table(doc: Document, markers: list[str]):
-    normalized_markers = [m.upper() for m in markers]
+def _complementar_find_tables(doc: Document, markers: list[str]):
+    normalized_markers = [_complementar_norm(m) for m in markers]
+    tables = []
     for table in doc.tables:
-        text_value = _complementar_table_text(table).upper()
+        text_value = _complementar_norm(_complementar_table_text(table))
         if all(marker in text_value for marker in normalized_markers):
-            return table
-    return None
+            tables.append(table)
+    return tables
+
+
+def _complementar_find_table(doc: Document, markers: list[str]):
+    tables = _complementar_find_tables(doc, markers)
+    return tables[0] if tables else None
 
 
 def _complementar_copy_row_style_if_possible(target_row, source_row) -> None:
@@ -4133,31 +4235,279 @@ def _complementar_copy_row_style_if_possible(target_row, source_row) -> None:
         pass
 
 
-def _complementar_append_pgr_plan_rows(doc: Document, setor: str, risks: list[dict[str, Any]], data_inicio: str, data_reavaliacao: str) -> int:
+def _complementar_xml_text(element) -> str:
+    return "".join(node.text or "" for node in element.iter(qn("w:t")))
+
+
+def _complementar_insert_after(reference, new_element) -> None:
+    parent = reference.getparent()
+    if parent is None:
+        return
+    parent.insert(parent.index(reference) + 1, new_element)
+
+
+def _complementar_cell_set_if_possible(row, idx: int, value: Any, size: int = 8, bold: bool = False, align: str = "left") -> None:
+    cells = row.cells
+    if len(cells) > idx:
+        _complementar_set_cell(cells[idx], value, size=size, bold=bold, align=align)
+
+
+def _complementar_fill_pgr_risk_block(block_rows, risk: dict[str, Any]) -> None:
+    if len(block_rows) < 11:
+        return
+    _complementar_cell_set_if_possible(block_rows[0], 3, risk.get("tipo_risco", ""), size=8, bold=True, align="center")
+    _complementar_cell_set_if_possible(block_rows[1], 3, risk.get("descricao_agente", ""), size=8)
+    _complementar_cell_set_if_possible(block_rows[2], 3, risk.get("possiveis_lesoes", ""), size=8)
+    _complementar_cell_set_if_possible(block_rows[3], 3, risk.get("fontes_circunstancias", "Durante o processo de trabalho."), size=8)
+    _complementar_cell_set_if_possible(block_rows[5], 3, risk.get("epis", ""), size=8)
+    _complementar_cell_set_if_possible(block_rows[6], 3, risk.get("epcs", ""), size=8)
+    _complementar_cell_set_if_possible(block_rows[7], 3, "Monitoramento do risco", size=8)
+    _complementar_cell_set_if_possible(block_rows[9], 1, risk.get("grau_severidade", ""), size=8, align="center")
+    _complementar_cell_set_if_possible(block_rows[9], 3, risk.get("grau_possibilidade", ""), size=8, align="center")
+    _complementar_cell_set_if_possible(block_rows[9], 5, risk.get("grau_nivel_risco", ""), size=8, align="center")
+    _complementar_cell_set_if_possible(block_rows[10], 3, "ACEITÁVEL", size=8, align="center")
+
+
+def _complementar_fill_ltcat_risk_block(block_rows, risk: dict[str, Any]) -> None:
+    if len(block_rows) < 20:
+        return
+    _complementar_cell_set_if_possible(block_rows[0], 3, risk.get("tipo_risco", ""), size=8, bold=True, align="center")
+    _complementar_cell_set_if_possible(block_rows[1], 3, risk.get("descricao_agente", ""), size=8)
+    _complementar_cell_set_if_possible(block_rows[2], 3, risk.get("ltcat_meio_propagacao", ""), size=8)
+    _complementar_cell_set_if_possible(block_rows[3], 3, risk.get("fontes_circunstancias", "Durante o processo de trabalho."), size=8)
+    _complementar_cell_set_if_possible(block_rows[5], 3, "Avaliação no processo de trabalho e atividades laborais.", size=8)
+    _complementar_cell_set_if_possible(block_rows[6], 3, "Avaliação no processo de trabalho e atividades laborais.", size=8)
+    _complementar_cell_set_if_possible(block_rows[8], 3, risk.get("epis", ""), size=8)
+    _complementar_cell_set_if_possible(block_rows[9], 3, risk.get("epcs", ""), size=8)
+    _complementar_cell_set_if_possible(block_rows[10], 3, "Monitoramento do risco", size=8)
+    _complementar_cell_set_if_possible(block_rows[12], 1, risk.get("ltcat_periodicidade_jornada", ""), size=8)
+    _complementar_cell_set_if_possible(block_rows[12], 3, risk.get("ltcat_enquadramento_tecnico", ""), size=8)
+    _complementar_cell_set_if_possible(block_rows[14], 2, risk.get("ltcat_insalubridade", ""), size=8, align="center")
+    _complementar_cell_set_if_possible(block_rows[15], 2, risk.get("ltcat_grau_insalubridade", ""), size=8, align="center")
+    _complementar_cell_set_if_possible(block_rows[16], 2, risk.get("ltcat_enquadramento_tecnico", ""), size=8)
+    _complementar_cell_set_if_possible(block_rows[18], 2, risk.get("ltcat_aposentadoria_especial", ""), size=8, align="center")
+    _complementar_cell_set_if_possible(block_rows[19], 2, risk.get("ltcat_parecer_previdenciario", ""), size=8)
+
+
+def _complementar_remove_absence_psychosocial_rows(table) -> None:
+    for row in list(table._tbl.findall(qn("w:tr"))):
+        if "NENHUM FATOR DE RISCO PSICOSSOCIAL" in _complementar_norm(_complementar_xml_text(row)):
+            table._tbl.remove(row)
+
+
+def _complementar_first_insert_index_for_risk_blocks(table) -> int:
+    rows_xml = list(table._tbl.findall(qn("w:tr")))
+    for i, row in enumerate(rows_xml):
+        txt = _complementar_norm(_complementar_xml_text(row))
+        if "NENHUM FATOR DE RISCO PSICOSSOCIAL" in txt or "CONTROLES EXISTENTES" in txt or "MONITORAMENTO DA SAUDE" in txt:
+            return i
+    return len(rows_xml)
+
+
+def _complementar_last_block_template(table, expected_rows: int) -> list[Any] | None:
+    rows_xml = list(table._tbl.findall(qn("w:tr")))
+    insert_idx = _complementar_first_insert_index_for_risk_blocks(table)
+    starts = []
+    for i, row in enumerate(rows_xml[:insert_idx]):
+        if "PERIGO/FATOR DE RISCO" in _complementar_norm(_complementar_xml_text(row)):
+            starts.append(i)
+    for start in reversed(starts):
+        if start + expected_rows <= insert_idx:
+            return [copy.deepcopy(row) for row in rows_xml[start:start + expected_rows]]
+    if len(rows_xml) >= expected_rows:
+        return [copy.deepcopy(row) for row in rows_xml[:expected_rows]]
+    return None
+
+
+def _complementar_table_matches_sector(table, setor: str) -> bool:
+    return _complementar_norm(setor) in _complementar_norm(_complementar_table_text(table))
+
+
+def _complementar_fill_sector_header(table, group: dict[str, Any]) -> None:
+    if len(table.rows) >= 1:
+        for cell in table.rows[0].cells:
+            _complementar_set_cell(cell, group.get("setor", ""), bold=True, size=9, align="center")
+    if len(table.rows) >= 3:
+        for cell in table.rows[2].cells:
+            _complementar_set_cell(cell, group.get("cargos", ""), size=8, align="center")
+
+
+
+def _complementar_fill_first_existing_risk_block(table, risk: dict[str, Any], kind: str) -> bool:
+    expected_rows = 20 if kind == "ltcat" else 11
+    rows_xml = list(table._tbl.findall(qn("w:tr")))
+    insert_idx = _complementar_first_insert_index_for_risk_blocks(table)
+    for start, row in enumerate(rows_xml[:insert_idx]):
+        if "PERIGO/FATOR DE RISCO" in _complementar_norm(_complementar_xml_text(row)) and start + expected_rows <= insert_idx:
+            wrapped_rows = table.rows[start:start + expected_rows]
+            if kind == "ltcat":
+                _complementar_fill_ltcat_risk_block(wrapped_rows, risk)
+            else:
+                _complementar_fill_pgr_risk_block(wrapped_rows, risk)
+            return True
+    return False
+
+def _complementar_append_risk_blocks_to_table(table, group: dict[str, Any], kind: str) -> int:
+    risks = group.get("risks") or []
+    if not risks:
+        return 0
+    expected_rows = 20 if kind == "ltcat" else 11
+    template_rows = _complementar_last_block_template(table, expected_rows)
+    if not template_rows:
+        return 0
+    if any(_complementar_is_psychosocial(risk) for risk in risks):
+        _complementar_remove_absence_psychosocial_rows(table)
+    appended = 0
+    for risk in risks:
+        block_rows = [copy.deepcopy(row) for row in template_rows]
+        temp_doc = Document()
+        # Recreate python-docx row wrappers by inserting first, then using table.rows.
+        insert_idx = _complementar_first_insert_index_for_risk_blocks(table)
+        for row_xml in block_rows:
+            table._tbl.insert(insert_idx, row_xml)
+            insert_idx += 1
+        table_rows = table.rows
+        inserted_rows = table_rows[insert_idx - expected_rows:insert_idx]
+        if kind == "ltcat":
+            _complementar_fill_ltcat_risk_block(inserted_rows, risk)
+        else:
+            _complementar_fill_pgr_risk_block(inserted_rows, risk)
+        appended += 1
+    _complementar_style_table(table, font_size=7 if kind == "ltcat" else 8)
+    return appended
+
+
+def _complementar_sector_tables(doc: Document, kind: str) -> list[Any]:
+    if kind == "ltcat":
+        tables = _complementar_find_tables(doc, ["ESPECIFICAÇÃO DOS PERIGOS/FATORES DE RISCO", "MEIO DE PROPAGAÇÃO"])
+    else:
+        tables = _complementar_find_tables(doc, ["ESPECIFICAÇÃO DOS PERIGOS/FATORES DE RISCO", "PERIGO/FATOR DE RISCO"])
+    return [table for table in tables if len(table.rows) >= 6]
+
+
+def _complementar_append_pgr_inventory(doc: Document, groups: list[dict[str, Any]]) -> int:
+    tables = _complementar_sector_tables(doc, "pgr")
+    if not tables:
+        return 0
+    appended = 0
+    last_xml = tables[-1]._tbl
+    for group in groups:
+        target = next((table for table in tables if _complementar_table_matches_sector(table, group.get("setor", ""))), None)
+        if target is None:
+            target_xml = copy.deepcopy(tables[0]._tbl)
+            _complementar_insert_after(last_xml, target_xml)
+            target = next(table for table in doc.tables if table._tbl is target_xml)
+            _complementar_fill_sector_header(target, group)
+            if group.get("risks"):
+                first, rest = group["risks"][0], group["risks"][1:]
+                if _complementar_fill_first_existing_risk_block(target, first, "pgr"):
+                    appended += 1
+                    target_group = dict(group)
+                    target_group["risks"] = rest
+                    appended += _complementar_append_risk_blocks_to_table(target, target_group, "pgr")
+                else:
+                    appended += _complementar_append_risk_blocks_to_table(target, group, "pgr")
+            last_xml = target_xml
+            tables.append(target)
+        else:
+            appended += _complementar_append_risk_blocks_to_table(target, group, "pgr")
+    return appended
+
+
+def _complementar_extract_existing_pgr_deadlines(table) -> tuple[str, str]:
+    impl = ""
+    reav = ""
+    for row in reversed(table.rows[2:]):
+        cells = row.cells
+        if len(cells) >= 8:
+            candidate_impl, candidate_reav = cells[5].text.strip(), cells[6].text.strip()
+        elif len(cells) >= 7:
+            candidate_impl, candidate_reav = cells[4].text.strip(), cells[5].text.strip()
+        else:
+            continue
+        joined = _complementar_norm(" ".join(cell.text for cell in cells))
+        if "30 DIAS" in joined and "180 DIAS" in joined:
+            continue
+        if candidate_impl and candidate_reav and "{{" not in candidate_impl and "{{" not in candidate_reav:
+            impl, reav = candidate_impl, candidate_reav
+            break
+    return impl, reav
+
+
+def _complementar_append_pgr_plan_rows(doc: Document, groups: list[dict[str, Any]]) -> int:
     table = _complementar_find_table(doc, ["GES", "PERIGO", "INDICADOR"])
     if table is None:
         return 0
+    existing_impl, existing_reav = _complementar_extract_existing_pgr_deadlines(table)
     appended = 0
-    for risk in risks:
-        row = table.add_row()
-        if len(table.rows) >= 2:
-            _complementar_copy_row_style_if_possible(row, table.rows[-2])
-        cells = row.cells
-        if len(cells) >= 7:
-            is_psychosocial = _complementar_clean(risk.get("tipo_risco"), upper=True) == "ERGONÔMICO PSICOSSOCIAL"
-            _complementar_set_cell(cells[0], setor, size=7, align="center")
-            _complementar_set_cell(cells[1], f"{risk.get('tipo_risco', '')}\n\n{risk.get('risco', '')}", size=7, align="center")
-            _complementar_set_cell(cells[2], risk.get("acoes", ""), size=7)
-            _complementar_set_cell(cells[3], "ADMINISTRAÇÃO", bold=True, size=7, align="center")
-            _complementar_set_cell(cells[4], "30 DIAS" if is_psychosocial else data_inicio, bold=True, size=7, align="center")
-            _complementar_set_cell(cells[5], "180 DIAS" if is_psychosocial else data_reavaliacao, bold=True, size=7, align="center")
-            _complementar_set_cell(cells[6], risk.get("indicador", ""), size=7)
+    for group in groups:
+        for risk in group.get("risks", []):
+            row = table.add_row()
+            if len(table.rows) >= 2:
+                _complementar_copy_row_style_if_possible(row, table.rows[-2])
+            cells = row.cells
+            prazo_implantacao, prazo_reavaliacao = _complementar_prazos(risk, existing_impl, existing_reav)
+            if len(cells) >= 8:
+                _complementar_set_cell(cells[0], group.get("setor", ""), size=7, align="center")
+                _complementar_set_cell(cells[1], f"{risk.get('tipo_risco', '')}\n\n{risk.get('risco', '')}", size=7, align="center")
+                _complementar_set_cell(cells[2], risk.get("acoes", ""), size=7)
+                _complementar_set_cell(cells[3], "ADMINISTRAÇÃO", bold=True, size=7, align="center")
+                _complementar_set_cell(cells[5], prazo_implantacao, bold=True, size=7, align="center")
+                _complementar_set_cell(cells[6], prazo_reavaliacao, bold=True, size=7, align="center")
+                _complementar_set_cell(cells[7], risk.get("indicador", ""), size=7)
+                appended += 1
+            elif len(cells) >= 7:
+                _complementar_set_cell(cells[0], group.get("setor", ""), size=7, align="center")
+                _complementar_set_cell(cells[1], f"{risk.get('tipo_risco', '')}\n\n{risk.get('risco', '')}", size=7, align="center")
+                _complementar_set_cell(cells[2], risk.get("acoes", ""), size=7)
+                _complementar_set_cell(cells[3], "ADMINISTRAÇÃO", bold=True, size=7, align="center")
+                _complementar_set_cell(cells[4], prazo_implantacao, bold=True, size=7, align="center")
+                _complementar_set_cell(cells[5], prazo_reavaliacao, bold=True, size=7, align="center")
+                _complementar_set_cell(cells[6], risk.get("indicador", ""), size=7)
+                appended += 1
+    _complementar_style_table(table, font_size=7)
+    return appended
+
+
+def _complementar_fill_pcmso_risk_table(table, group: dict[str, Any], risk: dict[str, Any]) -> None:
+    if len(table.rows) >= 1:
+        for cell in table.rows[0].cells:
+            _complementar_set_cell(cell, group.get("setor", ""), bold=True, size=9, align="center")
+    if len(table.rows) >= 3:
+        for cell in table.rows[2].cells:
+            _complementar_set_cell(cell, group.get("cargos", ""), size=8, align="center")
+    if len(table.rows) >= 8:
+        _complementar_cell_set_if_possible(table.rows[4], 1, risk.get("tipo_risco", ""), size=8, bold=True, align="center")
+        _complementar_cell_set_if_possible(table.rows[5], 1, risk.get("descricao_agente", ""), size=8)
+        _complementar_cell_set_if_possible(table.rows[6], 1, risk.get("possiveis_lesoes", ""), size=8)
+        _complementar_cell_set_if_possible(table.rows[7], 1, risk.get("fontes_circunstancias", "Durante o processo de trabalho."), size=8)
+
+
+def _complementar_pcmso_risk_tables(doc: Document) -> list[Any]:
+    return _complementar_find_tables(doc, ["ESPECIFICAÇÃO DOS PERIGOS/FATORES DE RISCO", "PERIGO/FATOR DE RISCO"])
+
+
+def _complementar_append_pcmso_risk_tables(doc: Document, groups: list[dict[str, Any]]) -> int:
+    templates = _complementar_pcmso_risk_tables(doc)
+    if not templates:
+        return 0
+    first_template = templates[0]
+    last_xml = templates[-1]._tbl
+    appended = 0
+    for group in groups:
+        for risk in group.get("risks", []):
+            table_xml = copy.deepcopy(first_template._tbl)
+            _complementar_insert_after(last_xml, table_xml)
+            table = next(t for t in doc.tables if t._tbl is table_xml)
+            _complementar_fill_pcmso_risk_table(table, group, risk)
+            _complementar_style_table(table, font_size=8)
+            last_xml = table_xml
             appended += 1
     return appended
 
 
 def _complementar_append_pcmso_exam_rows(doc: Document, exams: list[dict[str, Any]]) -> int:
-    table = _complementar_find_table(doc, ["EXAME", "ADMISSIONAL", "DEMISSIONAL"])
+    table = _complementar_find_table(doc, ["EXAMES", "ADMISSIONAL", "DEMISSIONAL"])
     if table is None:
         table = _complementar_find_table(doc, ["EXAMES RECOMENDADOS"])
     if table is None:
@@ -4179,126 +4529,110 @@ def _complementar_append_pcmso_exam_rows(doc: Document, exams: list[dict[str, An
         for idx, cell in enumerate(row.cells):
             _complementar_set_cell(cell, values[idx] if idx < len(values) else "", size=7, align="center" if idx else "left")
         appended += 1
+    _complementar_style_table(table, font_size=7)
     return appended
 
 
-def _complementar_intro_doc(doc: Document, titulo: str, setor: str, cargos: str, data_revisao: str, origem: str) -> None:
+def _complementar_append_ltcat_inventory(doc: Document, groups: list[dict[str, Any]]) -> int:
+    tables = _complementar_sector_tables(doc, "ltcat")
+    if not tables:
+        return 0
+    appended = 0
+    last_xml = tables[-1]._tbl
+    for group in groups:
+        target = next((table for table in tables if _complementar_table_matches_sector(table, group.get("setor", ""))), None)
+        if target is None:
+            target_xml = copy.deepcopy(tables[0]._tbl)
+            _complementar_insert_after(last_xml, target_xml)
+            target = next(table for table in doc.tables if table._tbl is target_xml)
+            _complementar_fill_sector_header(target, group)
+            if group.get("risks"):
+                first, rest = group["risks"][0], group["risks"][1:]
+                if _complementar_fill_first_existing_risk_block(target, first, "ltcat"):
+                    appended += 1
+                    target_group = dict(group)
+                    target_group["risks"] = rest
+                    appended += _complementar_append_risk_blocks_to_table(target, target_group, "ltcat")
+                else:
+                    appended += _complementar_append_risk_blocks_to_table(target, group, "ltcat")
+            last_xml = target_xml
+            tables.append(target)
+        else:
+            appended += _complementar_append_risk_blocks_to_table(target, group, "ltcat")
+    return appended
+
+
+def _complementar_append_fallback_section(doc: Document, kind: str, groups: list[dict[str, Any]], exams: list[dict[str, Any]], origem: str) -> None:
     doc.add_page_break()
-    _complementar_add_heading(doc, titulo, level=1)
-    _complementar_add_note(
-        doc,
-        "Complementação inserida pelo Sistema EDGE para acrescentar riscos e/ou exames informados pelo usuário em laudo já existente. "
-        "O conteúdo deve ser revisado pelo responsável técnico antes da assinatura ou emissão final.",
-    )
-    info_rows = [["Setor/GES", setor or "Não informado"], ["Cargos/Funções", cargos or "Não informado"], ["Data da complementação", data_revisao or datetime.now().strftime("%d/%m/%Y")], ["Arquivo base", origem]]
-    _complementar_add_basic_table(doc, ["Campo", "Informação"], info_rows, widths=[1.7, 5.8], font_size=8)
-
-
-def _complementar_append_pgr_section(doc: Document, setor: str, cargos: str, risks: list[dict[str, Any]], exams: list[dict[str, Any]], data_inicio: str, data_reavaliacao: str, origem: str) -> None:
-    _complementar_append_pgr_plan_rows(doc, setor, risks, data_inicio, data_reavaliacao)
-    _complementar_intro_doc(doc, "COMPLEMENTAÇÃO DO PGR", setor, cargos, data_inicio, origem)
-    if risks:
-        _complementar_add_heading(doc, "Inventário de riscos complementares", level=2)
-        rows = []
-        for risk in risks:
-            rows.append([
-                setor,
-                risk.get("tipo_risco", ""),
-                risk.get("risco", ""),
-                risk.get("descricao_agente", ""),
-                risk.get("possiveis_lesoes", ""),
-                risk.get("fontes_circunstancias", ""),
-                f"EPI: {risk.get('epis', '')}\nEPC: {risk.get('epcs', '')}",
-                f"Severidade: {risk.get('grau_severidade', '')}\nPossibilidade: {risk.get('grau_possibilidade', '')}\nNível: {risk.get('grau_nivel_risco', '')}",
-            ])
-        _complementar_add_basic_table(doc, ["GES", "Tipo", "Perigo/Fator", "Descrição", "Lesões/Agravos", "Fontes", "Controles", "Avaliação"], rows, font_size=7)
-        _complementar_add_heading(doc, "Plano de ação complementar", level=2)
+    _complementar_add_heading(doc, f"COMPLEMENTAÇÃO TÉCNICA - {kind.upper()}", level=1)
+    _complementar_add_note(doc, f"O sistema não localizou com segurança a tabela original para inserir os dados no corpo do {kind.upper()}. Por isso, a complementação abaixo foi adicionada ao final, sem alterar as demais partes do laudo base: {origem}.")
+    risk_rows = []
+    for group in groups:
+        for risk in group.get("risks", []):
+            risk_rows.append([group.get("setor", ""), group.get("cargos", ""), risk.get("tipo_risco", ""), risk.get("risco", ""), risk.get("descricao_agente", ""), risk.get("possiveis_lesoes", ""), risk.get("fontes_circunstancias", "")])
+    if risk_rows:
+        _complementar_add_heading(doc, "Riscos adicionados", level=2)
+        _complementar_add_basic_table(doc, ["Setor/GES", "Funções", "Tipo", "Risco", "Descrição", "Lesões/Agravos", "Fontes"], risk_rows, font_size=7)
+    if kind.lower() == "pgr" and risk_rows:
         action_rows = []
-        for risk in risks:
-            is_psychosocial = _complementar_clean(risk.get("tipo_risco"), upper=True) == "ERGONÔMICO PSICOSSOCIAL"
-            action_rows.append([
-                setor,
-                f"{risk.get('tipo_risco', '')}\n\n{risk.get('risco', '')}",
-                risk.get("acoes", ""),
-                "ADMINISTRAÇÃO",
-                "30 DIAS" if is_psychosocial else data_inicio,
-                "180 DIAS" if is_psychosocial else data_reavaliacao,
-                risk.get("indicador", ""),
-            ])
-        _complementar_add_basic_table(doc, ["GES", "PERIGO", "AÇÕES PREVENTIVA / CORRETIVA", "RESPONSÁVEL", "PRAZO DE IMPLANTAÇÃO", "PRAZO DE REAVALIAÇÃO", "INDICADOR DE EFETIVIDADE"], action_rows, font_size=7)
-    if exams:
-        _complementar_add_heading(doc, "Exames informados para vinculação no PCMSO", level=2)
-        _complementar_add_note(doc, "Estes exames foram informados junto da complementação. No PGR, permanecem como referência para atualização do PCMSO correspondente.")
-        _complementar_add_basic_table(doc, ["Exame", "Periodicidade"], [[e.get("exame", ""), e.get("periodicidade", "")] for e in exams], font_size=8)
-
-
-def _complementar_append_pcmso_section(doc: Document, setor: str, cargos: str, risks: list[dict[str, Any]], exams: list[dict[str, Any]], data_inicio: str, origem: str) -> None:
-    _complementar_append_pcmso_exam_rows(doc, exams)
-    _complementar_intro_doc(doc, "COMPLEMENTAÇÃO DO PCMSO", setor, cargos, data_inicio, origem)
-    if risks:
-        _complementar_add_heading(doc, "Riscos complementares vinculados ao PCMSO", level=2)
-        risk_rows = [[setor, r.get("tipo_risco", ""), r.get("risco", ""), r.get("descricao_agente", ""), r.get("possiveis_lesoes", ""), r.get("fontes_circunstancias", "")] for r in risks]
-        _complementar_add_basic_table(doc, ["Setor", "Tipo", "Perigo/Fator", "Descrição do agente", "Possíveis lesões", "Fontes/Circunstâncias"], risk_rows, font_size=7)
-    if exams:
-        _complementar_add_heading(doc, "Exames complementares recomendados", level=2)
+        for group in groups:
+            for risk in group.get("risks", []):
+                prazo1, prazo2 = _complementar_prazos(risk)
+                action_rows.append([group.get("setor", ""), f"{risk.get('tipo_risco', '')}\n\n{risk.get('risco', '')}", risk.get("acoes", ""), "ADMINISTRAÇÃO", prazo1, prazo2, risk.get("indicador", "")])
+        _complementar_add_heading(doc, "Plano de ação complementar", level=2)
+        _complementar_add_basic_table(doc, ["GES", "PERIGO", "AÇÕES PREVENTIVA / CORRETIVA", "RESPONSÁVEL", "PRAZO DE IMPLANTAÇÃO", "PRAZO DE REAVALIAÇÃO", "INDICADOR"], action_rows, font_size=7)
+    if kind.lower() == "pcmso" and exams:
+        _complementar_add_heading(doc, "Exames adicionados", level=2)
         exam_rows = [[e.get("exame", ""), e.get("periodicidade", ""), e.get("admissional", ""), e.get("periodico", ""), e.get("retorno", ""), e.get("mudanca", ""), e.get("demissional", "")] for e in exams]
         _complementar_add_basic_table(doc, ["Exame", "Periodicidade", "Admissional", "Periódico", "Retorno", "Mudança", "Demissional"], exam_rows, font_size=7)
 
 
-def _complementar_append_ltcat_section(doc: Document, setor: str, cargos: str, risks: list[dict[str, Any]], data_inicio: str, origem: str) -> None:
-    _complementar_intro_doc(doc, "COMPLEMENTAÇÃO DO LTCAT", setor, cargos, data_inicio, origem)
-    if risks:
-        _complementar_add_heading(doc, "Riscos complementares para análise técnica previdenciária", level=2)
-        rows = []
-        for risk in risks:
-            rows.append([
-                setor,
-                cargos,
-                risk.get("tipo_risco", ""),
-                risk.get("risco", ""),
-                risk.get("ltcat_meio_propagacao", ""),
-                risk.get("epis", ""),
-                risk.get("epcs", ""),
-                risk.get("ltcat_periodicidade_jornada", ""),
-                risk.get("ltcat_insalubridade", ""),
-                risk.get("ltcat_grau_insalubridade", ""),
-                risk.get("ltcat_aposentadoria_especial", ""),
-                risk.get("ltcat_enquadramento_tecnico", ""),
-                risk.get("ltcat_parecer_previdenciario", ""),
-            ])
-        _complementar_add_basic_table(
-            doc,
-            ["Setor", "Cargos", "Tipo", "Agente/Risco", "Meio de propagação / via", "EPI", "EPC", "Periodicidade/Jornada", "Insalubridade", "Grau", "Apos. especial", "Enquadramento", "Parecer"],
-            rows,
-            font_size=6,
-        )
+def _complementar_groups_from_form() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    sectors = _complementar_selected_sectors_from_form()
+    risks = _complementar_selected_risks_from_form()
+    exams = _complementar_selected_exams_from_form()
+    if not sectors:
+        raise ValueError("Selecione ou informe pelo menos um setor/GES onde a complementação será aplicada.")
+    if not risks and not exams:
+        raise ValueError("Selecione ou informe pelo menos um risco ou exame para complementar os laudos.")
+    groups = [{"setor": sector.get("setor", ""), "cargos": sector.get("cargos", ""), "risks": list(risks), "exams": list(exams)} for sector in sectors]
+    return groups, risks, exams
 
 
-def _complementar_process_docx(kind: str, input_path: Path, output_path: Path, setor: str, cargos: str, risks: list[dict[str, Any]], exams: list[dict[str, Any]], data_inicio: str, data_reavaliacao: str) -> None:
+def _complementar_process_docx(kind: str, input_path: Path, output_path: Path, groups: list[dict[str, Any]], exams: list[dict[str, Any]]) -> dict[str, int]:
     doc = Document(str(input_path))
-    for section in doc.sections:
-        try:
-            section.top_margin = section.top_margin or Inches(0.55)
-        except Exception:
-            pass
     kind = kind.lower().strip()
+    stats = {"pgr_inventario": 0, "pgr_plano": 0, "pcmso_riscos": 0, "pcmso_exames": 0, "ltcat_riscos": 0, "fallback": 0}
     if kind == "pgr":
-        _complementar_append_pgr_section(doc, setor, cargos, risks, exams, data_inicio, data_reavaliacao, input_path.name)
+        stats["pgr_inventario"] = _complementar_append_pgr_inventory(doc, groups)
+        stats["pgr_plano"] = _complementar_append_pgr_plan_rows(doc, groups)
+        if not stats["pgr_inventario"] and not stats["pgr_plano"]:
+            _complementar_append_fallback_section(doc, kind, groups, exams, input_path.name)
+            stats["fallback"] = 1
     elif kind == "pcmso":
-        _complementar_append_pcmso_section(doc, setor, cargos, risks, exams, data_inicio, input_path.name)
+        stats["pcmso_riscos"] = _complementar_append_pcmso_risk_tables(doc, groups)
+        stats["pcmso_exames"] = _complementar_append_pcmso_exam_rows(doc, exams)
+        if not stats["pcmso_riscos"] and not stats["pcmso_exames"]:
+            _complementar_append_fallback_section(doc, kind, groups, exams, input_path.name)
+            stats["fallback"] = 1
     elif kind == "ltcat":
-        _complementar_append_ltcat_section(doc, setor, cargos, risks, data_inicio, input_path.name)
+        stats["ltcat_riscos"] = _complementar_append_ltcat_inventory(doc, groups)
+        if not stats["ltcat_riscos"]:
+            _complementar_append_fallback_section(doc, kind, groups, exams, input_path.name)
+            stats["fallback"] = 1
     else:
         raise ValueError("Tipo de laudo inválido.")
-    apply_default_docx_font(doc, font_name="Arial Narrow", font_size=10)
+    apply_default_docx_font(doc, font_name="Arial Narrow")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(output_path))
+    return stats
 
 
 def _complementar_laudos_context() -> dict[str, Any]:
     return {
         "risks": _sorted_risks(),
         "exams": _sorted_exams(),
+        "sectors": _sorted_sectors(),
         "today": datetime.now().strftime("%d/%m/%Y"),
     }
 
@@ -4307,17 +4641,7 @@ def _complementar_laudos_context() -> dict[str, Any]:
 def complementar_laudos():
     if request.method == "POST":
         try:
-            setor = _complementar_clean(request.form.get("setor"), upper=True)
-            cargos = _complementar_clean(request.form.get("cargos"), upper=True)
-            data_inicio = _complementar_clean(request.form.get("data_inicio") or datetime.now().strftime("%d/%m/%Y"))
-            data_reavaliacao = _complementar_clean(request.form.get("data_reavaliacao") or "Conforme plano de ação")
-            risks = _complementar_selected_risks_from_form()
-            exams = _complementar_selected_exams_from_form()
-            if not setor:
-                raise ValueError("Informe o setor/GES onde a complementação será aplicada.")
-            if not risks and not exams:
-                raise ValueError("Selecione ou informe pelo menos um risco ou exame para complementar os laudos.")
-
+            groups, risks, exams = _complementar_groups_from_form()
             with tempfile.TemporaryDirectory() as tmp:
                 tmpdir = Path(tmp)
                 uploads = {
@@ -4333,23 +4657,34 @@ def complementar_laudos():
                 stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 zip_path = OUTPUT_DIR / f"laudos_complementados_{stamp}.zip"
                 generated: list[tuple[Path, str]] = []
+                stats_by_doc: dict[str, dict[str, int]] = {}
                 for kind, input_path in uploads.items():
                     out_path = tmpdir / _complementar_docx_output_name(input_path)
-                    _complementar_process_docx(kind, input_path, out_path, setor, cargos, risks, exams, data_inicio, data_reavaliacao)
+                    stats_by_doc[kind.upper()] = _complementar_process_docx(kind, input_path, out_path, groups, exams)
                     generated.append((out_path, out_path.name))
 
                 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                     for out_path, name in generated:
                         zf.write(out_path, name)
+                    setores_txt = ", ".join(group.get("setor", "") for group in groups)
                     resumo = [
                         "COMPLEMENTAÇÃO DE LAUDOS - SISTEMA EDGE",
-                        f"Setor/GES: {setor}",
-                        f"Cargos/Funções: {cargos or 'Não informado'}",
-                        f"Riscos adicionados: {len(risks)}",
-                        f"Exames adicionados: {len(exams)}",
+                        f"Setores/GES selecionados: {setores_txt}",
+                        f"Riscos selecionados: {len(risks)}",
+                        f"Exames selecionados: {len(exams)}",
                         "",
-                        "Observação: os documentos foram complementados em Word editável. Revise tecnicamente antes da emissão/assinatura.",
+                        "Regras automáticas de prazo:",
+                        "- Risco ERGONÔMICO PSICOSSOCIAL: 30 DIAS para implantação e 180 DIAS para reavaliação.",
+                        "- Demais riscos: usa prazo encontrado no plano de ação existente; se não localizar, registra VIGÊNCIA DO LAUDO.",
+                        "",
+                        "Locais alterados:",
                     ]
+                    for doc_name, stats in stats_by_doc.items():
+                        resumo.append(f"{doc_name}: {stats}")
+                    resumo.extend([
+                        "",
+                        "Observação: o sistema acrescenta linhas/blocos nos pontos reconhecidos dos laudos e não altera textos gerais, capas, assinaturas ou demais seções existentes. Revise tecnicamente antes da emissão/assinatura.",
+                    ])
                     zf.writestr("LEIA-ME_COMPLEMENTACAO.txt", "\n".join(resumo))
                 return _send_zip_with_cleanup(zip_path, f"LAUDOS_COMPLEMENTADOS_{stamp}.zip")
         except Exception as exc:

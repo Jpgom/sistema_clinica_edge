@@ -2,116 +2,184 @@
 {% block title %}Complementar laudos prontos{% endblock %}
 
 {% block content %}
-<div class="page-head">
-  <div>
-    <p class="eyebrow">Complementação</p>
-    <h1>Complementar PGR, PCMSO e LTCAT prontos</h1>
-    <p class="muted">Envie os laudos em Word e escolha os riscos e exames que precisam ser acrescentados. O sistema devolve um ZIP com os documentos complementados.</p>
+<style>
+  .comp-wrap { display: grid; gap: 18px; }
+  .comp-hero { border: 1px solid rgba(56, 189, 248, .22); background: linear-gradient(135deg, rgba(15, 23, 42, .92), rgba(30, 41, 59, .88)); border-radius: 20px; padding: 22px; box-shadow: 0 14px 36px rgba(15, 23, 42, .18); }
+  .comp-hero h1 { margin-bottom: 8px; }
+  .comp-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+  .comp-step { border: 1px solid rgba(148, 163, 184, .22); border-radius: 14px; padding: 12px; background: rgba(255,255,255,.04); }
+  .comp-step strong { display: block; font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; }
+  .comp-card { border: 1px solid rgba(148, 163, 184, .28); border-radius: 18px; padding: 18px; background: var(--panel-bg, #fff); box-shadow: 0 8px 22px rgba(15, 23, 42, .08); }
+  .comp-card h2 { display:flex; align-items:center; gap:10px; margin: 0 0 10px; }
+  .comp-badge { display:inline-grid; place-items:center; width:28px; height:28px; border-radius: 50%; background: #0ea5e9; color:#fff; font-weight:800; font-size:.9rem; }
+  .comp-file-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .comp-file { border: 1px dashed rgba(14, 165, 233, .45); border-radius: 14px; padding: 13px; background: rgba(14, 165, 233, .06); }
+  .comp-search { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin: 10px 0; }
+  .comp-list { max-height: 290px; overflow: auto; border: 1px solid rgba(148, 163, 184, .28); border-radius: 14px; padding: 8px; background: rgba(248,250,252,.55); }
+  .comp-item { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 9px 8px; border-radius: 10px; border-bottom: 1px solid rgba(148, 163, 184, .14); }
+  .comp-item:hover { background: rgba(14, 165, 233, .08); }
+  .comp-item:last-child { border-bottom: none; }
+  .comp-item strong { display:block; line-height:1.25; }
+  .comp-item em { display:block; color: var(--muted, #64748b); font-size:.82rem; margin-top:2px; }
+  .comp-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .comp-note { border-left: 4px solid #0ea5e9; background: rgba(14,165,233,.08); border-radius: 12px; padding: 12px 14px; }
+  .comp-rule-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .comp-rule { padding: 12px; border-radius: 14px; border: 1px solid rgba(148,163,184,.26); background: rgba(248,250,252,.62); }
+  .comp-actions { position: sticky; bottom: 10px; display:flex; justify-content:flex-end; padding: 12px; border: 1px solid rgba(148,163,184,.24); background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-radius: 16px; box-shadow: 0 12px 30px rgba(15,23,42,.12); }
+  .comp-small-btn { border: 1px solid rgba(14,165,233,.35); background: rgba(14,165,233,.08); border-radius: 10px; padding: 8px 10px; cursor:pointer; }
+  @media (max-width: 980px) { .comp-steps, .comp-file-grid, .comp-two, .comp-rule-grid { grid-template-columns: 1fr; } }
+</style>
+
+<div class="comp-wrap">
+  <div class="comp-hero">
+    <p class="eyebrow">Complementação inteligente</p>
+    <h1>Adicionar riscos e exames em laudos prontos</h1>
+    <p class="muted">Envie PGR, PCMSO e/ou LTCAT em Word. Escolha os setores onde os novos riscos e exames deverão entrar. O sistema acrescenta os dados nas tabelas reconhecidas, sem alterar capa, assinaturas ou demais textos do laudo.</p>
+    <div class="comp-steps">
+      <div class="comp-step"><strong>1. Envie</strong><span class="muted">PGR, PCMSO e/ou LTCAT .docx</span></div>
+      <div class="comp-step"><strong>2. Escolha setores</strong><span class="muted">Setores cadastrados ou manuais</span></div>
+      <div class="comp-step"><strong>3. Selecione riscos</strong><span class="muted">Riscos do sistema ou manuais</span></div>
+      <div class="comp-step"><strong>4. Baixe</strong><span class="muted">ZIP com os laudos complementados</span></div>
+    </div>
   </div>
+
+  <form method="post" enctype="multipart/form-data" class="comp-wrap">
+    <section class="comp-card">
+      <h2><span class="comp-badge">1</span>Laudos prontos</h2>
+      <p class="muted">Envie somente arquivos em Word editável, no formato <strong>.docx</strong>. Pode enviar apenas um laudo ou os três.</p>
+      <div class="comp-file-grid">
+        <label class="comp-file"><span>PGR pronto</span><input type="file" name="pgr_docx" accept=".docx"></label>
+        <label class="comp-file"><span>PCMSO pronto</span><input type="file" name="pcmso_docx" accept=".docx"></label>
+        <label class="comp-file"><span>LTCAT pronto</span><input type="file" name="ltcat_docx" accept=".docx"></label>
+      </div>
+    </section>
+
+    <section class="comp-card">
+      <h2><span class="comp-badge">2</span>Setores que receberão a complementação</h2>
+      <p class="muted">Os riscos e exames selecionados abaixo serão aplicados nos setores marcados aqui. Para aplicar conjuntos diferentes, faça uma geração separada.</p>
+      <div class="comp-search">
+        <input type="search" class="comp-filter" data-target="sector-list" placeholder="Pesquisar setor cadastrado...">
+        <button type="button" class="comp-small-btn" data-check-visible="sector-list">Marcar visíveis</button>
+      </div>
+      {% if sectors %}
+      <div class="comp-list" id="sector-list">
+        {% for sector in sectors %}
+        <label class="comp-item" data-filter-text="{{ sector.setor }} {{ sector.grupo_nome }} {% for cargo in sector.cargos %}{{ cargo.cargo }} {{ cargo.cbo }} {% endfor %}">
+          <input type="checkbox" name="sector_ids" value="{{ sector.id }}">
+          <span>
+            <strong>{{ sector.setor }}</strong>
+            <em>{{ sector.grupo_nome or 'Sem grupo' }}{% if sector.cargos %} • {{ sector.cargos|length }} função(ões){% endif %}</em>
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty left"><strong>Nenhum setor cadastrado.</strong><p>Informe setores manuais no campo abaixo.</p></div>
+      {% endif %}
+      <label style="margin-top:12px;">
+        <span>Setores manuais, um por linha</span>
+        <textarea name="setores_manuais" rows="4" placeholder="Formato: SETOR | CARGOS/FUNÇÕES
+Ex.: COZINHA | COZINHEIRO GERAL; AUXILIAR DE COZINHA"></textarea>
+      </label>
+    </section>
+
+    <section class="comp-card">
+      <h2><span class="comp-badge">3</span>Riscos novos a inserir nos setores escolhidos</h2>
+      <div class="comp-search">
+        <input type="search" class="comp-filter" data-target="risk-list" placeholder="Pesquisar risco cadastrado...">
+        <button type="button" class="comp-small-btn" data-check-visible="risk-list">Marcar visíveis</button>
+      </div>
+      {% if risks %}
+      <div class="comp-list" id="risk-list">
+        {% for risk in risks %}
+        <label class="comp-item" data-filter-text="{{ risk.risco }} {{ risk.tipo_risco }} {{ risk.descricao_agente }}">
+          <input type="checkbox" name="risk_ids" value="{{ risk.id }}">
+          <span><strong>{{ risk.risco }}</strong><em>{{ risk.tipo_risco }}</em></span>
+        </label>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty left"><strong>Nenhum risco cadastrado.</strong><p>Informe riscos manuais no campo abaixo.</p></div>
+      {% endif %}
+      <label style="margin-top:12px;">
+        <span>Riscos manuais, um por linha</span>
+        <textarea name="riscos_manuais" rows="6" placeholder="Formato recomendado:
+TIPO DE RISCO | NOME DO RISCO | DESCRIÇÃO DO AGENTE | POSSÍVEIS LESÕES | FONTES/CIRCUNSTÂNCIAS | AÇÕES | INDICADOR | EPI | EPC
+
+Ex.: ERGONÔMICO PSICOSSOCIAL | Sobrecarga mental | Exigência de atenção contínua e pressão por prazos | Estresse, fadiga e ansiedade | Durante atividades administrativas | Organizar demandas, orientar lideranças e acompanhar carga de trabalho | Registros de feedback, acompanhamento e melhorias | Não aplicável | Organização do trabalho"></textarea>
+      </label>
+    </section>
+
+    <section class="comp-card">
+      <h2><span class="comp-badge">4</span>Exames novos a inserir no PCMSO</h2>
+      <p class="muted">Os exames serão inseridos na tabela de exames recomendados do PCMSO. No PGR e LTCAT, exames não são inseridos como tabela principal.</p>
+      <div class="comp-search">
+        <input type="search" class="comp-filter" data-target="exam-list" placeholder="Pesquisar exame cadastrado...">
+        <button type="button" class="comp-small-btn" data-check-visible="exam-list">Marcar visíveis</button>
+      </div>
+      {% if exams %}
+      <div class="comp-list" id="exam-list">
+        {% for exam in exams %}
+        <label class="comp-item" data-filter-text="{{ exam.exame }} {{ exam.periodicidade }}">
+          <input type="checkbox" name="exam_ids" value="{{ exam.id }}">
+          <span><strong>{{ exam.exame }}</strong><em>{{ exam.periodicidade or 'Conforme PCMSO' }}</em></span>
+        </label>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty left"><strong>Nenhum exame cadastrado.</strong><p>Informe exames manuais no campo abaixo.</p></div>
+      {% endif %}
+      <label style="margin-top:12px;">
+        <span>Exames manuais, um por linha</span>
+        <textarea name="exames_manuais" rows="4" placeholder="Formato: EXAME | PERIODICIDADE | ADMISSIONAL | PERIÓDICO | RETORNO | MUDANÇA | DEMISSIONAL
+Ex.: AUDIOMETRIA | ANUAL | Sim | Sim | Conforme avaliação médica | Conforme avaliação médica | Sim"></textarea>
+      </label>
+    </section>
+
+    <section class="comp-card">
+      <h2><span class="comp-badge">✓</span>Regras automáticas aplicadas</h2>
+      <div class="comp-rule-grid">
+        <div class="comp-rule"><strong>Prazo psicossocial</strong><p class="muted">Quando o tipo for <strong>ERGONÔMICO PSICOSSOCIAL</strong>, o plano de ação recebe implantação em <strong>30 DIAS</strong> e reavaliação em <strong>180 DIAS</strong>.</p></div>
+        <div class="comp-rule"><strong>Demais riscos</strong><p class="muted">Para riscos que não sejam psicossociais, o sistema usa o prazo encontrado no próprio plano de ação. Se não localizar, preenche como <strong>VIGÊNCIA DO LAUDO</strong>.</p></div>
+      </div>
+      <div class="comp-note" style="margin-top:12px;">
+        <strong>Preservação do laudo:</strong>
+        <p class="muted">O sistema tenta acrescentar linhas/blocos nas tabelas reconhecidas: inventário de riscos e plano de ação no PGR, riscos e exames no PCMSO, e riscos técnicos no LTCAT. Ele não altera as demais partes do documento.</p>
+      </div>
+    </section>
+
+    <div class="comp-actions">
+      <button class="btn primary" type="submit">Complementar laudos e baixar ZIP</button>
+    </div>
+  </form>
 </div>
 
-<form method="post" enctype="multipart/form-data" class="panel grid-form">
-  <h2>1. Laudos prontos</h2>
-  <p class="muted">Envie somente arquivos <strong>.docx</strong>. Você pode enviar um, dois ou os três laudos.</p>
-  <div class="inline-grid three-cols">
-    <label>
-      <span>PGR pronto (.docx)</span>
-      <input type="file" name="pgr_docx" accept=".docx">
-    </label>
-    <label>
-      <span>PCMSO pronto (.docx)</span>
-      <input type="file" name="pcmso_docx" accept=".docx">
-    </label>
-    <label>
-      <span>LTCAT pronto (.docx)</span>
-      <input type="file" name="ltcat_docx" accept=".docx">
-    </label>
-  </div>
-
-  <h2>2. Onde será incluído</h2>
-  <div class="inline-grid">
-    <label>
-      <span>Setor / GES onde o risco ou exame será incluído</span>
-      <input name="setor" required placeholder="Ex.: ADMINISTRATIVO, COZINHA, PRODUÇÃO">
-    </label>
-    <label>
-      <span>Cargos / funções relacionados</span>
-      <input name="cargos" placeholder="Ex.: AUXILIAR ADMINISTRATIVO, COZINHEIRO">
-    </label>
-  </div>
-  <div class="inline-grid">
-    <label>
-      <span>Data da complementação / implantação</span>
-      <input name="data_inicio" value="{{ today }}" placeholder="Ex.: 15/07/2026">
-    </label>
-    <label>
-      <span>Prazo de reavaliação</span>
-      <input name="data_reavaliacao" placeholder="Ex.: 180 DIAS ou 15/01/2027">
-    </label>
-  </div>
-
-  <h2>3. Riscos a adicionar</h2>
-  {% if risks %}
-    <div class="split header-line compact-header">
-      <div>
-        <strong>Riscos cadastrados no sistema</strong>
-        <p class="muted small-note">Marque os riscos que deverão entrar nos laudos enviados.</p>
-      </div>
-    </div>
-    <div class="risk-group-risk-list">
-      {% for risk in risks %}
-        <label class="list-check risk-group-risk-option">
-          <input type="checkbox" name="risk_ids" value="{{ risk.id }}">
-          <span>{{ risk.risco }}</span>
-          <em>{{ risk.tipo_risco }}</em>
-        </label>
-      {% endfor %}
-    </div>
-  {% else %}
-    <div class="empty left"><strong>Nenhum risco cadastrado.</strong><p>Você ainda pode preencher riscos manuais no campo abaixo.</p></div>
-  {% endif %}
-
-  <label>
-    <span>Riscos manuais, um por linha</span>
-    <textarea name="riscos_manuais" rows="7" placeholder="Formato recomendado: TIPO DE RISCO | NOME DO RISCO | DESCRIÇÃO DO AGENTE | POSSÍVEIS LESÕES | FONTES/CIRCUNSTÂNCIAS | AÇÕES | INDICADOR | EPI | EPC
-Ex.: ERGONÔMICO PSICOSSOCIAL | Sobrecarga mental | Exigência de atenção contínua e pressão por prazos | Estresse, fadiga e ansiedade | Durante atividades administrativas | Organizar demandas e orientar lideranças | Registros de acompanhamento e feedback | Não aplicável | Organização do trabalho"></textarea>
-  </label>
-  <p class="muted small-note">Para LTCAT, se quiser detalhar mais, depois do EPC você pode continuar com: severidade | possibilidade | nível | meio de propagação | insalubridade | grau | aposentadoria especial | enquadramento | parecer | periodicidade/jornada.</p>
-
-  <h2>4. Exames a adicionar</h2>
-  {% if exams %}
-    <div class="split header-line compact-header">
-      <div>
-        <strong>Exames cadastrados no sistema</strong>
-        <p class="muted small-note">Os exames entram principalmente no PCMSO. No PGR eles ficam como referência de atualização do PCMSO.</p>
-      </div>
-    </div>
-    <div class="risk-group-risk-list">
-      {% for exam in exams %}
-        <label class="list-check risk-group-risk-option">
-          <input type="checkbox" name="exam_ids" value="{{ exam.id }}">
-          <span>{{ exam.exame }}</span>
-          <em>{{ exam.periodicidade or 'Conforme PCMSO' }}</em>
-        </label>
-      {% endfor %}
-    </div>
-  {% else %}
-    <div class="empty left"><strong>Nenhum exame cadastrado.</strong><p>Você ainda pode preencher exames manuais no campo abaixo.</p></div>
-  {% endif %}
-
-  <label>
-    <span>Exames manuais, um por linha</span>
-    <textarea name="exames_manuais" rows="5" placeholder="Formato: EXAME | PERIODICIDADE | ADMISSIONAL | PERIÓDICO | RETORNO | MUDANÇA | DEMISSIONAL
-Ex.: HEMOGRAMA COMPLETO | ANUAL | Sim | Sim | Conforme avaliação médica | Conforme avaliação médica | Sim"></textarea>
-  </label>
-
-  <div class="soft-note">
-    <strong>Como o sistema aplica:</strong>
-    <p class="muted">No PGR, ele cria complemento de inventário de riscos e plano de ação, além de tentar inserir os riscos na tabela de plano de ação existente. No PCMSO, ele cria complemento de riscos e exames e tenta acrescentar os exames na tabela existente. No LTCAT, ele cria complemento técnico dos riscos informados para revisão do responsável técnico.</p>
-  </div>
-
-  <div class="actions">
-    <button class="btn primary" type="submit">Complementar laudos e baixar ZIP</button>
-  </div>
-</form>
+<script>
+(function(){
+  const norm = (value) => (value || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  document.querySelectorAll('.comp-filter').forEach(input => {
+    input.addEventListener('input', () => {
+      const target = document.getElementById(input.dataset.target);
+      if (!target) return;
+      const query = norm(input.value);
+      target.querySelectorAll('.comp-item').forEach(item => {
+        const text = norm(item.dataset.filterText || item.textContent);
+        item.style.display = !query || text.includes(query) ? '' : 'none';
+      });
+    });
+  });
+  document.querySelectorAll('[data-check-visible]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.checkVisible);
+      if (!target) return;
+      target.querySelectorAll('.comp-item').forEach(item => {
+        if (item.style.display !== 'none') {
+          const cb = item.querySelector('input[type="checkbox"]');
+          if (cb) cb.checked = true;
+        }
+      });
+    });
+  });
+})();
+</script>
 {% endblock %}

@@ -31,11 +31,29 @@ DEFAULT_DOCX_FONT = "Arial Narrow"
 TIPO_RISCO_COLORS = {
     "ACIDENTE(MECÂNICO)": "0066FF",
     "ERGONÔMICO": "FFFF00",
+    "ERGONÔMICO BIOMECÂNICO": "FFFF00",
+    "ERGONÔMICO AMBIENTAL": "FFFF00",
     "ERGONÔMICO PSICOSSOCIAL": "FFFF00",
     "FÍSICO": "009933",
     "BIOLÓGICO": "E36C0A",
     "QUÍMICO": "EE0000",
 }
+
+ERGONOMIC_RISK_TYPES = {
+    "ERGONÔMICO",
+    "ERGONÔMICO BIOMECÂNICO",
+    "ERGONÔMICO AMBIENTAL",
+    "ERGONÔMICO PSICOSSOCIAL",
+}
+
+
+def _is_ergonomic_type(value: Any) -> bool:
+    """Retorna True para riscos ergonômicos e suas especificações."""
+    return _normalize_option(value) in ERGONOMIC_RISK_TYPES
+
+
+def _is_psychosocial_type(value: Any) -> bool:
+    return _normalize_option(value) == "ERGONÔMICO PSICOSSOCIAL"
 
 SEVERIDADE_COLORS = {
     "INSIGNIFICANTE": "009900",
@@ -581,7 +599,7 @@ def _fill_plano_row(row_xml, risk: Mapping[str, Any], setor: str = "", data_atua
         # - regra geral: prazo de implantação = Data atual/início da vigência;
         #                prazo de reavaliação = Data final da vigência.
         # - risco ERGONÔMICO PSICOSSOCIAL: implantação em 30 DIAS e reavaliação em 180 DIAS.
-        is_psychosocial = _normalize_option(risk.get("tipo_risco")) == "ERGONÔMICO PSICOSSOCIAL"
+        is_psychosocial = _is_psychosocial_type(risk.get("tipo_risco"))
         prazo_implantacao = "30 DIAS" if is_psychosocial else (data_atual or "")
         prazo_reavaliacao = "180 DIAS" if is_psychosocial else (data_final or "")
 
@@ -798,7 +816,7 @@ def _fill_pgr_sector_table(table_xml, sector: Mapping[str, Any], risks: list[Map
             table_xml.insert(insertion_index, block_row)
             insertion_index += 1
 
-    has_psychosocial = any(_normalize_option(risk.get("tipo_risco")) == "ERGONÔMICO PSICOSSOCIAL" for risk in risks)
+    has_psychosocial = any(_is_psychosocial_type(risk.get("tipo_risco")) for risk in risks)
     # O inventário deve sempre manter as linhas fixas:
     # CONTROLES EXISTENTES NO GES E SUA EFICÁCIA
     # Monitoramento da saúde do trabalhador através de exames ocupacionais.
@@ -1547,7 +1565,7 @@ def _fill_pcmso_riscos_sector_table(table_xml, sector: Mapping[str, Any], risks:
             table_xml.insert(insertion_index, block_row)
             insertion_index += 1
 
-    has_psychosocial = any(_normalize_option(risk.get("tipo_risco")) == "ERGONÔMICO PSICOSSOCIAL" for risk in risks)
+    has_psychosocial = any(_is_psychosocial_type(risk.get("tipo_risco")) for risk in risks)
     # A frase fica somente quando NÃO existe risco ERGONÔMICO PSICOSSOCIAL no setor.
     # Quando existir, ela é removida; quando não existir, ela é movida para ser a última linha da tabela.
     keep_phrase_row = not has_psychosocial
@@ -2296,7 +2314,7 @@ def generate_aet_docx(groups: list[Mapping[str, Any]], output_path: Path, empres
     add_heading("ANÁLISE ERGONÔMICA POR SETOR")
     for group in groups:
         sector = group.get("sector", {})
-        risks = [risk for risk in group.get("risks", []) if _normalize_option(risk.get("tipo_risco")) in {"ERGONÔMICO", "ERGONÔMICO PSICOSSOCIAL"}]
+        risks = [risk for risk in group.get("risks", []) if _is_ergonomic_type(risk.get("tipo_risco"))]
         add_heading(f"SETOR: {sector.get('setor', '')}")
         cargos = ", ".join([str(c.get("cargo", "")) for c in (sector.get("cargos", []) or []) if c.get("cargo")])
         if cargos:
@@ -2372,8 +2390,8 @@ def _aet_auto_sector_conclusion(sector_name: str, risks: list[Mapping[str, Any]]
     manual = str(data.get("conclusao_setor", "") or "").strip()
     if manual:
         return manual
-    has_psy = any(_normalize_option(r.get("tipo_risco")) == "ERGONÔMICO PSICOSSOCIAL" for r in risks)
-    has_erg = any(_normalize_option(r.get("tipo_risco")) == "ERGONÔMICO" for r in risks)
+    has_psy = any(_is_psychosocial_type(r.get("tipo_risco")) for r in risks)
+    has_erg = any(_is_ergonomic_type(r.get("tipo_risco")) and not _is_psychosocial_type(r.get("tipo_risco")) for r in risks)
     if has_psy and has_erg:
         return f"No setor {sector_name}, foram identificados fatores ergonômicos e psicossociais relacionados à organização e execução das atividades, recomendando-se acompanhamento contínuo, orientação dos trabalhadores e implantação das medidas preventivas descritas."
     if has_psy:
@@ -2391,8 +2409,8 @@ def _aet_sector_diagnostic(sector_name: str, risks: list[Mapping[str, Any]], dat
     exig_c = str(data.get("exigencia_cognitiva") or "a definir").lower()
     atividade = str(data.get("tipo_atividade") or "atividade informada no cadastro de cargos").strip()
     fatores = _aet_list_text(data.get("fatores_organizacionais"), "fatores organizacionais não detalhados")
-    has_psy = any(_normalize_option(r.get("tipo_risco")) == "ERGONÔMICO PSICOSSOCIAL" for r in risks)
-    has_erg = any(_normalize_option(r.get("tipo_risco")) == "ERGONÔMICO" for r in risks)
+    has_psy = any(_is_psychosocial_type(r.get("tipo_risco")) for r in risks)
+    has_erg = any(_is_ergonomic_type(r.get("tipo_risco")) and not _is_psychosocial_type(r.get("tipo_risco")) for r in risks)
     base = (
         f"O setor {sector_name} apresenta atividade predominante de {atividade}, com postura predominante: {postura}. "
         f"A exigência física foi classificada como {exig_f} e a exigência cognitiva como {exig_c}. "
@@ -2486,7 +2504,7 @@ def _aet_default_sector_data(profile: Mapping[str, Any], risks: list[Mapping[str
         "atendimento_publico": atendimento,
         "autonomia": "Adequada" if prioridade == "Baixa" else "Parcialmente limitada",
         "metas_prioridades": "Demandas variáveis" if prioridade != "Baixa" else "Compatíveis",
-        "comunicacao": "Necessita melhoria" if any(_normalize_option(r.get("tipo_risco")) == "ERGONÔMICO PSICOSSOCIAL" for r in risks) else "Adequada",
+        "comunicacao": "Necessita melhoria" if any(_is_psychosocial_type(r.get("tipo_risco")) for r in risks) else "Adequada",
         "ritmo_trabalho": "Por demanda da atividade, fluxo operacional e prioridades do setor",
         "pausas": "Pausas conforme escala, intensidade da atividade e necessidade de recuperação física/mental",
         "mobiliario": "A avaliar/manter adequado à atividade, considerando assentos, bancadas, mesas, equipamentos e alcances",
@@ -2543,7 +2561,7 @@ def _aet_critical_sector_text(groups: list[Mapping[str, Any]]) -> str:
         risks = group.get("risks", []) or []
         if any(_normalize_option(r.get("grau_nivel_risco")) in {"ALTO", "MUITO ALTO"} for r in risks):
             critical.append(sector_name)
-        if any(_normalize_option(r.get("tipo_risco")) == "ERGONÔMICO PSICOSSOCIAL" for r in risks):
+        if any(_is_psychosocial_type(r.get("tipo_risco")) for r in risks):
             psychosocial.append(sector_name)
     parts = []
     if critical:
@@ -2711,7 +2729,7 @@ def generate_aet_docx(groups: list[Mapping[str, Any]], output_path: Path, empres
     all_erg_risks = []
     for group in groups:
         for risk in group.get("risks", []) or []:
-            if _normalize_option(risk.get("tipo_risco")) in {"ERGONÔMICO", "ERGONÔMICO PSICOSSOCIAL"}:
+            if _is_ergonomic_type(risk.get("tipo_risco")):
                 all_erg_risks.append(risk)
 
     # CAPA
@@ -2914,7 +2932,7 @@ def generate_aet_docx(groups: list[Mapping[str, Any]], output_path: Path, empres
         sector = group.get("sector", {}) or {}
         sector_id = sector.get("id", "")
         sector_name = sector.get("setor", "")
-        risks = [risk for risk in group.get("risks", []) or [] if _normalize_option(risk.get("tipo_risco")) in {"ERGONÔMICO", "ERGONÔMICO PSICOSSOCIAL"}]
+        risks = [risk for risk in group.get("risks", []) or [] if _is_ergonomic_type(risk.get("tipo_risco"))]
         manual_sector_data = by_sector.get(sector_id, {}) if isinstance(by_sector, Mapping) else {}
         sector_data = _aet_merge_sector_data(_aet_default_sector_data(activity_profile, risks), manual_sector_data)
         cargos = ", ".join([str(c.get("cargo", "")) for c in (sector.get("cargos", []) or []) if c.get("cargo")])
@@ -2991,7 +3009,7 @@ def generate_aet_docx(groups: list[Mapping[str, Any]], output_path: Path, empres
                 row = plan.add_row().cells
                 row[0].text = str(risk.get("risco", ""))
                 row[1].text = _aet_risk_recommendation(risk)
-                row[2].text = str(sector_data.get("prazo") or ("30 DIAS" if _normalize_option(risk.get("tipo_risco")) == "ERGONÔMICO PSICOSSOCIAL" else "Conforme plano de ação"))
+                row[2].text = str(sector_data.get("prazo") or ("30 DIAS" if _is_psychosocial_type(risk.get("tipo_risco")) else "Conforme plano de ação"))
                 row[3].text = str(sector_data.get("responsavel") or "Empresa")
                 row[4].text = _aet_priority_from_risks([risk], sector_data.get("prioridade", ""))
         else:
@@ -3029,7 +3047,7 @@ def generate_aet_docx(groups: list[Mapping[str, Any]], output_path: Path, empres
     if manual_conclusion:
         add_text(manual_conclusion)
     else:
-        if any(_normalize_option(r.get("tipo_risco")) == "ERGONÔMICO PSICOSSOCIAL" for r in all_erg_risks):
+        if any(_is_psychosocial_type(r.get("tipo_risco")) for r in all_erg_risks):
             add_text("Conclui-se que as atividades analisadas apresentam fatores ergonômicos e psicossociais que devem ser acompanhados pela empresa, com implantação das medidas preventivas/corretivas indicadas, fortalecimento da comunicação, organização das demandas, orientação de liderança e trabalhadores e revisão periódica das condições de trabalho.")
         elif all_erg_risks:
             add_text("Conclui-se que as atividades analisadas apresentam fatores ergonômicos compatíveis com a rotina operacional, sendo recomendada a implantação das medidas de adequação postural, organização do posto, pausas, orientação ergonômica e acompanhamento periódico das condições de trabalho.")

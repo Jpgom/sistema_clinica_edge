@@ -671,7 +671,7 @@ EXAM_RULES = [
     {"keywords": ["altura", "queda", "nível", "nivel", "telhado", "escada"], "exams": ["Exame clínico", "Acuidade visual", "Eletrocardiograma"]},
     {"keywords": ["eletricidade", "elétrico", "eletrico", "choque"], "exams": ["Exame clínico", "Eletrocardiograma"]},
     {"keywords": ["calor", "temperatura elevada", "frio", "câmara frigorífica", "camara frigorifica"], "exams": ["Exame clínico"]},
-    {"keywords": ["ergonômico", "ergonomico", "postura", "repetitivo", "carga", "esforço", "esforco", "levantamento", "transporte manual"], "exams": ["Exame clínico", "Anamnese ocupacional"]},
+    {"keywords": ["ergonômico", "ergonomico", "biomecânico", "biomecanico", "ambiental", "postura", "repetitivo", "carga", "esforço", "esforco", "levantamento", "transporte manual"], "exams": ["Exame clínico", "Anamnese ocupacional"]},
     {"keywords": ["psicossocial", "assédio", "assedio", "estresse", "sobrecarga", "conflito", "comunicação hostil", "comunicacao hostil", "baixa autonomia"], "exams": ["Anamnese psicossocial ocupacional", "SRQ-20", "Exame clínico"]},
     {"keywords": ["trânsito", "transito", "motorista", "direção", "direcao", "veículo", "veiculo"], "exams": ["Exame clínico", "Acuidade visual"]},
 ]

@@ -15,6 +15,7 @@
     <nav>
       <a href="/">← Sistema EDGE</a>
       <a class="{% if request.endpoint in ['cadastro', 'edit_risk'] %}active{% endif %}" href="{{ url_for('cadastro') }}">Riscos</a>
+      <a class="{% if request.endpoint in ['risk_types', 'create_risk_type', 'edit_risk_type'] %}active{% endif %}" href="{{ url_for('risk_types') }}">Tipos de riscos</a>
       <a class="{% if request.endpoint in ['risk_groups', 'edit_risk_group'] %}active{% endif %}" href="{{ url_for('risk_groups') }}">Grupos de riscos</a>
       <a class="{% if request.endpoint in ['setores', 'edit_sector'] %}active{% endif %}" href="{{ url_for('setores') }}">Setores/Cargos</a>
       <a class="{% if request.endpoint in ['empresas', 'create_company', 'edit_company'] %}active{% endif %}" href="{{ url_for('empresas') }}">Empresas</a>

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Tipos de riscos{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Configuração</p>
+    <h1>Tipos de riscos</h1>
+    <p class="muted">Cadastre, edite e escolha a cor de fundo usada nos laudos. Use o padrão hexadecimal com #, por exemplo #FFFF00.</p>
+  </div>
+  <a class="btn" href="{{ url_for('cadastro') }}">Voltar para riscos</a>
+</div>
+
+<section class="panel">
+  <div class="panel-title">
+    <div>
+      <h2>Novo tipo de risco</h2>
+      <p>O tipo cadastrado aparecerá automaticamente nas telas de cadastro/edição de riscos e nas gerações dos laudos.</p>
+    </div>
+  </div>
+  <form action="{{ url_for('create_risk_type') }}" method="post" class="risk-type-form-grid">
+    <label>
+      <span>Nome do tipo de risco</span>
+      <input name="nome" placeholder="Ex.: ERGONÔMICO ORGANIZACIONAL" required>
+    </label>
+    <label>
+      <span>Cor hexadecimal</span>
+      <input name="cor_hex" type="color" value="#FFFF00" title="Escolha a cor">
+    </label>
+    <div class="actions end">
+      <button class="btn primary" type="submit">Cadastrar tipo</button>
+    </div>
+  </form>
+  <p class="hint">A cor escolhida será aplicada no fundo das células dos laudos quando esse tipo de risco for usado.</p>
+</section>
+
+<section class="panel">
+  <div class="panel-title">
+    <div>
+      <h2>Tipos cadastrados</h2>
+      <p>Edite o nome, a ordem e a cor. Ao alterar o nome, os riscos já cadastrados com o nome antigo serão atualizados para o novo.</p>
+    </div>
+  </div>
+
+  {% if risk_types %}
+    <div class="risk-type-list">
+      {% for item in risk_types %}
+        <div class="risk-type-row">
+          <form action="{{ url_for('edit_risk_type', risk_type_id=item.id) }}" method="post" class="risk-type-edit-form">
+            <label>
+              <span>Ordem</span>
+              <input name="ordem" type="number" min="0" value="{{ item.ordem }}">
+            </label>
+            <label class="grow">
+              <span>Tipo de risco</span>
+              <input name="nome" value="{{ item.nome }}" required>
+            </label>
+            <label>
+              <span>Cor</span>
+              <input name="cor_hex" type="color" value="{{ item.cor_hex }}" title="Cor do laudo">
+            </label>
+            <div>
+              <span class="field-caption">Prévia</span>
+              <span class="risk-color-preview" style="background: {{ item.cor_hex }};">{{ item.cor_hex }}</span>
+            </div>
+            <div class="actions end">
+              <button class="btn small primary" type="submit">Salvar</button>
+            </div>
+          </form>
+          <form action="{{ url_for('delete_risk_type', risk_type_id=item.id) }}" method="post" onsubmit="return confirm('Deseja excluir este tipo de risco? Só será possível se ele não estiver em uso.');">
+            <button class="btn small danger" type="submit">Excluir</button>
+          </form>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">Nenhum tipo de risco cadastrado.</p>
+  {% endif %}
+</section>
+{% endblock %}

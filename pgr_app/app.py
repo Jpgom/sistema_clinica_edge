@@ -214,6 +214,27 @@ class Risk(db.Model):
         }
 
 
+class RiskType(db.Model):
+    __tablename__ = "risk_types"
+
+    id = db.Column(db.String(32), primary_key=True, default=lambda: uuid.uuid4().hex)
+    nome = db.Column(db.String(120), nullable=False, unique=True)
+    cor_hex = db.Column(db.String(7), nullable=False, default="#FFFFFF")
+    ordem = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "cor_hex": self.cor_hex or "#FFFFFF",
+            "ordem": self.ordem or 0,
+            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else "",
+            "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M:%S") if self.updated_at else "",
+        }
+
+
 class RiskGroup(db.Model):
     __tablename__ = "risk_groups"
 
@@ -462,12 +483,87 @@ class ImportedLaudoDraft(db.Model):
         }
 
 
+DEFAULT_TIPO_RISCO_COLORS = dict(TIPO_RISCO_COLORS)
+
 FORM_OPTIONS = {
     "tipos_risco": list(TIPO_RISCO_COLORS.keys()),
     "severidades": list(SEVERIDADE_COLORS.keys()),
     "possibilidades": list(POSSIBILIDADE_COLORS.keys()),
     "niveis_risco": list(NIVEL_RISCO_COLORS.keys()),
 }
+
+
+def _normalize_risk_type_name(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip().upper())
+
+
+def _normalize_hex_color(value: Any) -> str | None:
+    raw = str(value or "").strip().upper()
+    if not raw:
+        return None
+    if not raw.startswith("#"):
+        raw = f"#{raw}"
+    if not re.fullmatch(r"#[0-9A-F]{6}", raw):
+        return None
+    return raw
+
+
+def _risk_type_docx_color(value: Any) -> str:
+    color = _normalize_hex_color(value) or "#FFFFFF"
+    return color.lstrip("#")
+
+
+def _sync_risk_type_options() -> dict[str, str]:
+    """Carrega do banco os tipos de risco e suas cores para formulários e laudos."""
+    colors: dict[str, str] = {}
+    try:
+        risk_types = RiskType.query.order_by(RiskType.ordem.asc(), RiskType.nome.asc()).all()
+        for item in risk_types:
+            name = _normalize_risk_type_name(item.nome)
+            if name:
+                colors[name] = _risk_type_docx_color(item.cor_hex)
+    except Exception:
+        db.session.rollback()
+        colors = {}
+
+    if not colors:
+        colors = dict(DEFAULT_TIPO_RISCO_COLORS)
+
+    TIPO_RISCO_COLORS.clear()
+    TIPO_RISCO_COLORS.update(colors)
+    FORM_OPTIONS["tipos_risco"] = list(colors.keys())
+    return colors
+
+
+def _current_form_options() -> dict[str, list[str]]:
+    _sync_risk_type_options()
+    return FORM_OPTIONS
+
+
+def _ensure_default_risk_types() -> None:
+    """Cria/atualiza a lista básica de tipos de risco sem apagar edições do usuário."""
+    created = False
+    for order, (name, color) in enumerate(DEFAULT_TIPO_RISCO_COLORS.items(), start=1):
+        normalized_name = _normalize_risk_type_name(name)
+        existing = RiskType.query.filter(db.func.upper(RiskType.nome) == normalized_name).first()
+        if existing:
+            if not existing.cor_hex:
+                existing.cor_hex = f"#{color}"
+                created = True
+            if not existing.ordem:
+                existing.ordem = order
+                created = True
+            continue
+        db.session.add(RiskType(nome=normalized_name, cor_hex=f"#{color}", ordem=order))
+        created = True
+    if created:
+        db.session.commit()
+    _sync_risk_type_options()
+
+
+def _sorted_risk_types() -> list[dict[str, Any]]:
+    _sync_risk_type_options()
+    return [item.to_dict() for item in RiskType.query.order_by(RiskType.ordem.asc(), RiskType.nome.asc()).all()]
 
 TIPOS_RISCO_LTCAT = {"FÍSICO", "QUÍMICO", "BIOLÓGICO", "FISICO", "QUIMICO", "BIOLOGICO"}
 TIPOS_RISCO_LTCAT_KEYS = {"FISICO", "QUIMICO", "BIOLOGICO"}
@@ -929,6 +1025,7 @@ def _create_temp_import_group(company: Company, template: ImportedLaudoTemplate)
 def init_database() -> None:
     db.create_all()
     _ensure_schema_columns()
+    _ensure_default_risk_types()
     _migrate_json_files_if_needed()
     _ensure_standard_complementary_exams()
     _cleanup_expired_temp_import_groups()
@@ -1130,6 +1227,7 @@ def _validate_exam(exam: dict[str, Any]) -> list[str]:
 
 
 def _validate_risk(risk: dict[str, Any]) -> list[str]:
+    _sync_risk_type_options()
     errors: list[str] = []
     required = {
         "risco": "Perigo / Risco",
@@ -1183,6 +1281,7 @@ BULK_RISK_EDIT_FIELDS = {
 
 
 def _validate_bulk_risk_edit_field(field: str, value: str) -> str | None:
+    _sync_risk_type_options()
     option_checks = {
         "tipo_risco": (FORM_OPTIONS["tipos_risco"], "Tipo de Risco"),
         "grau_severidade": (FORM_OPTIONS["severidades"], "Grau de Severidade"),
@@ -2428,8 +2527,97 @@ def index():
 
 @app.route("/cadastro")
 def cadastro():
-    return render_template("cadastro.html", risks=_sorted_risks(), risk_groups=_sorted_risk_groups(), options=FORM_OPTIONS)
+    return render_template("cadastro.html", risks=_sorted_risks(), risk_groups=_sorted_risk_groups(), options=_current_form_options())
 
+
+
+
+@app.route("/tipos-risco")
+def risk_types():
+    return render_template("risk_types.html", risk_types=_sorted_risk_types())
+
+
+@app.post("/tipo-risco/novo")
+def create_risk_type():
+    name = _normalize_risk_type_name(_field("nome"))
+    color = _normalize_hex_color(_field("cor_hex"))
+    if not name:
+        flash("Preencha o nome do tipo de risco.", "error")
+        return redirect(url_for("risk_types"))
+    if not color:
+        flash("Informe a cor em hexadecimal, no formato #RRGGBB. Exemplo: #FFFF00.", "error")
+        return redirect(url_for("risk_types"))
+    existing = RiskType.query.filter(db.func.upper(RiskType.nome) == name).first()
+    if existing:
+        flash("Já existe um tipo de risco com esse nome.", "error")
+        return redirect(url_for("risk_types"))
+    max_order = db.session.query(db.func.max(RiskType.ordem)).scalar() or 0
+    db.session.add(RiskType(nome=name, cor_hex=color, ordem=int(max_order) + 1))
+    db.session.commit()
+    _sync_risk_type_options()
+    flash("Tipo de risco cadastrado com sucesso.", "success")
+    return redirect(url_for("risk_types"))
+
+
+@app.post("/tipo-risco/<risk_type_id>/editar")
+def edit_risk_type(risk_type_id: str):
+    model = db.session.get(RiskType, risk_type_id)
+    if not model:
+        flash("Tipo de risco não encontrado.", "error")
+        return redirect(url_for("risk_types"))
+    old_name = model.nome
+    name = _normalize_risk_type_name(_field("nome"))
+    color = _normalize_hex_color(_field("cor_hex"))
+    if not name:
+        flash("Preencha o nome do tipo de risco.", "error")
+        return redirect(url_for("risk_types"))
+    if not color:
+        flash("Informe a cor em hexadecimal, no formato #RRGGBB. Exemplo: #FFFF00.", "error")
+        return redirect(url_for("risk_types"))
+    existing = RiskType.query.filter(db.func.upper(RiskType.nome) == name, RiskType.id != risk_type_id).first()
+    if existing:
+        flash("Já existe outro tipo de risco com esse nome.", "error")
+        return redirect(url_for("risk_types"))
+
+    model.nome = name
+    model.cor_hex = color
+    try:
+        model.ordem = int(_field("ordem") or model.ordem or 0)
+    except ValueError:
+        pass
+    model.updated_at = datetime.utcnow()
+
+    # Quando o nome do tipo muda, atualiza também os riscos já cadastrados que usavam o nome antigo.
+    if _normalize_risk_type_name(old_name) != name:
+        for risk in Risk.query.all():
+            if _normalize_risk_type_name(risk.tipo_risco) == _normalize_risk_type_name(old_name):
+                risk.tipo_risco = name
+                risk.updated_at = datetime.utcnow()
+
+    db.session.commit()
+    _sync_risk_type_options()
+    flash("Tipo de risco atualizado com sucesso.", "success")
+    return redirect(url_for("risk_types"))
+
+
+@app.post("/tipo-risco/<risk_type_id>/excluir")
+def delete_risk_type(risk_type_id: str):
+    model = db.session.get(RiskType, risk_type_id)
+    if not model:
+        flash("Tipo de risco não encontrado.", "error")
+        return redirect(url_for("risk_types"))
+    in_use = any(_normalize_risk_type_name(risk.tipo_risco) == _normalize_risk_type_name(model.nome) for risk in Risk.query.all())
+    if in_use:
+        flash("Esse tipo de risco está sendo usado em riscos cadastrados. Edite ou mova esses riscos antes de excluir.", "error")
+        return redirect(url_for("risk_types"))
+    if RiskType.query.count() <= 1:
+        flash("É necessário manter pelo menos um tipo de risco cadastrado.", "error")
+        return redirect(url_for("risk_types"))
+    db.session.delete(model)
+    db.session.commit()
+    _sync_risk_type_options()
+    flash("Tipo de risco excluído.", "success")
+    return redirect(url_for("risk_types"))
 
 @app.get("/modelo-importacao-riscos")
 def download_risk_import_template():
@@ -3704,7 +3892,7 @@ def _gerar_context(form_state: dict[str, Any] | None = None) -> dict[str, Any]:
         "aet_presets": AET_CNAE_PRESETS,
         "report_profiles": _sorted_report_profiles(),
         "imported_templates": _sorted_imported_laudo_templates(),
-        "options": FORM_OPTIONS,
+        "options": _current_form_options(),
         "today": today,
         "next_year": next_year,
         "form_state": form_state or {},
@@ -3787,7 +3975,7 @@ def apply_imported_template():
         group_id=group_id or "",
         selected_group=selected_group.to_dict() if selected_group else None,
         preview=preview,
-        options=FORM_OPTIONS,
+        options=_current_form_options(),
     )
 
 
@@ -3818,7 +4006,7 @@ def confirm_apply_imported_template():
             group_id=group_id or "",
             selected_group=selected_group.to_dict() if selected_group else None,
             preview=preview,
-            options=FORM_OPTIONS,
+            options=_current_form_options(),
         )
 
     temp_group = None
@@ -5087,13 +5275,13 @@ def edit_risk(risk_id: str):
         if errors:
             for error in errors:
                 flash(error, "error")
-            return render_template("edit.html", risk={**risk_model.to_dict(), **updated}, options=FORM_OPTIONS)
+            return render_template("edit.html", risk={**risk_model.to_dict(), **updated}, options=_current_form_options())
         _risk_from_dict(updated, risk_model)
         db.session.commit()
         flash("Risco atualizado com sucesso.", "success")
         return redirect(url_for("cadastro"))
 
-    return render_template("edit.html", risk=risk_model.to_dict(), options=FORM_OPTIONS)
+    return render_template("edit.html", risk=risk_model.to_dict(), options=_current_form_options())
 
 
 @app.post("/risco/<risk_id>/excluir")

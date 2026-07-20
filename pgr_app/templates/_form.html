@@ -36,7 +36,7 @@
   </div>
   <div class="grid-form">
     <label>
-      <span>Tipo de Risco</span>
+      <span>Tipo de Risco <a href="{{ url_for('risk_types') }}" target="_blank" class="inline-link">editar tipos/cores</a></span>
       <select name="tipo_risco" required>
         <option value="">Selecione...</option>
         {% for option in options.tipos_risco %}

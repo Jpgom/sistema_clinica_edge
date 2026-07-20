@@ -47,13 +47,20 @@ ERGONOMIC_RISK_TYPES = {
 }
 
 
+def _risk_type_norm_key(value: Any) -> str:
+    raw = unicodedata.normalize("NFKD", str(value or "")).upper()
+    raw = "".join(ch for ch in raw if not unicodedata.combining(ch))
+    return re.sub(r"[^A-Z0-9]+", " ", raw).strip()
+
+
 def _is_ergonomic_type(value: Any) -> bool:
-    """Retorna True para riscos ergonômicos e suas especificações."""
-    return _normalize_option(value) in ERGONOMIC_RISK_TYPES
+    """Retorna True para riscos ergonômicos e suas especificações cadastradas."""
+    key = _risk_type_norm_key(value)
+    return key in {_risk_type_norm_key(item) for item in ERGONOMIC_RISK_TYPES} or "ERGONOMICO" in key
 
 
 def _is_psychosocial_type(value: Any) -> bool:
-    return _normalize_option(value) == "ERGONÔMICO PSICOSSOCIAL"
+    return "PSICOSSOCIAL" in _risk_type_norm_key(value)
 
 SEVERIDADE_COLORS = {
     "INSIGNIFICANTE": "009900",
@@ -354,6 +361,122 @@ def _set_cell_text(cell_xml, value: Any, font_color: str | None = "000000") -> N
         run.append(node)
     paragraph.append(run)
     cell_xml.append(paragraph)
+
+
+
+MONTH_ABBREVIATIONS_PT_BR = [
+    "JAN", "FEV", "MAR", "ABR", "MAI", "JUN",
+    "JUL", "AGO", "SET", "OUT", "NOV", "DEZ",
+]
+MONTH_NAMES_LOWER_PT_BR = [
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+]
+
+
+def _parse_month_year(value: Any) -> tuple[int, int] | None:
+    """Extrai mês/ano de valores como 07/2026, 01/07/2026 ou 2026-07-01."""
+    text = re.sub(r"\s+", " ", str(value or "").strip())
+    if not text:
+        return None
+
+    # ISO: 2026-07-01 ou 2026/07/01
+    match = re.search(r"\b(20\d{2}|19\d{2})[-/.](\d{1,2})(?:[-/.]\d{1,2})?\b", text)
+    if match:
+        year = int(match.group(1))
+        month = int(match.group(2))
+        if 1 <= month <= 12:
+            return month, year
+
+    # Brasileiro: 01/07/2026 ou 07/2026
+    match = re.search(r"\b(?:(\d{1,2})/)?(\d{1,2})/(\d{2,4})\b", text)
+    if match:
+        month = int(match.group(2))
+        year = int(match.group(3))
+        if year < 100:
+            year += 2000
+        if 1 <= month <= 12:
+            return month, year
+
+    # Apenas ano/mês sem separador claro não é assumido para evitar mês errado.
+    return None
+
+
+def _add_months(month: int, year: int, offset: int) -> tuple[int, int]:
+    total = (year * 12) + (month - 1) + offset
+    return (total % 12) + 1, total // 12
+
+
+def _months_between_inclusive(start: tuple[int, int], end: tuple[int, int] | None) -> int:
+    start_month, start_year = start
+    if not end:
+        return 12
+    end_month, end_year = end
+    diff = (end_year - start_year) * 12 + (end_month - start_month)
+    if diff < 0:
+        return 12
+    return min(diff + 1, 12)
+
+
+def _is_pcmso_vaccination_table(table) -> bool:
+    raw = "\n".join(cell.text for row in table.rows for cell in row.cells)
+    normalized = _risk_type_norm_key(raw)
+    return "VACINAS" in normalized and ("MESINI" in normalized or "MESFIN" in normalized or "ANTI TETANICA" in normalized)
+
+
+def _update_pcmso_vaccination_intro_text(doc: Document, start: tuple[int, int], filled_month_count: int) -> None:
+    start_month = start[0]
+    end_offset = min(2, max(0, filled_month_count - 1))
+    end_month, _ = _add_months(start[0], start[1], end_offset)
+    start_name = MONTH_NAMES_LOWER_PT_BR[start_month - 1]
+    end_name = MONTH_NAMES_LOWER_PT_BR[end_month - 1]
+    replacement_text = f"prazo inicial de {start_name} até mês de {end_name}"
+
+    pattern = re.compile(r"prazo inicial de\s+[^.]*?\s+até\s+m[eê]s\s+de\s+[^.]*?(?=\s+para)", re.I)
+    for paragraph in doc.paragraphs:
+        text = paragraph.text or ""
+        if "prazo inicial" in text.lower() and "até" in text.lower() and "mês" in text.lower():
+            new_text = pattern.sub(replacement_text, text)
+            if new_text != text:
+                _replace_text_in_paragraph(paragraph, {text: new_text})
+
+
+def _fill_pcmso_vaccination_schedule(doc: Document, data_atual: str, data_final: str) -> None:
+    """Preenche a tabela de vacinas do PCMSO conforme a vigência do laudo.
+
+    A primeira coluna de mês recebe o mês/ano de {{DATAATUAL}}. As demais seguem
+    em sequência até {{DATAFINAL}}, limitado às 12 colunas do modelo. Em todas as
+    linhas de vacina, marca X somente no mês inicial e nas duas colunas seguintes.
+    """
+    start = _parse_month_year(data_atual)
+    if not start:
+        start = (datetime.now().month, datetime.now().year)
+    end = _parse_month_year(data_final)
+    filled_month_count = _months_between_inclusive(start, end)
+    _update_pcmso_vaccination_intro_text(doc, start, filled_month_count)
+
+    for table in doc.tables:
+        if not _is_pcmso_vaccination_table(table):
+            continue
+        if not table.rows or len(table.rows[0].cells) < 2:
+            return
+
+        month_columns = min(12, len(table.rows[0].cells) - 1)
+        for col_index in range(1, month_columns + 1):
+            offset = col_index - 1
+            if offset < filled_month_count:
+                month, year = _add_months(start[0], start[1], offset)
+                header_text = f"{MONTH_ABBREVIATIONS_PT_BR[month - 1]}\n{year}"
+            else:
+                header_text = ""
+            _set_cell_text(table.rows[0].cells[col_index]._tc, header_text)
+
+        for row in table.rows[1:]:
+            for col_index in range(1, min(month_columns, len(row.cells) - 1) + 1):
+                offset = col_index - 1
+                value = "X" if offset < filled_month_count and offset < 3 else ""
+                _set_cell_text(row.cells[col_index]._tc, value)
+        return
 
 
 
@@ -1686,6 +1809,7 @@ def generate_complete_pcmso_docx(
 
     _fill_company_identification_tables(doc, company, sectors)
     _insert_psychosocial_revision_line(doc, company)
+    _fill_pcmso_vaccination_schedule(doc, data_atual, data_final)
     _replace_doc_placeholders(doc, _company_replacements(company))
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)

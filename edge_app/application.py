@@ -781,38 +781,16 @@ def data_referencia_do_arquivo(nome_arquivo):
     return pd.Timestamp(datetime.now().date())
 
 def extrair_data_periodico(row, col_validade, col_ultimo_exame, col_data_fallback, nome_arquivo):
-    """Calcula a data de vencimento do periódico nos modelos de Convocação.
+    """Retorna SEMPRE a data da coluna ADMISSAO para a função Relatórios.
 
-    Os arquivos atuais trazem a informação principal em VALIDDADE/VALIDADE:
-    - "Próximo Periódico: 16/07/2026" -> usa a data informada.
-    - "O Periódico irá vencer em: 30 Dia(s)" -> soma os dias à data do arquivo.
-    Caso não exista data em VALIDADE, usa ULTIMO EXAME + 1 ano. A ADMISSAO fica
-    apenas como último fallback para manter compatibilidade com bases antigas.
+    Regra solicitada: o mês dos colaboradores deve ser calculado exclusivamente
+    pela coluna ADMISSAO. As colunas VALIDADE/VENCIMENTO e ULTIMO EXAME não são
+    mais usadas para decidir o mês do relatório ou da Base do Mês.
     """
-    validade = "" if not col_validade or pd.isna(row.get(col_validade)) else str(row.get(col_validade)).strip()
-
-    match_data = re.search(r"(\d{1,2}/\d{1,2}/\d{2,4})", validade)
-    if match_data:
-        parsed = pd.to_datetime(match_data.group(1), dayfirst=True, errors="coerce")
-        if not pd.isna(parsed):
-            return parsed
-
-    match_dias = re.search(r"(\d+)\s*dia", validade, flags=re.IGNORECASE)
-    if match_dias:
-        return data_referencia_do_arquivo(nome_arquivo) + pd.Timedelta(days=int(match_dias.group(1)))
-
-    if col_ultimo_exame and not pd.isna(row.get(col_ultimo_exame)):
-        ultimo = pd.to_datetime(row.get(col_ultimo_exame), dayfirst=True, errors="coerce")
-        if not pd.isna(ultimo):
-            try:
-                return ultimo + pd.DateOffset(years=1)
-            except Exception:
-                return ultimo + pd.Timedelta(days=365)
-
     if col_data_fallback and not pd.isna(row.get(col_data_fallback)):
-        fallback = pd.to_datetime(row.get(col_data_fallback), dayfirst=True, errors="coerce")
-        if not pd.isna(fallback):
-            return fallback
+        admissao = pd.to_datetime(row.get(col_data_fallback), dayfirst=True, errors="coerce")
+        if not pd.isna(admissao):
+            return admissao
 
     return pd.NaT
 
@@ -844,7 +822,7 @@ def criar_relatorio(files, mes):
             df = pd.read_excel(file)
 
             col_nome = encontrar_coluna(df, ["nome", "funcionario", "funcionário"], obrigatoria=True)
-            col_data = encontrar_coluna(df, ["admissao", "admissão", "data"])
+            col_data = encontrar_coluna(df, ["admissao", "admissão", "data admissao", "data admissão", "data de admissao", "data de admissão"], obrigatoria=True)
             col_validade = encontrar_coluna(df, ["validade", "vencimento", "periodico", "periódico", "proximo periodico", "próximo periódico"])
             col_ultimo_exame = encontrar_coluna(df, ["ultimo exame", "último exame"])
             col_empresa = encontrar_coluna(df, ["empresa"])
@@ -952,7 +930,7 @@ def criar_base(files, mes):
             df = pd.read_excel(file)
 
             col_nome = encontrar_coluna(df, ["nome", "funcionario", "funcionário"], obrigatoria=True)
-            col_data = encontrar_coluna(df, ["admissao", "admissão", "data"])
+            col_data = encontrar_coluna(df, ["admissao", "admissão", "data admissao", "data admissão", "data de admissao", "data de admissão"], obrigatoria=True)
             col_validade = encontrar_coluna(df, ["validade", "vencimento", "periodico", "periódico", "proximo periodico", "próximo periódico"])
             col_ultimo_exame = encontrar_coluna(df, ["ultimo exame", "último exame"])
             col_cargo = encontrar_coluna(df, ["cargo", "função", "funcao"])

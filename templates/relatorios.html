@@ -1,7 +1,16 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#f5f7fb"><title>Relatórios</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><meta name="csrf-token" content="{{ csrf_token() }}"></head>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f5f7fb">
+  <title>Relatórios de Periódicos</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <style>
+    .relatorios-grid{display:grid;grid-template-columns:1fr;gap:18px}.relatorio-panel{border:1px solid rgba(15,23,42,.08);border-radius:18px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.06);overflow:hidden}.relatorio-panel__head{padding:18px 20px;border-bottom:1px solid rgba(15,23,42,.08);background:linear-gradient(135deg,#f8fafc,#eef6ff)}.relatorio-panel__head h2{margin:0 0 6px;font-size:1.15rem}.relatorio-panel__head p{margin:0;color:#64748b}.relatorio-panel__body{padding:20px}.note-list{margin:14px 0 0;padding-left:18px;color:#475569}.sheet-box{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px}.sheet-option{display:flex;align-items:center;gap:8px;border:1px solid #dbe3ef;border-radius:12px;padding:10px 12px;background:#f8fafc}.compare-ready{border:1px solid #bbf7d0;background:#f0fdf4;color:#14532d;border-radius:14px;padding:14px;margin:12px 0}.muted-small{font-size:.9rem;color:#64748b}.divider-title{display:flex;align-items:center;gap:12px;margin:10px 0}.divider-title:after{content:"";height:1px;background:#e2e8f0;flex:1}.quick-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  </style>
+</head>
 <body>
 <div class="app-layout">
   <aside class="sidebar">
@@ -17,25 +26,79 @@
       <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
       <a class="nav-link" href="{{ url_for('atestado_medico') }}">🧾 Atestado Médico</a>
       <a class="nav-link" href="/pgr/">🧾 PGR / SST</a>
-          {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
+      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
       {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link" href="{{ url_for('auditoria') }}">📋 Auditoria</a>{% endif %}
       <a class="nav-link" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
       <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}">🚪 Sair</a>
     </div>
   </aside>
   <main class="main-area">
-    <div class="topbar compact-topbar"><div class="page-title"><h1>Relatório de Periódicos</h1></div></div>
-    <section class="content-card">
-      {% with messages = get_flashed_messages() %}{% for m in messages %}<div class="alert error">{{ m }}</div>{% endfor %}{% endwith %}
-      <form action="{{ url_for('relatorios_async') }}" method="POST" enctype="multipart/form-data">
-        <div class="form-grid">
-          <div class="field col-1"><label for="mes">Mês (1 a 12)</label><input type="number" id="mes" name="mes" min="1" max="12" required></div>
-          <div class="field col-3"><label for="files">Planilhas ou ZIP do mês</label><input type="file" id="files" name="files" accept=".xls,.xlsx,.zip" multiple required></div>
+    <div class="topbar compact-topbar"><div class="page-title"><h1>Relatório de Periódicos</h1><p>Geração por admissão e comparação com planilhas de controle de ASO.</p></div></div>
+
+    {% with messages = get_flashed_messages() %}{% for m in messages %}<div class="alert error">{{ m }}</div>{% endfor %}{% endwith %}
+
+    <div class="relatorios-grid">
+      <section class="relatorio-panel">
+        <div class="relatorio-panel__head">
+          <h2>1. Gerar Relatório e Base do Mês</h2>
+          <p>Envie uma ou várias planilhas de convocação. O mês será definido sempre pela coluna <strong>ADMISSAO</strong>.</p>
         </div>
-        <div class="helper-box" style="margin-top:16px">Gera <strong>Relatório</strong> e <strong>Base do Mês</strong>, entregues juntos em um ZIP. Você pode enviar as planilhas separadas ou o ZIP do mês inteiro.</div>
-        <div class="actions"><button class="btn btn--primary" type="submit">Gerar arquivos</button></div>
-      </form>
-    </section>
+        <div class="relatorio-panel__body">
+          <form action="{{ url_for('relatorios_async') }}" method="POST" enctype="multipart/form-data">
+            <div class="form-grid">
+              <div class="field col-1"><label for="mes">Mês da ADMISSÃO</label><input type="number" id="mes" name="mes" min="1" max="12" placeholder="Ex.: 9" required></div>
+              <div class="field col-3"><label for="files">Planilhas ou ZIP</label><input type="file" id="files" name="files" accept=".xls,.xlsx,.zip" multiple required></div>
+            </div>
+            <ul class="note-list">
+              <li>Usa somente a coluna <strong>ADMISSAO</strong> para filtrar o mês.</li>
+              <li>Todos os dados saem em <strong>maiúsculo</strong>.</li>
+              <li>No Relatório, duplicidades de <strong>nome + cargo</strong> são removidas.</li>
+            </ul>
+            <div class="actions"><button class="btn btn--primary" type="submit">Gerar arquivos</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section class="relatorio-panel">
+        <div class="relatorio-panel__head">
+          <h2>2. Comparar Relatório com Controle de ASO</h2>
+          <p>Envie o Relatório gerado pelo sistema e uma planilha de controle. Depois escolha as guias que serão usadas na comparação.</p>
+        </div>
+        <div class="relatorio-panel__body">
+          <form action="{{ url_for('relatorios_comparar_preparar') }}" method="POST" enctype="multipart/form-data">
+            <div class="form-grid">
+              <div class="field col-2"><label for="relatorio_file">Relatório gerado pelo sistema (.xlsx)</label><input type="file" id="relatorio_file" name="relatorio_file" accept=".xlsx" required></div>
+              <div class="field col-2"><label for="controle_file">Planilha de controle de ASO (.xlsx)</label><input type="file" id="controle_file" name="controle_file" accept=".xlsx" required></div>
+            </div>
+            <div class="helper-box" style="margin-top:16px">O sistema irá procurar os nomes nas guias escolhidas e preencher uma nova coluna com: <strong>DATA - TIPO DE EXAME - EMPRESA</strong>. Os nomes não encontrados permanecerão sem informação adicional.</div>
+            <div class="actions"><button class="btn btn--secondary" type="submit">Carregar guias para comparação</button></div>
+          </form>
+
+          {% if comparacao %}
+          <div class="compare-ready">
+            <strong>Arquivos carregados:</strong><br>
+            Relatório: {{ comparacao.relatorio_nome }}<br>
+            Controle: {{ comparacao.controle_nome }}
+          </div>
+          <div class="divider-title"><strong>Escolha as guias que deseja comparar</strong></div>
+          <form action="{{ url_for('relatorios_comparar_executar') }}" method="POST">
+            <input type="hidden" name="token" value="{{ comparacao.token }}">
+            <div class="quick-actions">
+              <button class="btn btn--ghost" type="button" onclick="document.querySelectorAll('.sheet-option input').forEach(c=>c.checked=true)">Selecionar todas</button>
+              <button class="btn btn--ghost" type="button" onclick="document.querySelectorAll('.sheet-option input').forEach(c=>c.checked=false)">Limpar seleção</button>
+            </div>
+            <div class="sheet-box">
+              {% for guia in comparacao.guias %}
+              <label class="sheet-option"><input type="checkbox" name="guias" value="{{ guia }}"> <span>{{ guia }}</span></label>
+              {% endfor %}
+            </div>
+            <p class="muted-small">As guias selecionadas serão lidas procurando colunas como FUNCIONÁRIO/NOME, DATA, TIPO DE EXAME e EMPRESA/SETOR.</p>
+            <div class="actions"><button class="btn btn--primary" type="submit">Comparar e baixar Relatório</button></div>
+          </form>
+          {% endif %}
+        </div>
+      </section>
+    </div>
   </main>
 </div>
 <script src="{{ url_for('static', filename='app.js') }}"></script>

@@ -9,7 +9,7 @@ from copy import deepcopy
 import pandas as pd
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
@@ -758,51 +758,137 @@ def salvar_planilhas_relatorios_uploads(files, destination: Path):
     return saved
 
 # =========================
-# RELATÓRIOS + BASE DO MÊS
+# RELATÓRIOS DE PERIÓDICOS + BASE DO MÊS + COMPARAÇÃO
 # =========================
+def _texto_upper(valor) -> str:
+    """Texto padronizado em maiúsculo para os relatórios."""
+    if valor is None:
+        return ""
+    try:
+        if pd.isna(valor):
+            return ""
+    except Exception:
+        pass
+    if isinstance(valor, (datetime, pd.Timestamp)):
+        return valor.strftime("%d/%m/%Y")
+    texto = str(valor).replace("\xa0", " ").strip()
+    texto = re.sub(r"\s+", " ", texto)
+    if texto.lower() in {"nan", "nat", "none"}:
+        return ""
+    return texto.upper()
+
+
+def _normalizar_chave(valor) -> str:
+    """Normaliza nomes/cargos para comparação e remoção de duplicidades."""
+    texto = _texto_upper(valor)
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+    texto = re.sub(r"[^A-Z0-9]+", " ", texto)
+    return re.sub(r"\s+", " ", texto).strip()
+
+
+def _formatar_data_br(valor) -> str:
+    if valor is None:
+        return ""
+    try:
+        if pd.isna(valor):
+            return ""
+    except Exception:
+        pass
+    if isinstance(valor, datetime):
+        return valor.strftime("%d/%m/%Y")
+    if isinstance(valor, pd.Timestamp):
+        if pd.isna(valor):
+            return ""
+        return valor.strftime("%d/%m/%Y")
+    texto = str(valor).strip()
+    if not texto:
+        return ""
+    match = re.search(r"(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})", texto)
+    if match:
+        dia, mes, ano = match.groups()
+        ano = f"20{ano}" if len(ano) == 2 else ano
+        return f"{int(dia):02d}/{int(mes):02d}/{ano}"
+    parsed = pd.to_datetime(valor, dayfirst=True, errors="coerce")
+    if not pd.isna(parsed):
+        return parsed.strftime("%d/%m/%Y")
+    return _texto_upper(texto)
+
+
+def _coluna_por_candidatos_df(df, candidatos, obrigatoria=False):
+    return encontrar_coluna(df, candidatos, obrigatoria=obrigatoria)
+
+
 def nome_empresa_da_planilha(row, col_empresa, col_setor, nome_arquivo):
     if col_empresa:
         valor = row[col_empresa]
         if not pd.isna(valor) and str(valor).strip():
-            return str(valor).strip()
+            return _texto_upper(valor)
     if col_setor:
         valor = row[col_setor]
         if not pd.isna(valor) and str(valor).strip():
-            return str(valor).strip()
-    return limpar_nome_arquivo(nome_arquivo)
+            return _texto_upper(valor)
+    return _texto_upper(limpar_nome_arquivo(nome_arquivo))
 
-def data_referencia_do_arquivo(nome_arquivo):
-    """Extrai a data de geração do nome Convocacao_..._AAAAMMDD_...xlsx."""
-    match = re.search(r"_(20\d{6})_", str(nome_arquivo or ""))
-    if match:
-        parsed = pd.to_datetime(match.group(1), format="%Y%m%d", errors="coerce")
-        if not pd.isna(parsed):
-            return parsed
-    return pd.Timestamp(datetime.now().date())
 
-def extrair_data_periodico(row, col_validade, col_ultimo_exame, col_data_fallback, nome_arquivo):
-    """Retorna SEMPRE a data da coluna ADMISSAO para a função Relatórios.
+def extrair_data_admissao(row, col_admissao):
+    """Retorna exclusivamente a data da coluna ADMISSAO para a função Relatórios."""
+    if not col_admissao or col_admissao not in row.index:
+        return pd.NaT
+    valor = row.get(col_admissao)
+    if pd.isna(valor):
+        return pd.NaT
+    data = pd.to_datetime(valor, dayfirst=True, errors="coerce")
+    if pd.isna(data):
+        return pd.NaT
+    return data
 
-    Regra solicitada: o mês dos colaboradores deve ser calculado exclusivamente
-    pela coluna ADMISSAO. As colunas VALIDADE/VENCIMENTO e ULTIMO EXAME não são
-    mais usadas para decidir o mês do relatório ou da Base do Mês.
+
+def filtrar_periodicos_do_mes(df, mes, col_nome, col_admissao):
+    """Filtra colaboradores pelo mês da ADMISSAO.
+
+    Esta função foi refeita para usar SEMPRE a coluna ADMISSAO.
+    VALIDADE, VENCIMENTO, PERIODICO e ULTIMO EXAME não participam do filtro.
     """
-    if col_data_fallback and not pd.isna(row.get(col_data_fallback)):
-        admissao = pd.to_datetime(row.get(col_data_fallback), dayfirst=True, errors="coerce")
-        if not pd.isna(admissao):
-            return admissao
-
-    return pd.NaT
-
-def filtrar_periodicos_do_mes(df, mes, col_nome, col_validade, col_ultimo_exame, col_data_fallback, nome_arquivo):
     df = df.copy()
     df["_data_periodico_calculada"] = df.apply(
-        lambda row: extrair_data_periodico(row, col_validade, col_ultimo_exame, col_data_fallback, nome_arquivo),
+        lambda row: extrair_data_admissao(row, col_admissao),
         axis=1,
     )
     df["_data_periodico_calculada"] = pd.to_datetime(df["_data_periodico_calculada"], errors="coerce")
     df = df.dropna(subset=["_data_periodico_calculada", col_nome])
     return df[df["_data_periodico_calculada"].dt.month == mes].copy()
+
+
+def _deduplicar_relatorio_por_nome_cargo(df, col_nome, col_cargo):
+    if df.empty:
+        return df
+    df = df.copy()
+    df["_nome_dedup"] = df[col_nome].map(_normalizar_chave)
+    if col_cargo:
+        df["_cargo_dedup"] = df[col_cargo].map(_normalizar_chave)
+    else:
+        df["_cargo_dedup"] = ""
+    df = df.drop_duplicates(subset=["_nome_dedup", "_cargo_dedup"], keep="first")
+    return df.drop(columns=["_nome_dedup", "_cargo_dedup"], errors="ignore")
+
+
+def _ler_convocacao(file):
+    file.seek(0)
+    df = pd.read_excel(file)
+    col_nome = _coluna_por_candidatos_df(df, ["nome", "funcionario", "funcionário"], obrigatoria=True)
+    col_admissao = _coluna_por_candidatos_df(
+        df,
+        ["admissao", "admissão", "data admissao", "data admissão", "data de admissao", "data de admissão"],
+        obrigatoria=True,
+    )
+    col_cargo = _coluna_por_candidatos_df(df, ["cargo", "função", "funcao"])
+    col_empresa = _coluna_por_candidatos_df(df, ["empresa", "razão social", "razao social"])
+    col_setor = _coluna_por_candidatos_df(df, ["setor", "ges"])
+    col_comp = _coluna_por_candidatos_df(df, ["complementares", "complementar", "exames_obg", "exames obrigatorios", "exames obrigatórios"])
+    col_doc = _coluna_por_candidatos_df(df, ["cnpj", "cpf", "documento"])
+    return df, col_nome, col_admissao, col_cargo, col_empresa, col_setor, col_comp, col_doc
+
 
 def criar_relatorio(files, mes):
     wb = Workbook()
@@ -818,24 +904,16 @@ def criar_relatorio(files, mes):
 
     for file in files:
         try:
-            file.seek(0)
-            df = pd.read_excel(file)
-
-            col_nome = encontrar_coluna(df, ["nome", "funcionario", "funcionário"], obrigatoria=True)
-            col_data = encontrar_coluna(df, ["admissao", "admissão", "data admissao", "data admissão", "data de admissao", "data de admissão"], obrigatoria=True)
-            col_validade = encontrar_coluna(df, ["validade", "vencimento", "periodico", "periódico", "proximo periodico", "próximo periódico"])
-            col_ultimo_exame = encontrar_coluna(df, ["ultimo exame", "último exame"])
-            col_empresa = encontrar_coluna(df, ["empresa"])
-            col_setor = encontrar_coluna(df, ["setor"])
-
-            filtrado = filtrar_periodicos_do_mes(df, mes, col_nome, col_validade, col_ultimo_exame, col_data, file.filename)
+            df, col_nome, col_admissao, col_cargo, col_empresa, col_setor, _col_comp, _col_doc = _ler_convocacao(file)
+            filtrado = filtrar_periodicos_do_mes(df, mes, col_nome, col_admissao)
+            filtrado = _deduplicar_relatorio_por_nome_cargo(filtrado, col_nome, col_cargo)
 
             if not filtrado.empty:
                 titulo = nome_empresa_da_planilha(filtrado.iloc[0], col_empresa, col_setor, file.filename)
             elif not df.empty:
                 titulo = nome_empresa_da_planilha(df.iloc[0], col_empresa, col_setor, file.filename)
             else:
-                titulo = limpar_nome_arquivo(file.filename)
+                titulo = _texto_upper(limpar_nome_arquivo(file.filename))
 
             ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=3)
             cell = ws.cell(row=linha, column=1, value=titulo)
@@ -857,7 +935,7 @@ def criar_relatorio(files, mes):
 
             if filtrado.empty:
                 ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=3)
-                cell = ws.cell(row=linha, column=1, value=f"NÃO HÁ EXAMES PERIÓDICOS PARA O MÊS DE {nome_mes(mes)}")
+                cell = ws.cell(row=linha, column=1, value=f"NÃO HÁ COLABORADORES COM ADMISSÃO PARA O MÊS DE {nome_mes(mes)}")
                 cell.font = Font(color="FF0000", bold=True)
                 cell.alignment = center
                 for col in range(1, 4):
@@ -865,7 +943,7 @@ def criar_relatorio(files, mes):
                 linha += 3
             else:
                 for _, row in filtrado.iterrows():
-                    nome = "" if pd.isna(row[col_nome]) else str(row[col_nome]).strip()
+                    nome = _texto_upper(row[col_nome])
                     ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=3)
                     cell = ws.cell(row=linha, column=1, value=nome)
                     cell.alignment = Alignment(horizontal="left", vertical="center")
@@ -874,7 +952,7 @@ def criar_relatorio(files, mes):
                     linha += 1
                 linha += 2
         except Exception as e:
-            titulo = limpar_nome_arquivo(file.filename)
+            titulo = _texto_upper(limpar_nome_arquivo(file.filename))
             ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=3)
             cell = ws.cell(row=linha, column=1, value=titulo)
             cell.font = Font(size=13, bold=True)
@@ -892,7 +970,7 @@ def criar_relatorio(files, mes):
                 ws.cell(row=linha, column=col).border = borda
             linha += 1
             ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=3)
-            cell = ws.cell(row=linha, column=1, value=f"Erro ao processar arquivo: {e}")
+            cell = ws.cell(row=linha, column=1, value=f"ERRO AO PROCESSAR ARQUIVO: {_texto_upper(e)}")
             cell.font = Font(color="FF0000", bold=True)
             cell.alignment = center
             for col in range(1, 4):
@@ -902,7 +980,9 @@ def criar_relatorio(files, mes):
     ws.column_dimensions["A"].width = 55
     ws.column_dimensions["B"].width = 12
     ws.column_dimensions["C"].width = 12
+    ws.freeze_panes = "A1"
     return wb
+
 
 def criar_base(files, mes):
     wb = Workbook()
@@ -914,7 +994,7 @@ def criar_base(files, mes):
     cabecalho_font = Font(bold=True)
     center = Alignment(horizontal="center", vertical="center")
 
-    headers = ["empresa", "cnpj", "nome", "cargo", "Complementares"]
+    headers = ["EMPRESA", "CNPJ/CPF", "NOME", "CARGO", "COMPLEMENTARES"]
     for idx, h in enumerate(headers, start=1):
         cell = ws.cell(row=1, column=idx, value=h)
         cell.font = cabecalho_font
@@ -926,44 +1006,186 @@ def criar_base(files, mes):
 
     for file in files:
         try:
-            file.seek(0)
-            df = pd.read_excel(file)
-
-            col_nome = encontrar_coluna(df, ["nome", "funcionario", "funcionário"], obrigatoria=True)
-            col_data = encontrar_coluna(df, ["admissao", "admissão", "data admissao", "data admissão", "data de admissao", "data de admissão"], obrigatoria=True)
-            col_validade = encontrar_coluna(df, ["validade", "vencimento", "periodico", "periódico", "proximo periodico", "próximo periódico"])
-            col_ultimo_exame = encontrar_coluna(df, ["ultimo exame", "último exame"])
-            col_cargo = encontrar_coluna(df, ["cargo", "função", "funcao"])
-            col_empresa = encontrar_coluna(df, ["empresa"])
-            col_setor = encontrar_coluna(df, ["setor"])
-            col_comp = encontrar_coluna(df, ["complementares", "complementar"])
-
-            filtrado = filtrar_periodicos_do_mes(df, mes, col_nome, col_validade, col_ultimo_exame, col_data, file.filename)
-
+            df, col_nome, col_admissao, col_cargo, col_empresa, col_setor, col_comp, col_doc = _ler_convocacao(file)
+            filtrado = filtrar_periodicos_do_mes(df, mes, col_nome, col_admissao)
             documento_arquivo = extrair_documento_do_final_do_arquivo(file.filename)
 
             for _, row in filtrado.iterrows():
                 empresa = nome_empresa_da_planilha(row, col_empresa, col_setor, file.filename)
-                nome = "" if pd.isna(row[col_nome]) else str(row[col_nome]).strip()
-                cargo = "" if not col_cargo or pd.isna(row[col_cargo]) else str(row[col_cargo]).strip()
-                complementares = "" if not col_comp or pd.isna(row[col_comp]) else str(row[col_comp]).strip()
+                documento = _texto_upper(row[col_doc]) if col_doc else documento_arquivo
+                nome = _texto_upper(row[col_nome])
+                cargo = _texto_upper(row[col_cargo]) if col_cargo else ""
+                complementares = _texto_upper(row[col_comp]) if col_comp else ""
 
-                valores = [empresa, documento_arquivo, nome, cargo, complementares]
+                valores = [empresa, documento, nome, cargo, complementares]
                 for idx, valor in enumerate(valores, start=1):
-                    cell = ws.cell(row=linha, column=idx, value=str(valor) if valor is not None else "")
+                    cell = ws.cell(row=linha, column=idx, value=valor if valor is not None else "")
                     cell.border = borda
+                    cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
                     if idx == 2:
                         cell.number_format = "@"
                 linha += 1
         except Exception:
+            logger.exception("Erro ao processar base do mês: %s", getattr(file, "filename", "arquivo"))
             continue
 
     ws.column_dimensions["A"].width = 45
     ws.column_dimensions["B"].width = 22
     ws.column_dimensions["C"].width = 38
     ws.column_dimensions["D"].width = 28
-    ws.column_dimensions["E"].width = 40
+    ws.column_dimensions["E"].width = 42
+    ws.freeze_panes = "A2"
     return wb
+
+
+# -------------------------
+# COMPARAÇÃO DO RELATÓRIO COM PLANILHA DE CONTROLE DE ASO
+# -------------------------
+def _salvar_upload_comparacao(file_storage, destination: Path, allowed_extensions: set[str], label: str) -> Path:
+    ok, msg = validate_uploaded_file(file_storage, allowed_extensions, label)
+    if not ok:
+        raise ValueError(msg)
+    destination.mkdir(parents=True, exist_ok=True)
+    filename = secure_filename(Path(file_storage.filename).name)
+    path = destination / filename
+    file_storage.save(path)
+    return path
+
+
+def _safe_comparacao_token(token: str) -> str:
+    token = str(token or "")
+    if not re.fullmatch(r"[A-Za-z0-9_\-]{8,80}", token):
+        raise ValueError("Sessão de comparação inválida. Envie os arquivos novamente.")
+    return token
+
+
+def listar_guias_planilha_controle(caminho_controle: Path):
+    wb = load_workbook(caminho_controle, read_only=True, data_only=True)
+    return list(wb.sheetnames)
+
+
+def _mapear_header_linha(values):
+    mapa = {}
+    for idx, value in enumerate(values, start=1):
+        chave = _normalizar_chave(value)
+        if chave:
+            mapa[chave] = idx
+    return mapa
+
+
+def _encontrar_coluna_header(header_map, candidatos):
+    candidatos_norm = [_normalizar_chave(c) for c in candidatos]
+    for cand in candidatos_norm:
+        if cand in header_map:
+            return header_map[cand]
+    for header, idx in header_map.items():
+        for cand in candidatos_norm:
+            if cand and cand in header:
+                return idx
+    return None
+
+
+def _encontrar_header_controle(ws, max_linhas=25):
+    for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=max_linhas, values_only=True), start=1):
+        header_map = _mapear_header_linha(row)
+        col_nome = _encontrar_coluna_header(header_map, ["FUNCIONARIO", "FUNCIONÁRIO", "NOME", "NOME DO FUNCIONARIO", "NOME DO FUNCIONÁRIO"])
+        col_data = _encontrar_coluna_header(header_map, ["DATA", "DATA DO EXAME", "DIA"])
+        col_tipo = _encontrar_coluna_header(header_map, ["TIPO DE EXAME", "TIPO EXAME", "EXAME", "TIPO"])
+        if col_nome and (col_data or col_tipo):
+            col_empresa = _encontrar_coluna_header(header_map, ["EMPRESA", "SETOR", "CLIENTE", "RAZAO SOCIAL", "RAZÃO SOCIAL"])
+            return row_idx, col_nome, col_data, col_tipo, col_empresa
+    return None, None, None, None, None
+
+
+def criar_indice_controle_asos(caminho_controle: Path, guias_selecionadas):
+    """Retorna {NOME_NORMALIZADO: ["DATA - TIPO - EMPRESA", ...]}."""
+    indice = {}
+    wb = load_workbook(caminho_controle, read_only=True, data_only=True)
+    guias_validas = [g for g in guias_selecionadas if g in wb.sheetnames]
+    if not guias_validas:
+        raise ValueError("Selecione ao menos uma guia válida da planilha de controle.")
+
+    for guia in guias_validas:
+        ws = wb[guia]
+        header_row, col_nome, col_data, col_tipo, col_empresa = _encontrar_header_controle(ws)
+        if not header_row or not col_nome:
+            continue
+        for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
+            nome = row[col_nome - 1] if col_nome <= len(row) else None
+            nome_key = _normalizar_chave(nome)
+            if not nome_key or nome_key.startswith("EXAMES"):
+                continue
+            data_txt = _formatar_data_br(row[col_data - 1] if col_data and col_data <= len(row) else "")
+            tipo_txt = _texto_upper(row[col_tipo - 1] if col_tipo and col_tipo <= len(row) else "")
+            empresa_txt = _texto_upper(row[col_empresa - 1] if col_empresa and col_empresa <= len(row) else "")
+            partes = [p for p in [data_txt, tipo_txt, empresa_txt] if p]
+            if not partes:
+                continue
+            info = " - ".join(partes)
+            indice.setdefault(nome_key, [])
+            if info not in indice[nome_key]:
+                indice[nome_key].append(info)
+    return indice
+
+
+def comparar_relatorio_com_controle(caminho_relatorio: Path, caminho_controle: Path, guias_selecionadas, caminho_saida: Path):
+    indice = criar_indice_controle_asos(caminho_controle, guias_selecionadas)
+    wb = load_workbook(caminho_relatorio)
+    ws = wb.active
+
+    borda = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    header_fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+    header_font = Font(bold=True)
+    wrap_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    # A coluna D fica ao lado do bloco de nomes do relatório original, que usa A:C mesclado.
+    ws.column_dimensions["D"].width = 75
+    dentro_lista = False
+    linhas_comparadas = 0
+    encontrados = 0
+
+    for row_idx in range(1, ws.max_row + 1):
+        nome_cell = ws.cell(row=row_idx, column=1)
+        valor = _texto_upper(nome_cell.value)
+        valor_norm = _normalizar_chave(valor)
+
+        if valor_norm == _normalizar_chave("NOME DO FUNCIONÁRIO"):
+            dentro_lista = True
+            cell = ws.cell(row=row_idx, column=4, value="DATA / TIPO DE EXAME / EMPRESA")
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center
+            cell.border = borda
+            continue
+
+        if not valor_norm:
+            dentro_lista = False
+            continue
+
+        if dentro_lista:
+            if valor_norm.startswith("NAO HA COLABORADORES") or valor_norm.startswith("ERRO AO PROCESSAR"):
+                continue
+            linhas_comparadas += 1
+            infos = indice.get(valor_norm, [])
+            info_cell = ws.cell(row=row_idx, column=4)
+            info_cell.value = " | ".join(infos) if infos else ""
+            info_cell.alignment = wrap_left
+            info_cell.border = borda
+            if infos:
+                encontrados += 1
+
+    # Pequeno resumo técnico abaixo da última linha, sem alterar os dados do relatório.
+    resumo_linha = ws.max_row + 2
+    ws.cell(row=resumo_linha, column=1, value="RESUMO DA COMPARAÇÃO")
+    ws.cell(row=resumo_linha, column=1).font = Font(bold=True)
+    ws.cell(row=resumo_linha + 1, column=1, value=f"NOMES COMPARADOS: {linhas_comparadas}")
+    ws.cell(row=resumo_linha + 2, column=1, value=f"NOMES ENCONTRADOS: {encontrados}")
+    ws.cell(row=resumo_linha + 3, column=1, value=f"GUIAS USADAS: {', '.join(guias_selecionadas)}")
+
+    caminho_saida.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(caminho_saida)
+    return caminho_saida
 
 # =========================
 # ENCAMINHAMENTOS
@@ -3279,6 +3501,63 @@ def relatorios_async():
 
     job = job_manager.create(f"Relatórios — {nome_mes(mes)}", task)
     return redirect(url_for("job_page", job_id=job.id))
+
+
+
+@app.route("/relatorios/comparar/preparar", methods=["POST"])
+def relatorios_comparar_preparar():
+    relatorio_file = request.files.get("relatorio_file")
+    controle_file = request.files.get("controle_file")
+    token = secrets.token_urlsafe(18).replace("-", "_")
+    job_root = Path(JOBS_DIR) / f"comparacao_relatorios_{token}"
+    try:
+        caminho_relatorio_original = _salvar_upload_comparacao(relatorio_file, job_root, {".xlsx"}, "o Relatório gerado pelo sistema")
+        caminho_controle_original = _salvar_upload_comparacao(controle_file, job_root, {".xlsx"}, "a planilha de controle")
+        caminho_relatorio = job_root / "relatorio_upload.xlsx"
+        caminho_controle = job_root / "controle_upload.xlsx"
+        if caminho_relatorio_original != caminho_relatorio:
+            caminho_relatorio_original.replace(caminho_relatorio)
+        if caminho_controle_original != caminho_controle:
+            caminho_controle_original.replace(caminho_controle)
+        guias = listar_guias_planilha_controle(caminho_controle)
+        if not guias:
+            raise ValueError("A planilha de controle não possui guias disponíveis.")
+        comparacao = {
+            "token": token,
+            "relatorio_nome": Path(caminho_relatorio).name,
+            "controle_nome": Path(caminho_controle).name,
+            "guias": guias,
+        }
+        flash("Arquivos carregados. Agora selecione as guias que deseja usar na comparação.")
+        return render_template("relatorios.html", comparacao=comparacao)
+    except Exception as exc:
+        logger.exception("Erro ao preparar comparação de relatórios")
+        shutil.rmtree(job_root, ignore_errors=True)
+        flash(str(exc) or "Não foi possível ler os arquivos para comparação.")
+        return redirect(url_for("relatorios"))
+
+
+@app.route("/relatorios/comparar/executar", methods=["POST"])
+def relatorios_comparar_executar():
+    try:
+        token = _safe_comparacao_token(request.form.get("token"))
+        guias = request.form.getlist("guias")
+        if not guias:
+            raise ValueError("Selecione ao menos uma guia para comparar.")
+        job_root = Path(JOBS_DIR) / f"comparacao_relatorios_{token}"
+        if not job_root.exists():
+            raise ValueError("Sessão de comparação expirada. Envie os arquivos novamente.")
+        caminho_relatorio = job_root / "relatorio_upload.xlsx"
+        caminho_controle = job_root / "controle_upload.xlsx"
+        if not caminho_relatorio.exists() or not caminho_controle.exists():
+            raise ValueError("Arquivos da comparação não foram encontrados. Envie novamente.")
+        saida = job_root / "Relatorio_comparado.xlsx"
+        comparar_relatorio_com_controle(caminho_relatorio, caminho_controle, guias, saida)
+        return send_file(saida, as_attachment=True, download_name="Relatorio_comparado.xlsx")
+    except Exception as exc:
+        logger.exception("Erro ao executar comparação de relatórios")
+        flash(str(exc) or "Não foi possível comparar as planilhas.")
+        return redirect(url_for("relatorios"))
 
 
 @app.route("/encaminhamentos/async", methods=["POST"])

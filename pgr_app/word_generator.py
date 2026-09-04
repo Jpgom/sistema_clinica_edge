@@ -3377,3 +3377,569 @@ def generate_aet_docx(groups: list[Mapping[str, Any]], output_path: Path, empres
     output_path.parent.mkdir(parents=True, exist_ok=True)
     save_docx_with_default_font(doc, output_path)
     return output_path
+
+
+# --- COMPATIBILIDADE MODELOS COMPLETOS 2026-09-04 ---
+# Ajustes para os novos modelos de PGR, PCMSO e LTCAT enviados em 04/09/2026.
+# Mantém as funcionalidades anteriores, mas reconhece os novos marcadores e tabelas.
+
+def _doc_month_year_text(value: Any) -> str:
+    parsed = _parse_month_year(value)
+    if parsed:
+        month, year = parsed
+        return f"{month:02d}/{year}"
+    return str(value or "").strip()
+
+
+def _doc_year_text(value: Any) -> str:
+    parsed = _parse_month_year(value)
+    if parsed:
+        return str(parsed[1])
+    match = re.search(r"\b(20\d{2}|19\d{2})\b", str(value or ""))
+    return match.group(1) if match else ""
+
+
+def _vigencia_text(data_atual: Any, data_final: Any) -> str:
+    start = str(data_atual or "").strip()
+    end = str(data_final or "").strip()
+    if start and end:
+        return f"{start} à {end}"
+    return start or end
+
+
+def _company_replacements(company: Mapping[str, str]) -> dict[str, str]:
+    funcionarios = company.get("funcionarios", "")
+    data_atual = company.get("data_atual", "")
+    data_final = company.get("data_final", "")
+    data_criacao = company.get("data_criacao_laudo") or company.get("data_avaliacao") or data_atual
+    mm_aaaa = _doc_month_year_text(data_atual)
+    ano_final = _doc_year_text(data_final) or _doc_year_text(data_atual)
+    vigencia = _vigencia_text(data_atual, data_final)
+    return {
+        "{{EMPRESA}}": company.get("empresa", ""),
+        "{{empresa}}": company.get("empresa", ""),
+        "{{CNPJ}}": company.get("cnpj", ""),
+        "{{DATAATUAL}}": data_atual,
+        "{{DATAFINAL}}": data_final,
+        "{{DATA DO LAUDO}}": data_atual,
+        "{{MM/AAAA DOC}}": mm_aaaa,
+        "{{VIGENCIA}}": vigencia,
+        "{{AAAA FINAL VIGENCIA}}": ano_final,
+        "{{ANOFINALLAUDO}}": ano_final,
+        "{[ANOFINALLAUDO}}": ano_final,
+        "{{ENDERECO}}": company.get("endereco", ""),
+        "{{ENDEREÇO}}": company.get("endereco", ""),
+        "{{BAIRRO/CIDADE}}": company.get("bairro_cidade", ""),
+        "{{BAIRRO / CIDADE}}": company.get("bairro_cidade", ""),
+        "{{CEP}}": company.get("cep", ""),
+        "{{CNAE}}": company.get("cnae", ""),
+        "{{CNAE1}}": company.get("cnae", ""),
+        "{{DESCRICAO1}}": company.get("descricao_atividade", ""),
+        "{{DESCRIÇÃOCNAE1}}": company.get("descricao_atividade", ""),
+        "{{GRAU1}}": company.get("grau_risco", ""),
+        "{{GRAUCNAE1}}": company.get("grau_risco", ""),
+        "{{CNAE2}}": company.get("cnae_secundario", ""),
+        "{{DESCRICAO2}}": company.get("descricao_atividade_secundaria", ""),
+        "{{DESCRIÇÃOCNAE2}}": company.get("descricao_atividade_secundaria", ""),
+        "{{GRAU2}}": company.get("grau_risco_secundario", ""),
+        "{{GRAUCNAE2}}": company.get("grau_risco_secundario", ""),
+        "{{N°FUNCIONARIOS}}": funcionarios,
+        "{{FUNC}}": funcionarios,
+        "{{EMAIL}}": company.get("email", ""),
+        "{{FONE}}": company.get("fone", ""),
+        "{{CONTATO}}": company.get("fone", ""),
+        "{{DATACRIACAOLAUDO}}": data_criacao,
+        "{{datacriacaolaudo}}": data_criacao,
+        "{{DD/MM/AAAA CRIAÇÃO}}": data_criacao,
+        "{{data criação do laudo}}": data_criacao,
+        "{{DATADAREVISAO}}": company.get("data_da_revisao", ""),
+        "{{datadarevisao}}": company.get("data_da_revisao", ""),
+    }
+
+
+def _xml_replace_text(element, replacements: Mapping[str, Any]) -> None:
+    clean = {key: "" if value is None else str(value) for key, value in replacements.items()}
+    for node in list(element.iter(qn("w:t"))):
+        text = node.text or ""
+        changed = False
+        for marker, value in clean.items():
+            if marker in text:
+                text = text.replace(marker, value)
+                changed = True
+        if changed:
+            node.text = text
+
+
+def _last_cell(row_xml):
+    cells = row_xml.findall(qn("w:tc"))
+    return cells[-1] if cells else None
+
+
+def _set_labeled_row_value(row_xml, value: Any, fill: str | None = None, font_color: str = "000000") -> None:
+    cell = _last_cell(row_xml)
+    if cell is None:
+        return
+    if fill:
+        _set_cell_shading(cell, fill)
+    _set_cell_text(cell, value, font_color=font_color)
+
+
+def _risk_text_value(risk: Mapping[str, Any], *keys: str, default: str = "") -> str:
+    for key in keys:
+        value = risk.get(key)
+        if value not in (None, ""):
+            return str(value).strip()
+    return default
+
+
+def _pgr_risk_replacements(risk: Mapping[str, Any]) -> dict[str, str]:
+    tipo = _normalize_option(risk.get("tipo_risco"))
+    descricao = _risk_text_value(risk, "descricao_agente", "risco")
+    fontes = _risk_text_value(risk, "fontes_circunstancias", default="Durante o processo de trabalho.")
+    meio = _risk_text_value(risk, "meio_propagacao", "ltcat_meio_propagacao", default=fontes)
+    via = _risk_text_value(risk, "via_exposicao", "via", default="Conforme contato, proximidade ou exposição durante a atividade.")
+    tipo_exposicao = _risk_text_value(risk, "tipo_exposicao", "ltcat_periodicidade_jornada", default="Habitual/intermitente, conforme rotina do GES.")
+    procedimentos = _risk_text_value(
+        risk,
+        "procedimentos_avaliacao",
+        "procedimentos",
+        default="Avaliação qualitativa por inspeção, observação das atividades e análise das condições de trabalho.",
+    )
+    medidas = _risk_text_value(risk, "medidas", "acoes", default="Manter medidas preventivas e corretivas conforme plano de ação.")
+    return {
+        "{{TIPO DE RISCO}}": tipo,
+        "{{risco}}": descricao,
+        "{{ Possíveis lesões ou agravos a saúde}}": _risk_text_value(risk, "possiveis_lesoes"),
+        "{{Possíveis lesões ou agravos a saúde}}": _risk_text_value(risk, "possiveis_lesoes"),
+        "{{FONTEGERADORA}}": fontes,
+        "{FONTEGERADORA}}": fontes,
+        "{{fontesgeradoras}}": fontes,
+        "{{MEIO}}": meio,
+        "{{meiodepropagacao}}": meio,
+        "{{VIA}}": via,
+        "{{viadeexposição}}": via,
+        "{{TIPO}}": tipo_exposicao,
+        "{{tempodeexposição}}": tipo_exposicao,
+        "{{PROCEDIMENTOS}}": procedimentos,
+        "{{EPI}}": _risk_text_value(risk, "epis"),
+        "{{EPIs}}": _risk_text_value(risk, "epis"),
+        "{{EPC}}": _risk_text_value(risk, "epcs"),
+        "{{EPCs}}": _risk_text_value(risk, "epcs"),
+        "{{MEDIDAS}}": medidas,
+        "{{GRAU DE SEVERIDADE}}": _normalize_option(risk.get("grau_severidade")),
+        "{{GRAU DE POSSIBILIDADE}}": _normalize_option(risk.get("grau_possibilidade")),
+        "{{GRAU DE NIVEL DE RISCO}}": _normalize_option(risk.get("grau_nivel_risco")),
+    }
+
+
+def _fill_pgr_risk_rows(risk_rows: list, risk: Mapping[str, Any]) -> None:
+    if len(risk_rows) < 4:
+        raise ValueError("O bloco de risco do PGR precisa manter as linhas básicas do risco.")
+    tipo = _normalize_option(risk.get("tipo_risco"))
+    fill = TIPO_RISCO_COLORS.get(tipo)
+    replacements = _pgr_risk_replacements(risk)
+
+    for row in risk_rows:
+        label = _risk_type_norm_key(_xml_text(row))
+        if "PERIGO FATOR DE RISCO" in label:
+            _set_labeled_row_value(row, tipo, fill=fill, font_color="000000")
+        elif "DESCRICAO DO AGENTE" in label:
+            _set_labeled_row_value(row, replacements["{{risco}}"])
+        elif "POSSIVEIS LESOES" in label:
+            _set_labeled_row_value(row, replacements["{{ Possíveis lesões ou agravos a saúde}}"])
+        elif "FONTES GERADORAS" in label or "FONTES OU CIRCUNSTANCIAS" in label:
+            _set_labeled_row_value(row, replacements["{{FONTEGERADORA}}"])
+        elif "MEIO DE PROPAGACAO" in label:
+            _set_labeled_row_value(row, replacements["{{MEIO}}"])
+        elif "VIA DE EXPOSICAO" in label:
+            _set_labeled_row_value(row, replacements["{{VIA}}"])
+        elif "TIPO DE EXPOSICAO" in label:
+            _set_labeled_row_value(row, replacements["{{TIPO}}"])
+        elif "PROCEDIMENTOS DE AVALIACAO" in label:
+            _set_labeled_row_value(row, replacements["{{PROCEDIMENTOS}}"])
+        elif label.strip() == "EPI" or label.startswith("EPI "):
+            _set_labeled_row_value(row, replacements["{{EPI}}"])
+        elif label.strip() == "EPC" or label.startswith("EPC "):
+            _set_labeled_row_value(row, replacements["{{EPC}}"])
+        elif "MEDIDAS ADMINISTRATIVAS" in label:
+            _set_labeled_row_value(row, replacements["{{MEDIDAS}}"])
+
+    # Células coloridas da matriz de risco, quando existirem.
+    for row in risk_rows:
+        cells = row.findall(qn("w:tc"))
+        if len(cells) >= 6 and "SEVERIDADE" in _risk_type_norm_key(_xml_text(row)):
+            _colored_value(cells[1], risk.get("grau_severidade", ""), SEVERIDADE_COLORS)
+            _colored_value(cells[3], risk.get("grau_possibilidade", ""), POSSIBILIDADE_COLORS)
+            _colored_value(cells[5], risk.get("grau_nivel_risco", ""), NIVEL_RISCO_COLORS)
+    for row in risk_rows:
+        _xml_replace_text(row, replacements)
+
+
+def _risk_block_end_index_for_pgr(rows: list) -> int:
+    for index in range(4, len(rows)):
+        text = _risk_type_norm_key(_xml_text(rows[index]))
+        if "GRAU DE NIVEL DE RISCO" in text or ("SEVERIDADE" in text and "NIVEL DE RISCO" in text):
+            return index + 1
+    for index in range(4, len(rows)):
+        text = _risk_type_norm_key(_xml_text(rows[index]))
+        if "CONTROLES EXISTENTES" in text or "NENHUM FATOR" in text:
+            return index
+    return len(rows)
+
+
+def _fill_pgr_sector_table(table_xml, sector: Mapping[str, Any], risks: list[Mapping[str, Any]]) -> None:
+    rows = table_xml.findall(qn("w:tr"))
+    if len(rows) < 8:
+        raise ValueError("O modelo de Inventário de Riscos do PGR precisa manter a tabela original.")
+    if not risks:
+        raise ValueError("Cada GES selecionado precisa ter pelo menos um risco.")
+
+    _set_cell_text(_row_cell(rows[0], 0), sector.get("setor", ""))
+    _set_cell_text(_row_cell(rows[2], 0), _sector_cargos_text(sector))
+
+    block_end = _risk_block_end_index_for_pgr(rows)
+    risk_template_rows = [deepcopy(row) for row in rows[4:block_end]]
+    if not risk_template_rows:
+        raise ValueError("Não encontrei o bloco-modelo de risco no PGR.")
+
+    # Remove linhas extras de risco já deixadas no modelo e recria somente as necessárias.
+    # O índice precisa considerar tblPr/tblGrid no XML, não apenas o número da linha.
+    insertion_index = list(table_xml).index(rows[4])
+    for row in list(rows[4:block_end]):
+        table_xml.remove(row)
+    for risk in risks:
+        block_rows = [deepcopy(row) for row in risk_template_rows]
+        _fill_pgr_risk_rows(block_rows, risk)
+        for block_row in block_rows:
+            table_xml.insert(insertion_index, block_row)
+            insertion_index += 1
+
+    has_psychosocial = any(_is_psychosocial_type(risk.get("tipo_risco")) for risk in risks)
+    phrase_template = None
+    for row in list(table_xml.findall(qn("w:tr"))):
+        if "NENHUM FATOR DE RISCO PSICOSSOCIAL" in _xml_text(row).upper():
+            if phrase_template is None:
+                phrase_template = deepcopy(row)
+            table_xml.remove(row)
+    if not has_psychosocial and phrase_template is not None:
+        table_xml.append(phrase_template)
+
+
+def generate_complete_pgr_docx(
+    groups_or_risks: Iterable[Mapping[str, Any]],
+    output_path: str | Path,
+    empresa: str,
+    cnpj: str,
+    data_atual: str | None = None,
+    data_final: str | None = None,
+    company_extra: Mapping[str, Any] | None = None,
+) -> Path:
+    """Gera o PGR completo compatível com o novo modelo 2026."""
+    items = list(groups_or_risks)
+    if not items:
+        raise ValueError("Selecione pelo menos um GES e um risco para gerar o PGR completo.")
+    if not empresa or not str(empresa).strip():
+        raise ValueError("Preencha o nome da empresa para gerar o PGR completo.")
+    if not cnpj or not str(cnpj).strip():
+        raise ValueError("Preencha o CNPJ da empresa para gerar o PGR completo.")
+    if not TEMPLATE_PGR_COMPLETO_PATH.exists():
+        raise FileNotFoundError(f"Modelo PGR completo não encontrado: {TEMPLATE_PGR_COMPLETO_PATH}")
+
+    groups = _sanitize_sector_risk_groups(items) if _is_grouped_payload(items) else [{"sector": {"setor": "", "cargos": []}, "risks": items}]
+    if not groups:
+        raise ValueError("Selecione pelo menos um GES e um risco para gerar o PGR completo.")
+
+    empresa = str(empresa).strip()
+    cnpj = str(cnpj).strip()
+    data_atual = (data_atual or datetime.now().strftime("%d/%m/%Y")).strip()
+    data_final = (data_final or "").strip()
+    company = _company_dict_for_docs(empresa, cnpj, data_atual, data_final, company_extra)
+
+    doc = Document(str(TEMPLATE_PGR_COMPLETO_PATH))
+    relation_table = _find_table_xml(doc, ["{{CARGO}}", "{{CBOCARGO}}", "{{N°FUNC}}", "{{DESCRIÇÃO ATIVIDADE}}"])
+    descritivo_table = _find_table_xml(doc, ["PAREDE:", "{{SETOR}}", "VENTILAÇÃO:"])
+    risco_pgr_table = _find_table_xml(doc, ["{{CARGOS}}", "{{risco}}", "{{GRAU DE NIVEL DE RISCO}}"])
+    plano_table = _find_table_xml(doc, ["PLANO", "{{risco}}", "{{INDICADOR DE EFETIVIDADE}}"])
+
+    sectors = _unique_sectors_from_groups(groups)
+    if not sectors:
+        raise ValueError("Cadastre e selecione pelo menos um GES para gerar o PGR completo.")
+
+    _replace_xml_element_with(relation_table.getparent(), relation_table, _build_relacao_elements(relation_table, sectors, data_atual, data_final))
+    _replace_xml_element_with(descritivo_table.getparent(), descritivo_table, _build_descritivo_elements(descritivo_table, sectors))
+    _replace_xml_element_with(risco_pgr_table.getparent(), risco_pgr_table, _build_risco_pgr_elements(risco_pgr_table, groups, break_before_first=False))
+    plano_elements = _build_action_plan_elements(plano_table, groups, data_atual=data_atual, data_final=data_final)
+    _replace_xml_element_with(plano_table.getparent(), plano_table, plano_elements)
+    if plano_elements:
+        _put_table_section_landscape(doc, plano_elements[0], "PLANO DE AÇÃO")
+
+    _fill_company_identification_tables(doc, company, sectors)
+    _insert_psychosocial_revision_line(doc, company)
+    _replace_doc_placeholders(doc, _company_replacements(company))
+    _compact_first_page_date_block(doc)
+    _compact_known_static_spacers(doc)
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    save_docx_with_default_font(doc, output_path)
+    return output_path
+
+
+def _fill_pcmso_risk_rows(risk_rows: list, risk: Mapping[str, Any]) -> None:
+    if len(risk_rows) < 4:
+        raise ValueError("O bloco de risco do PCMSO precisa manter 4 linhas.")
+    tipo = _normalize_option(risk.get("tipo_risco"))
+    descricao = _risk_text_value(risk, "descricao_agente", "risco")
+    possiveis = _risk_text_value(risk, "possiveis_lesoes")
+    fontes = _risk_text_value(risk, "fontes_circunstancias", default="Durante o processo de trabalho.")
+    fill = TIPO_RISCO_COLORS.get(tipo)
+    replacements = {
+        "{{TIPO DE RISCO}}": tipo,
+        "{{risco}}": descricao,
+        "{{ Possíveis lesões ou agravos a saúde}}": possiveis,
+        "{{Possíveis lesões ou agravos a saúde}}": possiveis,
+        "{{fontesgeradoras}}": fontes,
+    }
+    for row in risk_rows:
+        label = _risk_type_norm_key(_xml_text(row))
+        if "PERIGO FATOR DE RISCO" in label:
+            _set_labeled_row_value(row, tipo, fill=fill, font_color="000000")
+        elif "DESCRICAO DO AGENTE" in label:
+            _set_labeled_row_value(row, descricao)
+        elif "POSSIVEIS LESOES" in label:
+            _set_labeled_row_value(row, possiveis)
+        elif "FONTES" in label:
+            _set_labeled_row_value(row, fontes)
+        _xml_replace_text(row, replacements)
+
+
+def _fill_pcmso_exam_row(row_xml, exam: Mapping[str, Any]) -> None:
+    cells = row_xml.findall(qn("w:tc"))
+    if len(cells) < 7:
+        raise ValueError("A linha de exame do PCMSO precisa manter 7 células.")
+    values = [
+        exam.get("exame", "") or "Exame clínico",
+        exam.get("periodicidade", ""),
+        exam.get("admissional", ""),
+        exam.get("periodico", ""),
+        exam.get("retorno", ""),
+        exam.get("mudanca", ""),
+        exam.get("demissional", ""),
+    ]
+    for cell, value in zip(cells[:7], values):
+        _set_cell_text(cell, value)
+
+
+def _pcmso_fill_exam_table(table_xml, exams: list[Mapping[str, Any]]) -> None:
+    rows = table_xml.findall(qn("w:tr"))
+    template_row = None
+    for row in rows:
+        txt = _xml_text(row)
+        if "{{exame}}" in txt or "{{tempo de peridiocidade}}" in txt or "{{admissional}}" in txt:
+            template_row = row
+            break
+    if template_row is None:
+        return
+    template_copy = deepcopy(template_row)
+    insert_index = list(table_xml).index(template_row)
+    table_xml.remove(template_row)
+    if not exams:
+        exams = [{"exame": "Exame clínico", "periodicidade": "", "admissional": "X", "periodico": "X", "retorno": "X", "mudanca": "X", "demissional": "X"}]
+    for exam in exams:
+        new_row = deepcopy(template_copy)
+        _fill_pcmso_exam_row(new_row, exam)
+        table_xml.insert(insert_index, new_row)
+        insert_index += 1
+
+
+def _fill_pcmso_riscos_sector_table(table_xml, sector: Mapping[str, Any], risks: list[Mapping[str, Any]], exams: list[Mapping[str, Any]]) -> None:
+    rows = table_xml.findall(qn("w:tr"))
+    if len(rows) < 8:
+        raise ValueError("O modelo riscos PCMSO precisa manter as linhas básicas do bloco de risco.")
+    if not risks:
+        raise ValueError("Cada GES selecionado precisa ter pelo menos um risco.")
+
+    _set_cell_text(_row_cell(rows[0], 0), sector.get("setor", ""))
+    _set_cell_text(_row_cell(rows[2], 0), _sector_cargos_text(sector))
+
+    risk_template_rows = [deepcopy(row) for row in rows[4:8]]
+    # Preserva, quando o modelo antigo de bloco único tiver frase/exames dentro da mesma tabela.
+    phrase_rows = [deepcopy(row) for row in rows[8:] if "NENHUM FATOR DE RISCO PSICOSSOCIAL" in _xml_text(row).upper()]
+    exam_rows = []
+    exam_start = None
+    for idx, row in enumerate(rows[8:], start=8):
+        if "EXAMES RECOMENDADOS" in _xml_text(row).upper():
+            exam_start = idx
+            break
+    if exam_start is not None:
+        exam_rows = [deepcopy(row) for row in rows[exam_start:]]
+
+    # O índice precisa considerar tblPr/tblGrid no XML, não apenas o número da linha.
+    insert_index = list(table_xml).index(rows[4])
+    for row in list(rows[4:]):
+        table_xml.remove(row)
+    for risk in risks:
+        block_rows = [deepcopy(row) for row in risk_template_rows]
+        _fill_pcmso_risk_rows(block_rows, risk)
+        for block_row in block_rows:
+            table_xml.insert(insert_index, block_row)
+            insert_index += 1
+
+    if not any(_is_psychosocial_type(risk.get("tipo_risco")) for risk in risks):
+        for phrase in phrase_rows:
+            table_xml.insert(insert_index, phrase)
+            insert_index += 1
+
+    if exam_rows:
+        # Reconstrói a área de exames quando ela pertence à mesma tabela.
+        title_and_header = exam_rows[:-1]
+        template = exam_rows[-1]
+        for row in title_and_header:
+            table_xml.insert(insert_index, row)
+            insert_index += 1
+        if not exams:
+            exams = [{"exame": "Exame clínico", "periodicidade": "", "admissional": "X", "periodico": "X", "retorno": "X", "mudanca": "X", "demissional": "X"}]
+        for exam in exams:
+            row = deepcopy(template)
+            _fill_pcmso_exam_row(row, exam)
+            table_xml.insert(insert_index, row)
+            insert_index += 1
+
+
+def _build_pcmso_riscos_elements(template_table_xml, groups: list[Mapping[str, Any]], page_break_between_sectors: bool = True, phrase_table_xml=None, exams_table_xml=None) -> list:
+    elements: list = []
+    for index, group in enumerate(groups):
+        if index > 0 and page_break_between_sectors:
+            elements.append(_page_break_paragraph())
+        table = deepcopy(template_table_xml)
+        _fill_pcmso_riscos_sector_table(table, group["sector"], group["risks"], group.get("exams", []))
+        elements.append(table)
+        if phrase_table_xml is not None and not any(_is_psychosocial_type(risk.get("tipo_risco")) for risk in group.get("risks", [])):
+            elements.append(deepcopy(phrase_table_xml))
+        if exams_table_xml is not None:
+            exam_table = deepcopy(exams_table_xml)
+            _pcmso_fill_exam_table(exam_table, group.get("exams", []))
+            elements.append(exam_table)
+    return elements
+
+
+def _replace_pcmso_riscos_area(doc: Document, groups: list[Mapping[str, Any]]) -> None:
+    risco_table = _find_table_xml(doc, ["{{CARGOS}}", "{{TIPO DE RISCO}}", "{{risco}}"])
+    phrase_table = None
+    exams_table = None
+    try:
+        phrase_table = _find_table_xml(doc, ["NENHUM FATOR DE RISCO PSICOSSOCIAL"])
+    except Exception:
+        phrase_table = None
+    try:
+        exams_table = _find_table_xml(doc, ["EXAMES RECOMENDADOS", "{{tempo de peridiocidade}}"])
+    except Exception:
+        exams_table = None
+
+    risk_template = deepcopy(risco_table)
+    phrase_template = deepcopy(phrase_table) if phrase_table is not None and phrase_table is not risco_table else None
+    exams_template = deepcopy(exams_table) if exams_table is not None and exams_table is not risco_table else None
+    generated = [_page_break_paragraph()] + _build_pcmso_riscos_elements(risk_template, groups, True, phrase_template, exams_template)
+
+    parent = risco_table.getparent()
+    index = list(parent).index(risco_table)
+    _remove_element(risco_table)
+    if phrase_table is not None and phrase_table is not risco_table:
+        _remove_element(phrase_table)
+    if exams_table is not None and exams_table is not risco_table:
+        _remove_element(exams_table)
+    for offset, element in enumerate(generated):
+        parent.insert(index + offset, element)
+
+
+def _ltcat_risk_from_common(risk: Mapping[str, Any]) -> dict[str, Any]:
+    fontes = _risk_text_value(risk, "fontes_circunstancias", default="Durante o processo de trabalho.")
+    meio = _risk_text_value(risk, "ltcat_meio_propagacao", "meio_propagacao", default=fontes)
+    return {
+        "id": str(risk.get("id", "")),
+        "risco": _risk_text_value(risk, "descricao_agente", "risco"),
+        "tipo_risco": _normalize_option(risk.get("tipo_risco")),
+        "possiveis_lesoes": _risk_text_value(risk, "possiveis_lesoes"),
+        "meio_propagacao": meio,
+        "fontes_geradoras": fontes,
+        "via_exposicao": _risk_text_value(risk, "via_exposicao", "via", default=meio),
+        "tipo_exposicao": _risk_text_value(risk, "tipo_exposicao", "ltcat_periodicidade_jornada", default="Habitual/intermitente, conforme rotina do GES."),
+        "procedimentos_avaliacao": _risk_text_value(risk, "procedimentos_avaliacao", "procedimentos", default="Inspeção técnica dos postos e rotinas de trabalho; observação das atividades; análise da utilização de EPIs/EPCs e verificação das medidas de prevenção.") ,
+        "epis": _risk_text_value(risk, "epis"),
+        "epcs": _risk_text_value(risk, "epcs"),
+        "medidas_administrativas": _risk_text_value(risk, "medidas", "acoes", default="Monitoramento do risco"),
+        "insalubridade": _risk_text_value(risk, "ltcat_insalubridade", default="Não"),
+        "grau_insalubridade": _risk_text_value(risk, "ltcat_grau_insalubridade", default="Não aplicável"),
+        "aposentadoria_especial": _risk_text_value(risk, "ltcat_aposentadoria_especial", default="Não"),
+        "enquadramento_tecnico": _risk_text_value(risk, "ltcat_enquadramento_tecnico", default=DEFAULT_LTCAT_ENQUADRAMENTO),
+        "parecer_previdenciario": _risk_text_value(risk, "ltcat_parecer_previdenciario", default=DEFAULT_LTCAT_PARECER),
+        "periodicidade_jornada": _risk_text_value(risk, "ltcat_periodicidade_jornada", default="Habitual/intermitente, conforme rotina do GES."),
+        "codigo_esocial": _risk_text_value(risk, "codigo_esocial", "codigo_e_social", default="NÃO APLICÁVEL"),
+    }
+
+
+def _ltcat_fill_single_risk_block(table, start: int, risk: Mapping[str, Any], data_avaliacao: str) -> None:
+    tipo = _normalize_option(risk.get("tipo_risco"))
+    fill = TIPO_RISCO_COLORS.get(tipo)
+    aposentadoria_parecer = _risk_text_value(risk, "aposentadoria_especial", default="Não")
+    parecer = _risk_text_value(risk, "parecer_previdenciario")
+    if parecer and parecer.upper() not in aposentadoria_parecer.upper():
+        aposentadoria_parecer = f"{aposentadoria_parecer}. {parecer}"
+
+    replacements = {
+        "{{TIPO DE RISCO}}": tipo,
+        "{{risco}}": _risk_text_value(risk, "risco"),
+        "{{Possíveis lesões ou agravos a saúde}}": _risk_text_value(risk, "possiveis_lesoes"),
+        "{{ Possíveis lesões ou agravos a saúde}}": _risk_text_value(risk, "possiveis_lesoes"),
+        "{{meiodepropagacao}}": _risk_text_value(risk, "meio_propagacao"),
+        "{{fontesgeradoras}}": _risk_text_value(risk, "fontes_geradoras"),
+        "{{viadeexposição}}": _risk_text_value(risk, "via_exposicao"),
+        "{{tempodeexposição}}": _risk_text_value(risk, "tipo_exposicao", "periodicidade_jornada"),
+        "{{EPIs}}": _risk_text_value(risk, "epis"),
+        "{{EPCs}}": _risk_text_value(risk, "epcs"),
+        "{{data criação do laudo}}": data_avaliacao,
+        "{{datacriacaolaudo}}": data_avaliacao,
+        "{{simounao}}": _risk_text_value(risk, "insalubridade"),
+        "{{graudeinsalubridade}}": _risk_text_value(risk, "grau_insalubridade"),
+        "{{NÃO APLICÁVEL, CASO NÃO HAJA CÓDIGO}}": _risk_text_value(risk, "codigo_esocial", default="NÃO APLICÁVEL"),
+    }
+
+    for offset in range(0, 40):
+        row_index = start + offset
+        if row_index >= len(table.rows):
+            break
+        row_xml = table.rows[row_index]._tr
+        norm = _risk_type_norm_key(_xml_text(row_xml))
+        if "PERIGO FATOR DE RISCO" in norm:
+            _set_labeled_row_value(row_xml, tipo, fill=fill, font_color="000000")
+        elif "DESCRICAO DO AGENTE" in norm:
+            _set_labeled_row_value(row_xml, replacements["{{risco}}"])
+        elif "POSSIVEIS LESOES" in norm:
+            _set_labeled_row_value(row_xml, replacements["{{Possíveis lesões ou agravos a saúde}}"])
+        elif "MEIO DE PROPAGACAO" in norm:
+            _set_labeled_row_value(row_xml, replacements["{{meiodepropagacao}}"])
+        elif "FONTES GERADORAS" in norm:
+            _set_labeled_row_value(row_xml, replacements["{{fontesgeradoras}}"])
+        elif "VIA DE EXPOSICAO" in norm:
+            _set_labeled_row_value(row_xml, replacements["{{viadeexposição}}"])
+        elif "TIPO DE EXPOSICAO" in norm:
+            _set_labeled_row_value(row_xml, replacements["{{tempodeexposição}}"])
+        elif "PROCEDIMENTOS DE AVALIACAO" in norm:
+            _set_labeled_row_value(row_xml, _risk_text_value(risk, "procedimentos_avaliacao"))
+        elif norm.strip() == "EPI" or norm.startswith("EPI "):
+            _set_labeled_row_value(row_xml, replacements["{{EPIs}}"])
+        elif norm.strip() == "EPC" or norm.startswith("EPC "):
+            _set_labeled_row_value(row_xml, replacements["{{EPCs}}"])
+        elif "MEDIDAS ADMINISTRATIVAS" in norm:
+            _set_labeled_row_value(row_xml, _risk_text_value(risk, "medidas_administrativas", default="Monitoramento do risco"))
+        elif "DATA BASE DA AVALIACAO" in norm:
+            _set_labeled_row_value(row_xml, data_avaliacao)
+        elif "NR 15" in norm and "INSALUBRIDADE" in norm:
+            _set_labeled_row_value(row_xml, _risk_text_value(risk, "enquadramento_tecnico"))
+        elif "GRAU DE INSALUBRIDADE" in norm:
+            _set_labeled_row_value(row_xml, replacements["{{graudeinsalubridade}}"])
+        elif "APOSENTADORIA ESPECIAL" in norm:
+            _set_labeled_row_value(row_xml, aposentadoria_parecer)
+        elif "CODIGO DO E SOCIAL" in norm or "CODIGO DO ESOCIAL" in norm:
+            _set_labeled_row_value(row_xml, replacements["{{NÃO APLICÁVEL, CASO NÃO HAJA CÓDIGO}}"])
+        _xml_replace_text(row_xml, replacements)

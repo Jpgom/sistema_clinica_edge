@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f5f7fb">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<style>
+  .step-panel{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:22px;margin-bottom:18px;box-shadow:0 10px 25px rgba(15,23,42,.06)}
+  .step-title{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+  .step-badge{width:30px;height:30px;border-radius:999px;background:#1d4ed8;color:white;display:inline-flex;align-items:center;justify-content:center;font-weight:800}
+  .muted{color:#64748b;font-size:.95rem}
+  .file-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:14px}
+  .field-card{border:1px solid #e5e7eb;background:#f8fafc;border-radius:14px;padding:14px}
+  .month-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:12px}
+  .month-item{border:1px solid #dbe3ef;background:#fff;border-radius:12px;padding:9px 10px;display:flex;align-items:center;gap:8px;font-weight:700}
+  .source-list{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .source-chip{background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;border-radius:999px;padding:6px 10px;font-weight:700;font-size:.86rem}
+  .warning-box{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:14px;padding:12px 14px;margin-top:12px}
+  .success-box{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:14px;padding:12px 14px;margin-top:12px}
+  .actions-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:18px}
+  input[type=file]{width:100%;padding:10px;border:1px dashed #94a3b8;border-radius:12px;background:white}
+</style>
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand"><img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho"><div>EDGE<small>Exames a Prazo</small></div></div>
+    <div class="nav-card">
+      <a class="nav-link" href="{{ url_for('home') }}">🏠 Início</a>
+      <a class="nav-link" href="{{ url_for('relatorios') }}">📊 Relatórios</a>
+      <a class="nav-link active" href="{{ url_for('exames_a_prazo') }}">🧾 Exames a Prazo</a>
+      <a class="nav-link" href="{{ url_for('encaminhamentos') }}">📄 Encaminhamentos</a>
+      <a class="nav-link" href="{{ url_for('encaminhamento_especialista') }}">📝 Enc. individual</a>
+      <a class="nav-link" href="{{ url_for('encaminhamento_complementares') }}">🧪 Enc. complementares</a>
+      <a class="nav-link" href="{{ url_for('renumerador') }}">🔢 Renumerador</a>
+      <a class="nav-link" href="{{ url_for('esocial') }}">🗂️ E-SOCIAL</a>
+      <a class="nav-link" href="{{ url_for('laudo_pcd') }}">♿ Laudo PCD</a>
+      <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
+      <a class="nav-link" href="{{ url_for('atestado_medico') }}">🧾 Atestado Médico</a>
+      <a class="nav-link" href="/pgr/">🧾 PGR / SST</a>
+      <a class="nav-link" href="/pgr/complementar-laudos">🛠️ Complementar laudos</a>
+      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
+      {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link" href="{{ url_for('auditoria') }}">📋 Auditoria</a>{% endif %}
+      <a class="nav-link" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}">🚪 Sair</a>
+    </div>
+  </aside>
+
+  <main class="main-area">
+    <div class="topbar compact-topbar"><div class="page-title"><h1>Exames a Prazo</h1><p>Busca exames por CNPJ nas bases de consulta e gera planilhas com o mesmo nome dos arquivos enviados.</p></div></div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-stack">
+          {% for category, message in messages %}
+            <div class="flash flash--{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <section class="step-panel">
+      <div class="step-title"><span class="step-badge">1</span><div><h2>Enviar bases de consulta</h2><p class="muted">Use uma ou duas planilhas onde ficam as guias mensais e os exames lançados.</p></div></div>
+      <form method="POST" action="{{ url_for('exames_a_prazo_guias') }}" enctype="multipart/form-data">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <div class="file-grid">
+          <label class="field-card"><strong>Base de consulta 1</strong><br><span class="muted">Arquivo .xlsx obrigatório.</span><br><input type="file" name="source_base_1" accept=".xlsx" required></label>
+          <label class="field-card"><strong>Base de consulta 2</strong><br><span class="muted">Opcional. Exemplo: outra unidade/base.</span><br><input type="file" name="source_base_2" accept=".xlsx"></label>
+        </div>
+        <div class="actions-row"><button class="btn btn--primary" type="submit">Carregar guias mensais</button><span class="muted">Limite geral de upload: {{ max_upload_mb }} MB.</span></div>
+      </form>
+    </section>
+
+    {% if source_names %}
+      <div class="success-box"><strong>Bases carregadas:</strong><div class="source-list">{% for name in source_names %}<span class="source-chip">{{ name }}</span>{% endfor %}</div></div>
+    {% endif %}
+
+    {% if stage == 'generate' and month_options %}
+    <section class="step-panel">
+      <div class="step-title"><span class="step-badge">2</span><div><h2>Escolher guias e enviar planilhas com CNPJ</h2><p class="muted">O sistema vai procurar os CNPJs em qualquer célula das planilhas enviadas. Cada planilha gera uma saída com o mesmo nome.</p></div></div>
+      <form method="POST" action="{{ url_for('exames_a_prazo_gerar') }}" enctype="multipart/form-data">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="source_token" value="{{ source_token }}">
+
+        <h3>Guias/competências que entrarão no resultado</h3>
+        <div class="month-grid">
+          {% for month in month_options %}
+            <label class="month-item"><input type="checkbox" name="selected_months" value="{{ month }}" {% if month in selected_months %}checked{% endif %}> {{ month }}</label>
+          {% endfor %}
+        </div>
+
+        <div class="warning-box"><strong>Importante:</strong> CNPJs sem exames não serão descartados. Eles sairão na planilha com a faixa amarela de identificação.</div>
+
+        <div class="file-grid" style="margin-top:18px">
+          <label class="field-card"><strong>Planilhas com CNPJs ou ZIP</strong><br><span class="muted">Envie uma ou várias planilhas .xlsx, ou um ZIP contendo várias planilhas.</span><br><input type="file" name="request_files" accept=".xlsx,.zip" multiple required></label>
+        </div>
+
+        <div class="actions-row"><button class="btn btn--primary" type="submit">Gerar Exames a Prazo</button><a class="btn btn--secondary" href="{{ url_for('exames_a_prazo') }}">Trocar bases</a></div>
+      </form>
+    </section>
+    {% endif %}
+  </main>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

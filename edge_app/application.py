@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, send_file, flash, redirect, url_for, jsonify, session, abort
-import os, re, tempfile, unicodedata, zipfile, io, sqlite3, shutil, subprocess, logging, secrets, hmac
+import os, re, tempfile, unicodedata, zipfile, io, sqlite3, shutil, subprocess, logging, secrets, hmac, json, hashlib
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -60,6 +60,13 @@ ATESTADO_MEDICO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ATESTAD
 PCD_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "MODELO LAUDO PCD.docx")
 ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE.docx")
 ENCAMINHAMENTO_COMPLEMENTARES_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTO_COMPLEMENTARES_TEMPLATE.docx")
+EXAMES_A_PRAZO_SOLO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "exames_a_prazo_templates", "MODELO_PRA_EMPRESA_SOLO.xlsx")
+EXAMES_A_PRAZO_GROUP_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "exames_a_prazo_templates", "MODELO_PARA_MULTIPLAS_EMPRESAS.xlsx")
+EXAMES_A_PRAZO_SOURCE_EXTENSIONS = {".xlsx"}
+EXAMES_A_PRAZO_REQUEST_EXTENSIONS = {".xlsx", ".zip"}
+EXAMES_A_PRAZO_MAX_REQUEST_FILES = 200
+EXAMES_A_PRAZO_MAX_SINGLE_XLSX_BYTES = 30 * 1024 * 1024
+EXAMES_A_PRAZO_MAX_ZIP_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.environ.get("RENDER_DISK_PATH") or os.environ.get("DATA_DIR") or BASE_DIR
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -2884,6 +2891,404 @@ def encaminhamento_especialista_gerar():
             return encaminhamento_especialista_render(form_data)
         payload = Path(output_path).read_bytes()
         return send_file(io.BytesIO(payload), as_attachment=True, download_name=f'{filename_base}.docx', mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
+
+# =========================
+# EXAMES A PRAZO
+# =========================
+def _exames_a_prazo_base_dir() -> str:
+    path = os.path.join(DATA_DIR, "exames_a_prazo")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _exames_a_prazo_token_ok(token: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]{12,80}", token or ""))
+
+
+def _exames_a_prazo_job_dir(token: str) -> str:
+    if not _exames_a_prazo_token_ok(token):
+        raise ValueError("Sessão inválida. Reenvie as bases de consulta.")
+    base = os.path.abspath(_exames_a_prazo_base_dir())
+    path = os.path.abspath(os.path.join(base, token))
+    if not (path == base or path.startswith(base + os.sep)):
+        raise ValueError("Sessão inválida.")
+    return path
+
+
+def _read_upload_bytes(upload) -> bytes:
+    try:
+        upload.stream.seek(0)
+    except Exception:
+        pass
+    raw = upload.read()
+    try:
+        upload.stream.seek(0)
+    except Exception:
+        pass
+    return raw or b""
+
+
+def _exames_a_prazo_cleanup_old(max_age_hours: int = 24) -> None:
+    base = _exames_a_prazo_base_dir()
+    now = datetime.now().timestamp()
+    max_age = max_age_hours * 3600
+    try:
+        for name in os.listdir(base):
+            full = os.path.join(base, name)
+            if os.path.isdir(full) and now - os.path.getmtime(full) > max_age:
+                shutil.rmtree(full, ignore_errors=True)
+    except Exception as exc:
+        logger.warning("Falha ao limpar sessões antigas de Exames a Prazo: %s", exc)
+
+
+def _exames_a_prazo_load_context(token: str):
+    job_dir = _exames_a_prazo_job_dir(token)
+    manifest_path = os.path.join(job_dir, "manifest.json")
+    if not os.path.exists(manifest_path):
+        raise ValueError("As bases de consulta não foram encontradas. Reenvie as bases.")
+    with open(manifest_path, "r", encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    source_paths = [os.path.join(job_dir, name) for name in manifest.get("source_files", [])]
+    source_files = []
+    for path in source_paths:
+        if os.path.exists(path):
+            with open(path, "rb") as fh:
+                source_files.append(fh.read())
+    if not source_files:
+        raise ValueError("Nenhuma base de consulta válida foi localizada. Reenvie as bases.")
+    return manifest, source_files
+
+
+def _exames_a_prazo_expand_request_uploads(uploads):
+    extracted = []
+    errors = []
+
+    for upload in uploads or []:
+        if not upload or not getattr(upload, "filename", ""):
+            continue
+        original_name = Path(upload.filename).name
+        suffix = Path(original_name).suffix.lower()
+        raw = _read_upload_bytes(upload)
+        if not raw:
+            errors.append(f"{original_name}: arquivo vazio.")
+            continue
+
+        if suffix == ".xlsx":
+            if len(raw) > EXAMES_A_PRAZO_MAX_SINGLE_XLSX_BYTES:
+                errors.append(f"{original_name}: arquivo maior que o limite de 30 MB.")
+                continue
+            extracted.append((original_name, raw))
+            continue
+
+        if suffix == ".zip":
+            try:
+                with zipfile.ZipFile(BytesIO(raw), "r") as zf:
+                    infos = [
+                        info for info in zf.infolist()
+                        if not info.is_dir()
+                        and Path(info.filename).suffix.lower() == ".xlsx"
+                        and not Path(info.filename).name.startswith("~$")
+                        and "__MACOSX" not in Path(info.filename).parts
+                    ]
+                    if not infos:
+                        errors.append(f"{original_name}: o ZIP não contém nenhuma planilha .xlsx.")
+                        continue
+                    if len(infos) > EXAMES_A_PRAZO_MAX_REQUEST_FILES:
+                        errors.append(f"{original_name}: o ZIP contém {len(infos)} planilhas; o limite é {EXAMES_A_PRAZO_MAX_REQUEST_FILES}.")
+                        continue
+                    if sum(info.file_size for info in infos) > EXAMES_A_PRAZO_MAX_ZIP_UNCOMPRESSED_BYTES:
+                        errors.append(f"{original_name}: o conteúdo descompactado ultrapassa 250 MB.")
+                        continue
+
+                    for info in infos:
+                        filename = Path(info.filename).name
+                        if info.file_size > EXAMES_A_PRAZO_MAX_SINGLE_XLSX_BYTES:
+                            errors.append(f"{filename}: arquivo maior que o limite de 30 MB e foi ignorado.")
+                            continue
+                        extracted.append((filename, zf.read(info)))
+            except zipfile.BadZipFile:
+                errors.append(f"{original_name}: ZIP inválido ou corrompido.")
+            continue
+
+        errors.append(f"{original_name}: formato não aceito. Envie .xlsx ou .zip.")
+
+    unique = []
+    seen = {}
+    for filename, content in extracted:
+        key = filename.casefold()
+        if key in seen:
+            errors.append(
+                f"Nome duplicado '{filename}'. Como a saída precisa manter exatamente o nome original, deixe apenas uma planilha com esse nome."
+            )
+            continue
+        seen[key] = filename
+        unique.append((filename, content))
+
+    if len(unique) > EXAMES_A_PRAZO_MAX_REQUEST_FILES:
+        errors.append(f"Foram recebidas mais de {EXAMES_A_PRAZO_MAX_REQUEST_FILES} planilhas; apenas as primeiras foram consideradas.")
+        unique = unique[:EXAMES_A_PRAZO_MAX_REQUEST_FILES]
+
+    return unique, errors
+
+
+@app.route('/exames-a-prazo', methods=['GET'])
+def exames_a_prazo():
+    return render_template(
+        'exames_a_prazo.html',
+        title='Exames a Prazo',
+        month_options=[],
+        source_token='',
+        source_names=[],
+        selected_months=[],
+        stage='upload',
+        max_upload_mb=get_max_upload_mb(),
+    )
+
+
+@app.route('/exames-a-prazo/guias', methods=['POST'])
+def exames_a_prazo_guias():
+    from edge_app.exames_a_prazo_core import get_month_sheets_from_sources
+
+    _exames_a_prazo_cleanup_old()
+    uploads = [request.files.get('source_base_1'), request.files.get('source_base_2')]
+    source_files = []
+    source_names = []
+    messages = []
+
+    for idx, upload in enumerate(uploads, 1):
+        if not upload or not getattr(upload, 'filename', ''):
+            continue
+        ok, msg = validate_uploaded_file(upload, EXAMES_A_PRAZO_SOURCE_EXTENSIONS, f'a base de consulta {idx}')
+        if not ok:
+            messages.append(msg)
+            continue
+        raw = _read_upload_bytes(upload)
+        if not raw:
+            messages.append(f"{Path(upload.filename).name}: arquivo vazio.")
+            continue
+        if len(raw) > EXAMES_A_PRAZO_MAX_SINGLE_XLSX_BYTES:
+            messages.append(f"{Path(upload.filename).name}: arquivo maior que o limite de 30 MB.")
+            continue
+        source_files.append(raw)
+        source_names.append(Path(upload.filename).name)
+
+    if messages:
+        for msg in messages:
+            flash(msg, 'error')
+    if not source_files:
+        flash('Envie pelo menos uma base de consulta em .xlsx.', 'error')
+        return redirect(url_for('exames_a_prazo'))
+
+    try:
+        month_options = get_month_sheets_from_sources(source_files)
+    except Exception as exc:
+        logger.exception('Erro ao ler bases de consulta do Exames a Prazo')
+        flash(f'Não foi possível ler as bases de consulta: {exc}', 'error')
+        return redirect(url_for('exames_a_prazo'))
+
+    if not month_options:
+        flash('Nenhuma guia mensal foi identificada nas bases enviadas.', 'error')
+        return redirect(url_for('exames_a_prazo'))
+
+    token = secrets.token_urlsafe(24)
+    job_dir = _exames_a_prazo_job_dir(token)
+    os.makedirs(job_dir, exist_ok=True)
+    saved = []
+    for idx, raw in enumerate(source_files, 1):
+        filename = f'source_{idx}.xlsx'
+        with open(os.path.join(job_dir, filename), 'wb') as fh:
+            fh.write(raw)
+        saved.append(filename)
+
+    manifest = {
+        'created_at': datetime.now().isoformat(timespec='seconds'),
+        'source_files': saved,
+        'source_names': source_names,
+        'month_options': month_options,
+    }
+    with open(os.path.join(job_dir, 'manifest.json'), 'w', encoding='utf-8') as fh:
+        json.dump(manifest, fh, ensure_ascii=False, indent=2)
+
+    default_months = month_options[-2:] if len(month_options) >= 2 else month_options
+    return render_template(
+        'exames_a_prazo.html',
+        title='Exames a Prazo',
+        month_options=month_options,
+        source_token=token,
+        source_names=source_names,
+        selected_months=default_months,
+        stage='generate',
+        max_upload_mb=get_max_upload_mb(),
+    )
+
+
+@app.route('/exames-a-prazo/gerar', methods=['POST'])
+def exames_a_prazo_gerar():
+    from edge_app.exames_a_prazo_core import (
+        company_key,
+        extract_cnpjs_from_workbook,
+        format_cnpj,
+        generate_group_workbook,
+        generate_solo_workbook,
+        parse_selected_months_from_sources,
+    )
+
+    token = request.form.get('source_token', '').strip()
+    selected_months = [m.strip() for m in request.form.getlist('selected_months') if m.strip()]
+    try:
+        manifest, source_files = _exames_a_prazo_load_context(token)
+    except Exception as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('exames_a_prazo'))
+
+    if not selected_months:
+        flash('Selecione pelo menos uma guia/competência.', 'error')
+        return render_template(
+            'exames_a_prazo.html',
+            title='Exames a Prazo',
+            month_options=manifest.get('month_options', []),
+            source_token=token,
+            source_names=manifest.get('source_names', []),
+            selected_months=[],
+            stage='generate',
+            max_upload_mb=get_max_upload_mb(),
+        )
+
+    invalid_months = [m for m in selected_months if m not in set(manifest.get('month_options', []))]
+    if invalid_months:
+        flash('Uma ou mais guias selecionadas não pertencem às bases carregadas. Recarregue as bases e tente novamente.', 'error')
+        return redirect(url_for('exames_a_prazo'))
+
+    request_uploads = request.files.getlist('request_files')
+    request_files, expansion_errors = _exames_a_prazo_expand_request_uploads(request_uploads)
+    errors = list(expansion_errors)
+    requests_data = []
+    all_requested_keys = []
+    seen_requested_keys = set()
+
+    for filename, content in request_files:
+        try:
+            cnpjs = extract_cnpjs_from_workbook(content)
+        except Exception as exc:
+            errors.append(f'{filename}: não foi possível ler a planilha ({exc}).')
+            continue
+        if not cnpjs:
+            errors.append(f'{filename}: nenhum CNPJ foi encontrado e a planilha foi ignorada.')
+            continue
+        requests_data.append({'name': filename, 'bytes': content, 'cnpjs': cnpjs})
+        for cnpj in cnpjs:
+            key = company_key(cnpj)
+            if key not in seen_requested_keys:
+                seen_requested_keys.add(key)
+                all_requested_keys.append(key)
+
+    if not requests_data:
+        for msg in errors or ['Envie pelo menos uma planilha .xlsx ou ZIP contendo CNPJs.']:
+            flash(msg, 'error')
+        return render_template(
+            'exames_a_prazo.html',
+            title='Exames a Prazo',
+            month_options=manifest.get('month_options', []),
+            source_token=token,
+            source_names=manifest.get('source_names', []),
+            selected_months=selected_months,
+            stage='generate',
+            max_upload_mb=get_max_upload_mb(),
+        )
+
+    if not os.path.exists(EXAMES_A_PRAZO_SOLO_TEMPLATE_PATH) or not os.path.exists(EXAMES_A_PRAZO_GROUP_TEMPLATE_PATH):
+        flash('Os modelos do Exames a Prazo não foram encontrados no sistema.', 'error')
+        return redirect(url_for('exames_a_prazo'))
+
+    try:
+        records, companies = parse_selected_months_from_sources(
+            source_files,
+            selected_months,
+            all_requested_keys,
+        )
+    except Exception as exc:
+        logger.exception('Erro ao analisar guias do Exames a Prazo')
+        flash(f'Erro ao analisar as guias selecionadas: {exc}', 'error')
+        return render_template(
+            'exames_a_prazo.html',
+            title='Exames a Prazo',
+            month_options=manifest.get('month_options', []),
+            source_token=token,
+            source_names=manifest.get('source_names', []),
+            selected_months=selected_months,
+            stage='generate',
+            max_upload_mb=get_max_upload_mb(),
+        )
+
+    output_files = {}
+    for req in requests_data:
+        filename = req['name']
+        cnpjs = req['cnpjs']
+        keys = [company_key(cnpj) for cnpj in cnpjs]
+        request_companies = {
+            key: companies.get(key, format_cnpj(cnpj))
+            for key, cnpj in zip(keys, cnpjs)
+        }
+        try:
+            if len(keys) == 1:
+                key = keys[0]
+                content = generate_solo_workbook(
+                    records,
+                    selected_months,
+                    key,
+                    request_companies[key],
+                    EXAMES_A_PRAZO_SOLO_TEMPLATE_PATH,
+                    include_empty_months=True,
+                    empty_title_only=True,
+                )
+            else:
+                content = generate_group_workbook(
+                    records,
+                    selected_months,
+                    keys,
+                    request_companies,
+                    EXAMES_A_PRAZO_GROUP_TEMPLATE_PATH,
+                    include_empty_months=True,
+                    empty_title_only=True,
+                )
+            if content:
+                output_files[filename] = content
+            else:
+                errors.append(f'{filename}: não foi possível montar a planilha.')
+        except Exception as exc:
+            logger.exception('Erro ao gerar planilha Exames a Prazo')
+            errors.append(f'{filename}: {exc}')
+
+    if not output_files:
+        for msg in errors or ['Nenhum arquivo foi gerado.']:
+            flash(msg, 'error')
+        return render_template(
+            'exames_a_prazo.html',
+            title='Exames a Prazo',
+            month_options=manifest.get('month_options', []),
+            source_token=token,
+            source_names=manifest.get('source_names', []),
+            selected_months=selected_months,
+            stage='generate',
+            max_upload_mb=get_max_upload_mb(),
+        )
+
+    bio = BytesIO()
+    with zipfile.ZipFile(bio, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+        for filename, content in output_files.items():
+            zf.writestr(sanitize_filename(filename), content)
+        if errors:
+            zf.writestr('ATENCAO_ERROS.txt', '\n'.join(errors))
+    bio.seek(0)
+
+    audit_log('exames_a_prazo_gerado', f'{len(output_files)} planilha(s); guias: {", ".join(selected_months)}')
+    return send_file(
+        bio,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name='EXAMES_A_PRAZO.zip',
+    )
 
 @app.route("/healthz")
 def healthz():

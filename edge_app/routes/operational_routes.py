@@ -2,6 +2,9 @@
 from edge_app import application as app_module
 
 relatorios = app_module.relatorios
+exames_a_prazo = app_module.exames_a_prazo
+exames_a_prazo_guias = app_module.exames_a_prazo_guias
+exames_a_prazo_gerar = app_module.exames_a_prazo_gerar
 encaminhamentos = app_module.encaminhamentos
 encaminhamento_especialista = app_module.encaminhamento_especialista
 encaminhamento_especialista_gerar = app_module.encaminhamento_especialista_gerar

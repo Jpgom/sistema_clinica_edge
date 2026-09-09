@@ -3131,6 +3131,8 @@ def exames_a_prazo_gerar():
         format_cnpj,
         generate_group_workbook,
         generate_solo_workbook,
+        month_identity,
+        normalize_text,
         parse_selected_months_from_sources,
     )
 
@@ -3155,9 +3157,27 @@ def exames_a_prazo_gerar():
             max_upload_mb=get_max_upload_mb(),
         )
 
-    invalid_months = [m for m in selected_months if m not in set(manifest.get('month_options', []))]
+    # Validação tolerante: algumas abas do Excel podem ter espaço oculto no
+    # final do nome (ex.: "JANEIRO.2025 OK "). O checkbox da página pode voltar
+    # como "JANEIRO.2025 OK", então não podemos comparar apenas texto exato.
+    month_options = [str(m).strip() for m in manifest.get('month_options', []) if str(m).strip()]
+    option_exact = set(month_options)
+    option_norms = {normalize_text(m) for m in month_options}
+    option_ids = {month_identity(m) for m in month_options if month_identity(m) is not None}
+
+    invalid_months = []
+    for month in selected_months:
+        month_id = month_identity(month)
+        if month in option_exact or normalize_text(month) in option_norms or (month_id is not None and month_id in option_ids):
+            continue
+        invalid_months.append(month)
+
     if invalid_months:
-        flash('Uma ou mais guias selecionadas não pertencem às bases carregadas. Recarregue as bases e tente novamente.', 'error')
+        flash(
+            'Uma ou mais guias selecionadas não pertencem às bases carregadas. Recarregue as bases e tente novamente. '
+            f'Guias não reconhecidas: {", ".join(invalid_months)}',
+            'error'
+        )
         return redirect(url_for('exames_a_prazo'))
 
     request_uploads = request.files.getlist('request_files')

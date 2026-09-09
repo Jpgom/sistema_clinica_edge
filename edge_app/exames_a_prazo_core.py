@@ -242,12 +242,18 @@ def get_month_sheets(file_bytes: bytes) -> List[str]:
                 if elem.tag.rsplit("}", 1)[-1] == "sheet":
                     name = elem.attrib.get("name")
                     if name and is_month_sheet(name):
-                        names.append(name)
+                        # O Excel permite guias com espaços no final (ex.:
+                        # "JANEIRO.2025 OK "). O navegador envia o valor do
+                        # checkbox sem esse espaço e a validação posterior podia
+                        # acusar falsamente que a guia não pertencia à base.
+                        # Guardamos o nome de exibição limpo; na leitura final o
+                        # nome real da guia é resolvido por normalização/mês-ano.
+                        names.append(str(name).strip())
             return sorted(names, key=month_sort_key)
     except Exception:
         wb = load_workbook(BytesIO(file_bytes), read_only=True, data_only=False, keep_links=False)
         try:
-            sheets = [name for name in wb.sheetnames if is_month_sheet(name)]
+            sheets = [str(name).strip() for name in wb.sheetnames if is_month_sheet(name)]
         finally:
             wb.close()
         return sorted(sheets, key=month_sort_key)
@@ -267,9 +273,9 @@ def get_month_sheets_from_sources(source_files: Sequence[bytes]) -> List[str]:
         for name in get_month_sheets(file_bytes):
             identity = month_identity(name)
             if identity is not None:
-                by_identity.setdefault(identity, name)
+                by_identity.setdefault(identity, str(name).strip())
             else:
-                fallback_names.setdefault(normalize_text(name), name)
+                fallback_names.setdefault(normalize_text(name), str(name).strip())
 
     names = list(by_identity.values()) + list(fallback_names.values())
     return sorted(names, key=month_sort_key)

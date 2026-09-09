@@ -71,7 +71,7 @@ MONTH_NAMES = {
 
 HEADER_ALIASES = {
     "employee": {
-        "FUNCIONARIO", "FUNCIONARIO(A)", "COLABORADOR", "NOME", "NOME DO FUNCIONARIO"
+        "FUNCIONARIO", "FUNCIONARIO(A)", "COLABORADOR", "NOME", "NOME DO FUNCIONARIO", "FUNCIONARIO "
     },
     "transaction": {"ID TRANSACAO", "ID DA TRANSACAO", "TRANSACAO", "ID"},
     "receipt": {"RECIBO", "N RECIBO", "NO RECIBO", "NUMERO RECIBO", "NUMERO DO RECIBO"},
@@ -309,6 +309,46 @@ def _match_header(value: object) -> str | None:
     return None
 
 
+
+def _legacy_layout_mapping(ws) -> Dict[str, int]:
+    """Mapeia planilhas antigas/operacionais sem linha de cabeçalho.
+
+    A base enviada pelo usuário tem meses como JANEIRO.2025 OK sem cabeçalho
+    na primeira linha. Nesses casos, a coluna L é o SETOR/empresa e as demais
+    colunas seguem o padrão operacional do sistema. Sem esse fallback, a busca
+    encontra o CNPJ, mas o arquivo de saída fica sem recibo, valor, exame,
+    função e depositante, dando a impressão de resultado vazio/incompleto.
+    """
+    max_col = ws.max_column or 0
+    if max_col >= 12:
+        return {
+            "employee": 1,
+            "receipt": 3,
+            "value": 4,
+            "exam_number": 5,
+            "exam_type": 6,
+            "function": 7,
+            "transaction": 8,
+            "depositor": 9,
+            "date": 10,
+            "status": 11,
+            "company": 12,
+        }
+    if max_col >= 10:
+        return {
+            "employee": 1,
+            "receipt": 2,
+            "value": 3,
+            "exam_number": 4,
+            "exam_type": 5,
+            "function": 6,
+            "health_card": 7,
+            "date": 8,
+            "status": 9,
+            "company": 10,
+        }
+    return {"employee": 1}
+
 def _detect_header(ws, max_scan_rows: int = 30) -> Tuple[int, Dict[str, int]]:
     best_row = 1
     best_map: Dict[str, int] = {}
@@ -330,22 +370,18 @@ def _detect_header(ws, max_scan_rows: int = 30) -> Tuple[int, Dict[str, int]]:
             best_row = row_idx
             best_map = mapping
 
-    if "company" not in best_map:
-        # Regra principal informada pelo usuário: empresa na coluna L.
-        if (ws.max_column or 0) >= 12:
-            best_map["company"] = 12
-        elif (ws.max_column or 0) >= 10:
-            best_map["company"] = 10
+    # Quando a guia não tem cabeçalho real (ex.: JANEIRO.2025 OK), o melhor
+    # score fica muito baixo. Nesse cenário usamos o layout operacional padrão.
+    # Isso também impede que o sistema descarte os exames por ausência de
+    # colunas reconhecidas.
+    if best_score < 3:
+        return 1, _legacy_layout_mapping(ws)
 
-    if "employee" not in best_map:
-        best_map["employee"] = 1
-    if "date" not in best_map:
-        best_map["date"] = 10 if (ws.max_column or 0) >= 12 else 8
-    if "status" not in best_map:
-        best_map["status"] = 11 if (ws.max_column or 0) >= 12 else 9
+    legacy = _legacy_layout_mapping(ws)
+    for key, col_idx in legacy.items():
+        best_map.setdefault(key, col_idx)
 
     return best_row, best_map
-
 
 def _value(row_values: Sequence[object], col_idx: int | None) -> object:
     if not col_idx or col_idx <= 0 or col_idx > len(row_values):

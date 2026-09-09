@@ -34,7 +34,7 @@ except Exception:
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
-app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", 75 * 1024 * 1024))
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", 250 * 1024 * 1024))
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SESSION_COOKIE_SECURE", "1") not in {"0", "false", "False"}
@@ -65,8 +65,8 @@ EXAMES_A_PRAZO_GROUP_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ex
 EXAMES_A_PRAZO_SOURCE_EXTENSIONS = {".xlsx"}
 EXAMES_A_PRAZO_REQUEST_EXTENSIONS = {".xlsx", ".zip"}
 EXAMES_A_PRAZO_MAX_REQUEST_FILES = 200
-EXAMES_A_PRAZO_MAX_SINGLE_XLSX_BYTES = 30 * 1024 * 1024
-EXAMES_A_PRAZO_MAX_ZIP_UNCOMPRESSED_BYTES = 250 * 1024 * 1024
+EXAMES_A_PRAZO_MAX_SINGLE_XLSX_BYTES = int(os.environ.get("EXAMES_A_PRAZO_MAX_SINGLE_XLSX_MB", "150")) * 1024 * 1024
+EXAMES_A_PRAZO_MAX_ZIP_UNCOMPRESSED_BYTES = int(os.environ.get("EXAMES_A_PRAZO_MAX_ZIP_MB", "600")) * 1024 * 1024
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.environ.get("RENDER_DISK_PATH") or os.environ.get("DATA_DIR") or BASE_DIR
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -101,7 +101,7 @@ def sanitize_filename(name: str) -> str:
 
 
 def get_max_upload_mb() -> int:
-    return max(1, int(app.config.get("MAX_CONTENT_LENGTH", 75 * 1024 * 1024)) // (1024 * 1024))
+    return max(1, int(app.config.get("MAX_CONTENT_LENGTH", 250 * 1024 * 1024)) // (1024 * 1024))
 
 def validate_uploaded_file(file_storage, allowed_extensions: set[str], label: str = "o arquivo") -> tuple[bool, str]:
     """Valida upload antes de processar, com mensagens seguras para o usuário.
@@ -119,7 +119,7 @@ def validate_uploaded_file(file_storage, allowed_extensions: set[str], label: st
 
     # Quando o navegador informa tamanho, bloqueia arquivos vazios e reforça limite configurado.
     content_length = getattr(file_storage, "content_length", None) or 0
-    max_bytes = int(app.config.get("MAX_CONTENT_LENGTH", 75 * 1024 * 1024))
+    max_bytes = int(app.config.get("MAX_CONTENT_LENGTH", 250 * 1024 * 1024))
     if content_length and content_length > max_bytes:
         return False, f"{original_name} excede o limite de {get_max_upload_mb()} MB."
 
@@ -3068,7 +3068,7 @@ def exames_a_prazo_guias():
             messages.append(f"{Path(upload.filename).name}: arquivo vazio.")
             continue
         if len(raw) > EXAMES_A_PRAZO_MAX_SINGLE_XLSX_BYTES:
-            messages.append(f"{Path(upload.filename).name}: arquivo maior que o limite de 30 MB.")
+            messages.append(f"{Path(upload.filename).name}: arquivo maior que o limite configurado de {EXAMES_A_PRAZO_MAX_SINGLE_XLSX_BYTES // (1024 * 1024)} MB.")
             continue
         source_files.append(raw)
         source_names.append(Path(upload.filename).name)
@@ -3274,10 +3274,33 @@ def exames_a_prazo_gerar():
             max_upload_mb=get_max_upload_mb(),
         )
 
+    # Relatório técnico simples dentro do ZIP para o usuário conferir rapidamente
+    # se a base foi lida e quantos registros foram encontrados por CNPJ.
+    record_counts = {key: 0 for key in all_requested_keys}
+    for rec in records:
+        if rec.company_key in record_counts:
+            record_counts[rec.company_key] += 1
+    resumo_lines = [
+        'RESUMO DA GERAÇÃO - EXAMES A PRAZO',
+        '',
+        f'Competências selecionadas: {", ".join(selected_months)}',
+        f'Total de CNPJs solicitados: {len(all_requested_keys)}',
+        f'Total de registros encontrados: {len(records)}',
+        '',
+        'CNPJs / empresas:',
+    ]
+    for req in requests_data:
+        for cnpj in req['cnpjs']:
+            key = company_key(cnpj)
+            resumo_lines.append(f'- {format_cnpj(cnpj)}: {record_counts.get(key, 0)} registro(s)')
+    if errors:
+        resumo_lines.extend(['', 'Avisos:', *errors])
+
     bio = BytesIO()
     with zipfile.ZipFile(bio, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
         for filename, content in output_files.items():
             zf.writestr(sanitize_filename(filename), content)
+        zf.writestr('RESUMO_EXAMES_A_PRAZO.txt', '\n'.join(resumo_lines))
         if errors:
             zf.writestr('ATENCAO_ERROS.txt', '\n'.join(errors))
     bio.seek(0)

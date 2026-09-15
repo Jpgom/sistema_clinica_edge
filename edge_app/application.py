@@ -70,6 +70,8 @@ EXAMES_A_PRAZO_MAX_ZIP_UNCOMPRESSED_BYTES = int(os.environ.get("EXAMES_A_PRAZO_M
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.environ.get("RENDER_DISK_PATH") or os.environ.get("DATA_DIR") or BASE_DIR
 os.makedirs(DATA_DIR, exist_ok=True)
+RELATORIOS_EMPRESAS_CNPJ_PATH = os.path.join(DATA_DIR, "relatorios_empresas_cnpj.json")
+RELATORIOS_EMPRESAS_CNPJ_EXTENSIONS = {".xls", ".xlsx"}
 FISICO_DB_PATH = os.path.join(DATA_DIR, "fisico_mental.db")
 AUTH_DB_PATH = os.path.join(DATA_DIR, "usuarios.db")
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
@@ -880,6 +882,171 @@ def _deduplicar_relatorio_por_nome_cargo(df, col_nome, col_cargo):
     return df.drop(columns=["_nome_dedup", "_cargo_dedup"], errors="ignore")
 
 
+def _documento_digits_relatorios(valor) -> str:
+    """Extrai números de CPF/CNPJ preservando melhor valores vindos do Excel."""
+    if valor is None:
+        return ""
+    try:
+        if pd.isna(valor):
+            return ""
+    except Exception:
+        pass
+
+    if isinstance(valor, int):
+        texto = str(valor)
+    elif isinstance(valor, float):
+        texto = str(int(valor)) if valor.is_integer() else f"{valor:.0f}"
+    else:
+        texto = str(valor).strip()
+        if re.fullmatch(r"\d+\.0+", texto):
+            texto = texto.split(".", 1)[0]
+        elif "e" in texto.lower():
+            try:
+                texto = str(int(float(texto)))
+            except Exception:
+                pass
+
+    numeros = somente_numeros(texto)
+    if len(numeros) == 15 and numeros.endswith("0") and ".0" in str(valor):
+        numeros = numeros[:-1]
+    if len(numeros) >= 14:
+        return numeros[-14:]
+    if len(numeros) in {12, 13}:
+        # Quando o Excel salva CNPJ como número, zeros à esquerda podem ser perdidos.
+        # Mantemos o valor para a rotina de CNPJ completar com zero à esquerda.
+        return numeros
+    if len(numeros) == 11:
+        return numeros
+    return numeros
+
+
+def _cnpj_digits_relatorios(valor) -> str:
+    numeros = _documento_digits_relatorios(valor)
+    if len(numeros) == 14:
+        return numeros
+    if len(numeros) in {12, 13}:
+        return numeros.zfill(14)
+    return ""
+
+
+def _formatar_cnpj_relatorios(valor) -> str:
+    numeros = _cnpj_digits_relatorios(valor)
+    return formatar_documento(numeros) if numeros else ""
+
+
+def carregar_empresas_cnpj_relatorios():
+    """Carrega o cadastro persistente de CNPJ -> nome oficial da empresa."""
+    try:
+        path = Path(RELATORIOS_EMPRESAS_CNPJ_PATH)
+        if not path.exists():
+            return {}
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {}
+        normalizado = {}
+        for chave, item in data.items():
+            cnpj_digits = _cnpj_digits_relatorios(chave)
+            if not cnpj_digits or not isinstance(item, dict):
+                continue
+            empresa = _texto_upper(item.get("empresa"))
+            if not empresa:
+                continue
+            normalizado[cnpj_digits] = {
+                "empresa": empresa,
+                "cnpj": formatar_documento(cnpj_digits),
+                "updated_at": item.get("updated_at", ""),
+            }
+        return normalizado
+    except Exception:
+        logger.exception("Erro ao carregar cadastro de empresas por CNPJ")
+        return {}
+
+
+def salvar_empresas_cnpj_relatorios(cadastros: dict):
+    path = Path(RELATORIOS_EMPRESAS_CNPJ_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(cadastros, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def listar_empresas_cnpj_relatorios(limit=15):
+    cadastros = carregar_empresas_cnpj_relatorios()
+    itens = sorted(cadastros.values(), key=lambda item: item.get("empresa", ""))
+    return {"total": len(itens), "itens": itens[:limit]}
+
+
+def importar_empresas_cnpj_relatorios(file_storage):
+    ok, msg = validate_uploaded_file(file_storage, RELATORIOS_EMPRESAS_CNPJ_EXTENSIONS, "a planilha de empresas/CNPJ")
+    if not ok:
+        raise ValueError(msg)
+
+    file_storage.seek(0)
+    dados = file_storage.read()
+    if not dados:
+        raise ValueError("A planilha de empresas/CNPJ está vazia.")
+
+    cadastros = carregar_empresas_cnpj_relatorios()
+    total_importados = 0
+    total_linhas_validas = 0
+
+    try:
+        planilhas = pd.read_excel(BytesIO(dados), sheet_name=None)
+    except Exception as exc:
+        raise ValueError("Não foi possível ler a planilha. Envie um arquivo .xls ou .xlsx válido.") from exc
+
+    for _guia, df in planilhas.items():
+        if df is None or df.empty:
+            continue
+        col_empresa = encontrar_coluna(df, [
+            "empresa", "nome da empresa", "razao social", "razão social",
+            "nome oficial", "cliente", "nome"
+        ])
+        col_cnpj = encontrar_coluna(df, ["cnpj", "cnpj da empresa", "documento", "cpf/cnpj"])
+        if not col_empresa or not col_cnpj:
+            continue
+        for _, row in df.iterrows():
+            cnpj_digits = _cnpj_digits_relatorios(row.get(col_cnpj))
+            empresa = _texto_upper(row.get(col_empresa))
+            if not cnpj_digits or not empresa:
+                continue
+            total_linhas_validas += 1
+            cadastros[cnpj_digits] = {
+                "empresa": empresa,
+                "cnpj": formatar_documento(cnpj_digits),
+                "updated_at": datetime.now().strftime("%d/%m/%Y %H:%M"),
+            }
+            total_importados += 1
+
+    if total_linhas_validas == 0:
+        raise ValueError("Nenhuma empresa foi cadastrada. A planilha precisa ter colunas de EMPRESA/NOME DA EMPRESA e CNPJ.")
+
+    salvar_empresas_cnpj_relatorios(cadastros)
+    return total_importados
+
+
+def obter_empresa_cnpj_relatorios(row, col_cnpj, col_empresa, col_setor, nome_arquivo, cadastros=None):
+    """Define empresa oficial e CNPJ formatado para Relatório e Base do Mês."""
+    cadastros = cadastros if cadastros is not None else carregar_empresas_cnpj_relatorios()
+    cnpj_digits = ""
+    if col_cnpj and col_cnpj in row.index:
+        cnpj_digits = _cnpj_digits_relatorios(row.get(col_cnpj))
+    if not cnpj_digits:
+        cnpj_digits = _cnpj_digits_relatorios(extrair_documento_do_final_do_arquivo(nome_arquivo))
+
+    if cnpj_digits and cnpj_digits in cadastros:
+        item = cadastros[cnpj_digits]
+        return item.get("empresa", ""), item.get("cnpj", formatar_documento(cnpj_digits))
+
+    empresa = nome_empresa_da_planilha(row, col_empresa, col_setor, nome_arquivo)
+    cnpj_formatado = formatar_documento(cnpj_digits) if cnpj_digits else ""
+    return empresa, cnpj_formatado
+
+
+def titulo_empresa_relatorios(empresa, cnpj):
+    empresa = _texto_upper(empresa)
+    cnpj = _texto_upper(cnpj)
+    return f"{empresa} - {cnpj}" if cnpj else empresa
+
+
 def _ler_convocacao(file):
     file.seek(0)
     df = pd.read_excel(file)
@@ -893,11 +1060,11 @@ def _ler_convocacao(file):
     col_empresa = _coluna_por_candidatos_df(df, ["empresa", "razão social", "razao social"])
     col_setor = _coluna_por_candidatos_df(df, ["setor", "ges"])
     col_comp = _coluna_por_candidatos_df(df, ["complementares", "complementar", "exames_obg", "exames obrigatorios", "exames obrigatórios"])
-    col_doc = _coluna_por_candidatos_df(df, ["cnpj", "cpf", "documento"])
-    return df, col_nome, col_admissao, col_cargo, col_empresa, col_setor, col_comp, col_doc
+    col_cnpj = _coluna_por_candidatos_df(df, ["cnpj", "cnpj da empresa", "documento da empresa", "cpf/cnpj"])
+    return df, col_nome, col_admissao, col_cargo, col_empresa, col_setor, col_comp, col_cnpj
 
 
-def criar_relatorio(files, mes):
+def criar_relatorio(files, mes, cadastros_empresas=None):
     wb = Workbook()
     ws = wb.active
     ws.title = "Relatório"
@@ -908,56 +1075,70 @@ def criar_relatorio(files, mes):
     left_wrap = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
     linha = 1
+    cadastros_empresas = cadastros_empresas if cadastros_empresas is not None else carregar_empresas_cnpj_relatorios()
 
-    for file in files:
-        try:
-            df, col_nome, col_admissao, col_cargo, col_empresa, col_setor, _col_comp, _col_doc = _ler_convocacao(file)
-            filtrado = filtrar_periodicos_do_mes(df, mes, col_nome, col_admissao)
-            filtrado = _deduplicar_relatorio_por_nome_cargo(filtrado, col_nome, col_cargo)
+    def escrever_bloco(titulo, registros):
+        nonlocal linha
+        ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=3)
+        cell = ws.cell(row=linha, column=1, value=titulo)
+        cell.font = Font(size=13, bold=True)
+        cell.fill = cor_empresa
+        cell.alignment = left_wrap
+        for col in range(1, 4):
+            ws.cell(row=linha, column=col).border = borda
+        ws.row_dimensions[linha].height = 35
+        linha += 1
 
-            if not filtrado.empty:
-                titulo = nome_empresa_da_planilha(filtrado.iloc[0], col_empresa, col_setor, file.filename)
-            elif not df.empty:
-                titulo = nome_empresa_da_planilha(df.iloc[0], col_empresa, col_setor, file.filename)
-            else:
-                titulo = _texto_upper(limpar_nome_arquivo(file.filename))
+        ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=3)
+        cell = ws.cell(row=linha, column=1, value="NOME DO FUNCIONÁRIO")
+        cell.font = Font(bold=True)
+        cell.alignment = center
+        for col in range(1, 4):
+            ws.cell(row=linha, column=col).border = borda
+        linha += 1
 
+        if registros is None or registros.empty:
             ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=3)
-            cell = ws.cell(row=linha, column=1, value=titulo)
-            cell.font = Font(size=13, bold=True)
-            cell.fill = cor_empresa
-            cell.alignment = left_wrap
-            for col in range(1, 4):
-                ws.cell(row=linha, column=col).border = borda
-            ws.row_dimensions[linha].height = 35
-            linha += 1
-
-            ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=3)
-            cell = ws.cell(row=linha, column=1, value="NOME DO FUNCIONÁRIO")
-            cell.font = Font(bold=True)
+            cell = ws.cell(row=linha, column=1, value=f"NÃO HÁ COLABORADORES COM ADMISSÃO PARA O MÊS DE {nome_mes(mes)}")
+            cell.font = Font(color="FF0000", bold=True)
             cell.alignment = center
             for col in range(1, 4):
                 ws.cell(row=linha, column=col).border = borda
+            linha += 3
+            return
+
+        for _, row_item in registros.iterrows():
+            nome = _texto_upper(row_item[col_nome])
+            ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=3)
+            cell = ws.cell(row=linha, column=1, value=nome)
+            cell.alignment = Alignment(horizontal="left", vertical="center")
+            for col in range(1, 4):
+                ws.cell(row=linha, column=col).border = borda
             linha += 1
+        linha += 2
+
+    for file in files:
+        try:
+            df, col_nome, col_admissao, col_cargo, col_empresa, col_setor, _col_comp, col_cnpj = _ler_convocacao(file)
+            filtrado = filtrar_periodicos_do_mes(df, mes, col_nome, col_admissao)
+            filtrado = _deduplicar_relatorio_por_nome_cargo(filtrado, col_nome, col_cargo)
 
             if filtrado.empty:
-                ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=3)
-                cell = ws.cell(row=linha, column=1, value=f"NÃO HÁ COLABORADORES COM ADMISSÃO PARA O MÊS DE {nome_mes(mes)}")
-                cell.font = Font(color="FF0000", bold=True)
-                cell.alignment = center
-                for col in range(1, 4):
-                    ws.cell(row=linha, column=col).border = borda
-                linha += 3
+                if not df.empty:
+                    empresa, cnpj = obter_empresa_cnpj_relatorios(df.iloc[0], col_cnpj, col_empresa, col_setor, file.filename, cadastros_empresas)
+                    titulo = titulo_empresa_relatorios(empresa, cnpj)
+                else:
+                    titulo = _texto_upper(limpar_nome_arquivo(file.filename))
+                escrever_bloco(titulo, filtrado)
             else:
+                filtrado = filtrado.copy()
+                titulos = []
                 for _, row in filtrado.iterrows():
-                    nome = _texto_upper(row[col_nome])
-                    ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=3)
-                    cell = ws.cell(row=linha, column=1, value=nome)
-                    cell.alignment = Alignment(horizontal="left", vertical="center")
-                    for col in range(1, 4):
-                        ws.cell(row=linha, column=col).border = borda
-                    linha += 1
-                linha += 2
+                    empresa, cnpj = obter_empresa_cnpj_relatorios(row, col_cnpj, col_empresa, col_setor, file.filename, cadastros_empresas)
+                    titulos.append(titulo_empresa_relatorios(empresa, cnpj))
+                filtrado["_titulo_relatorio_empresa"] = titulos
+                for titulo, grupo in filtrado.groupby("_titulo_relatorio_empresa", sort=False):
+                    escrever_bloco(titulo, grupo.drop(columns=["_titulo_relatorio_empresa"], errors="ignore"))
         except Exception as e:
             titulo = _texto_upper(limpar_nome_arquivo(file.filename))
             ws.merge_cells(start_row=linha, start_column=1, end_row=linha, end_column=3)
@@ -991,7 +1172,7 @@ def criar_relatorio(files, mes):
     return wb
 
 
-def criar_base(files, mes):
+def criar_base(files, mes, cadastros_empresas=None):
     wb = Workbook()
     ws = wb.active
     ws.title = "Base do Mês"
@@ -1001,7 +1182,7 @@ def criar_base(files, mes):
     cabecalho_font = Font(bold=True)
     center = Alignment(horizontal="center", vertical="center")
 
-    headers = ["EMPRESA", "CNPJ/CPF", "NOME", "CARGO", "COMPLEMENTARES"]
+    headers = ["EMPRESA", "CNPJ", "NOME", "CARGO", "COMPLEMENTARES"]
     for idx, h in enumerate(headers, start=1):
         cell = ws.cell(row=1, column=idx, value=h)
         cell.font = cabecalho_font
@@ -1010,16 +1191,15 @@ def criar_base(files, mes):
         cell.border = borda
 
     linha = 2
+    cadastros_empresas = cadastros_empresas if cadastros_empresas is not None else carregar_empresas_cnpj_relatorios()
 
     for file in files:
         try:
-            df, col_nome, col_admissao, col_cargo, col_empresa, col_setor, col_comp, col_doc = _ler_convocacao(file)
+            df, col_nome, col_admissao, col_cargo, col_empresa, col_setor, col_comp, col_cnpj = _ler_convocacao(file)
             filtrado = filtrar_periodicos_do_mes(df, mes, col_nome, col_admissao)
-            documento_arquivo = extrair_documento_do_final_do_arquivo(file.filename)
 
             for _, row in filtrado.iterrows():
-                empresa = nome_empresa_da_planilha(row, col_empresa, col_setor, file.filename)
-                documento = _texto_upper(row[col_doc]) if col_doc else documento_arquivo
+                empresa, documento = obter_empresa_cnpj_relatorios(row, col_cnpj, col_empresa, col_setor, file.filename, cadastros_empresas)
                 nome = _texto_upper(row[col_nome])
                 cargo = _texto_upper(row[col_cargo]) if col_cargo else ""
                 complementares = _texto_upper(row[col_comp]) if col_comp else ""
@@ -3367,8 +3547,9 @@ def relatorios():
         files_base = [UploadedMemoryFile(nome, dados) for nome, dados in arquivos_memoria]
 
         try:
-            wb_rel = criar_relatorio(files_rel, mes)
-            wb_base = criar_base(files_base, mes)
+            cadastros = carregar_empresas_cnpj_relatorios()
+            wb_rel = criar_relatorio(files_rel, mes, cadastros)
+            wb_base = criar_base(files_base, mes, cadastros)
         except Exception:
             logger.exception("Erro ao gerar relatórios")
             flash("Não foi possível gerar os relatórios. Confira se as planilhas estão no modelo esperado.")
@@ -3386,7 +3567,39 @@ def relatorios():
             z.write(caminho_base, os.path.basename(caminho_base))
 
         return send_file(caminho_zip, as_attachment=True, download_name=f"Arquivos_{nome_mes(mes)}.zip")
-    return render_template("relatorios.html")
+    return render_template("relatorios.html", empresas_cnpj=listar_empresas_cnpj_relatorios())
+
+
+@app.route("/relatorios/empresas-cnpj/modelo")
+def relatorios_empresas_cnpj_modelo():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Empresas CNPJ"
+    headers = ["EMPRESA", "CNPJ"]
+    for col, header in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill(start_color="D9EAD3", end_color="D9EAD3", fill_type="solid")
+        cell.alignment = Alignment(horizontal="center")
+    ws.cell(row=2, column=1, value="EMPRESA EXEMPLO LTDA")
+    ws.cell(row=2, column=2, value="12.345.678/0001-90")
+    ws.column_dimensions["A"].width = 45
+    ws.column_dimensions["B"].width = 22
+    temp_dir = tempfile.mkdtemp(prefix="modelo_empresas_cnpj_")
+    path = os.path.join(temp_dir, "MODELO_CADASTRO_EMPRESAS_CNPJ.xlsx")
+    wb.save(path)
+    return send_file(path, as_attachment=True, download_name="MODELO_CADASTRO_EMPRESAS_CNPJ.xlsx")
+
+
+@app.route("/relatorios/empresas-cnpj/importar", methods=["POST"])
+def relatorios_empresas_cnpj_importar():
+    try:
+        total = importar_empresas_cnpj_relatorios(request.files.get("empresas_cnpj_file"))
+        flash(f"Cadastro atualizado: {total} empresa(s)/CNPJ(s) importado(s) ou atualizado(s).")
+    except Exception as exc:
+        logger.exception("Erro ao importar cadastro de empresas/CNPJ")
+        flash(str(exc) or "Não foi possível importar o cadastro de empresas/CNPJ.")
+    return redirect(url_for("relatorios"))
 
 
 # =========================
@@ -3930,10 +4143,11 @@ def relatorios_async():
     def task(progress):
         progress(15, "Lendo planilhas...")
         mem_files = [_memory_file_from_path(p) for p in saved_paths]
-        wb_rel = criar_relatorio(mem_files, mes)
+        cadastros = carregar_empresas_cnpj_relatorios()
+        wb_rel = criar_relatorio(mem_files, mes, cadastros)
         progress(45, "Gerando relatório...")
         mem_files = [_memory_file_from_path(p) for p in saved_paths]
-        wb_base = criar_base(mem_files, mes)
+        wb_base = criar_base(mem_files, mes, cadastros)
         out_dir = job_root / "saida"
         out_dir.mkdir(exist_ok=True)
         caminho_rel = out_dir / f"Relatorio_{nome_mes(mes)}.xlsx"
@@ -3977,7 +4191,7 @@ def relatorios_comparar_preparar():
             "guias": guias,
         }
         flash("Arquivos carregados. Agora selecione as guias que deseja usar na comparação.")
-        return render_template("relatorios.html", comparacao=comparacao)
+        return render_template("relatorios.html", comparacao=comparacao, empresas_cnpj=listar_empresas_cnpj_relatorios())
     except Exception as exc:
         logger.exception("Erro ao preparar comparação de relatórios")
         shutil.rmtree(job_root, ignore_errors=True)

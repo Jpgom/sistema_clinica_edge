@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <style>
-    .relatorios-grid{display:grid;grid-template-columns:1fr;gap:18px}.relatorio-panel{border:1px solid rgba(15,23,42,.08);border-radius:18px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.06);overflow:hidden}.relatorio-panel__head{padding:18px 20px;border-bottom:1px solid rgba(15,23,42,.08);background:linear-gradient(135deg,#f8fafc,#eef6ff)}.relatorio-panel__head h2{margin:0 0 6px;font-size:1.15rem}.relatorio-panel__head p{margin:0;color:#64748b}.relatorio-panel__body{padding:20px}.note-list{margin:14px 0 0;padding-left:18px;color:#475569}.sheet-box{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px}.sheet-option{display:flex;align-items:center;gap:8px;border:1px solid #dbe3ef;border-radius:12px;padding:10px 12px;background:#f8fafc}.compare-ready{border:1px solid #bbf7d0;background:#f0fdf4;color:#14532d;border-radius:14px;padding:14px;margin:12px 0}.muted-small{font-size:.9rem;color:#64748b}.divider-title{display:flex;align-items:center;gap:12px;margin:10px 0}.divider-title:after{content:"";height:1px;background:#e2e8f0;flex:1}.quick-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+    .relatorios-grid{display:grid;grid-template-columns:1fr;gap:18px}.relatorio-panel{border:1px solid rgba(15,23,42,.08);border-radius:18px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.06);overflow:hidden}.relatorio-panel__head{padding:18px 20px;border-bottom:1px solid rgba(15,23,42,.08);background:linear-gradient(135deg,#f8fafc,#eef6ff)}.relatorio-panel__head h2{margin:0 0 6px;font-size:1.15rem}.relatorio-panel__head p{margin:0;color:#64748b}.relatorio-panel__body{padding:20px}.note-list{margin:14px 0 0;padding-left:18px;color:#475569}.sheet-box{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px}.sheet-option{display:flex;align-items:center;gap:8px;border:1px solid #dbe3ef;border-radius:12px;padding:10px 12px;background:#f8fafc}.compare-ready{border:1px solid #bbf7d0;background:#f0fdf4;color:#14532d;border-radius:14px;padding:14px;margin:12px 0}.muted-small{font-size:.9rem;color:#64748b}.divider-title{display:flex;align-items:center;gap:12px;margin:10px 0}.divider-title:after{content:"";height:1px;background:#e2e8f0;flex:1}.quick-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.cadastro-list{margin-top:14px;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden}.cadastro-row{display:grid;grid-template-columns:1fr 180px;gap:12px;padding:10px 12px;border-top:1px solid #e2e8f0}.cadastro-row:first-child{border-top:none}.badge-ok{display:inline-flex;align-items:center;border-radius:999px;background:#dcfce7;color:#166534;font-weight:700;padding:4px 10px;font-size:.82rem}.mini-table-head{font-weight:700;background:#f8fafc}
   </style>
 </head>
 <body>
@@ -34,7 +34,7 @@
     </div>
   </aside>
   <main class="main-area">
-    <div class="topbar compact-topbar"><div class="page-title"><h1>Relatório de Periódicos</h1><p>Geração por admissão e comparação com planilhas de controle de ASO.</p></div></div>
+    <div class="topbar compact-topbar"><div class="page-title"><h1>Relatório de Periódicos</h1><p>Geração por admissão, cadastro oficial de empresas por CNPJ e comparação com planilhas de controle de ASO.</p></div></div>
 
     {% with messages = get_flashed_messages() %}{% for m in messages %}<div class="alert error">{{ m }}</div>{% endfor %}{% endwith %}
 
@@ -42,7 +42,7 @@
       <section class="relatorio-panel">
         <div class="relatorio-panel__head">
           <h2>1. Gerar Relatório e Base do Mês</h2>
-          <p>Envie uma ou várias planilhas de convocação. O mês será definido sempre pela coluna <strong>ADMISSAO</strong>.</p>
+          <p>Envie uma ou várias planilhas de convocação. O mês será definido sempre pela coluna <strong>ADMISSAO</strong>. Quando houver CNPJ cadastrado, o sistema usa o nome oficial da empresa.</p>
         </div>
         <div class="relatorio-panel__body">
           <form action="{{ url_for('relatorios_async') }}" method="POST" enctype="multipart/form-data">
@@ -54,6 +54,7 @@
               <li>Usa somente a coluna <strong>ADMISSAO</strong> para filtrar o mês.</li>
               <li>Todos os dados saem em <strong>maiúsculo</strong>.</li>
               <li>No Relatório, duplicidades de <strong>nome + cargo</strong> são removidas.</li>
+              <li>O título de cada empresa sai como <strong>EMPRESA - CNPJ</strong>, usando o cadastro oficial quando existir.</li>
             </ul>
             <div class="actions"><button class="btn btn--primary" type="submit">Gerar arquivos</button></div>
           </form>
@@ -62,7 +63,39 @@
 
       <section class="relatorio-panel">
         <div class="relatorio-panel__head">
-          <h2>2. Comparar Relatório com Controle de ASO</h2>
+          <h2>2. Cadastro oficial de Empresas por CNPJ</h2>
+          <p>Importe uma planilha com as colunas <strong>EMPRESA</strong> e <strong>CNPJ</strong>. Esse cadastro será usado no Relatório e na Base do Mês.</p>
+        </div>
+        <div class="relatorio-panel__body">
+          <form action="{{ url_for('relatorios_empresas_cnpj_importar') }}" method="POST" enctype="multipart/form-data">
+            <div class="form-grid">
+              <div class="field col-3"><label for="empresas_cnpj_file">Planilha de empresas e CNPJs</label><input type="file" id="empresas_cnpj_file" name="empresas_cnpj_file" accept=".xls,.xlsx" required></div>
+            </div>
+            <div class="helper-box" style="margin-top:16px">
+              A planilha pode ter os cabeçalhos <strong>EMPRESA</strong>, <strong>NOME DA EMPRESA</strong> ou <strong>RAZÃO SOCIAL</strong>, e a coluna <strong>CNPJ</strong>. Ao importar novamente, o sistema atualiza o nome oficial dos CNPJs já existentes.
+            </div>
+            <div class="actions">
+              <button class="btn btn--primary" type="submit">Importar/atualizar cadastro</button>
+              <a class="btn btn--ghost" href="{{ url_for('relatorios_empresas_cnpj_modelo') }}">Baixar modelo</a>
+            </div>
+          </form>
+          {% if empresas_cnpj and empresas_cnpj.total %}
+          <div class="cadastro-list">
+            <div class="cadastro-row mini-table-head"><span>Empresa cadastrada</span><span>CNPJ</span></div>
+            {% for item in empresas_cnpj.itens %}
+            <div class="cadastro-row"><span>{{ item.empresa }}</span><span>{{ item.cnpj }}</span></div>
+            {% endfor %}
+          </div>
+          <p class="muted-small"><span class="badge-ok">{{ empresas_cnpj.total }}</span> CNPJ(s) cadastrado(s). Mostrando os primeiros registros em ordem alfabética.</p>
+          {% else %}
+          <p class="muted-small">Ainda não há empresas cadastradas por CNPJ. Sem cadastro, o sistema usa o nome que vier na planilha de convocação.</p>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="relatorio-panel">
+        <div class="relatorio-panel__head">
+          <h2>3. Comparar Relatório com Controle de ASO</h2>
           <p>Envie o Relatório gerado pelo sistema e uma planilha de controle. Depois escolha as guias que serão usadas na comparação.</p>
         </div>
         <div class="relatorio-panel__body">

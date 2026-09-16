@@ -93,6 +93,10 @@ class ExamRecord:
     company_key: str
     company_display: str
     values: Tuple[object, ...]
+    # Formatos numéricos originais das células da planilha-base, na mesma
+    # ordem de OUTPUT_HEADERS. Isso evita que ID TRANSAÇÃO e RECIBO herdem
+    # formatação de dinheiro do modelo de saída.
+    number_formats: Tuple[str | None, ...] = ()
 
 
 def normalize_text(value: object) -> str:
@@ -412,6 +416,92 @@ def _to_output_row(row_values: Sequence[object], mapping: Mapping[str, int]) -> 
     )
 
 
+
+
+def _cell_value(cell) -> object:
+    return getattr(cell, "value", None)
+
+
+def _cell_number_format(cell) -> str | None:
+    fmt = getattr(cell, "number_format", None)
+    if not fmt:
+        return None
+    return str(fmt)
+
+
+def _output_number_formats(row_cells: Sequence[object], mapping: Mapping[str, int]) -> Tuple[str | None, ...]:
+    """Captura o formato original da planilha-base para cada coluna de saída."""
+    result = []
+    for key in (
+        "employee",
+        "transaction",
+        "receipt",
+        "value",
+        "exam_number",
+        "exam_type",
+        "function",
+        "health_card",
+        "depositor",
+        "date",
+        "status",
+        "company",
+    ):
+        col_idx = mapping.get(key)
+        if not col_idx or col_idx <= 0 or col_idx > len(row_cells):
+            result.append(None)
+        else:
+            result.append(_cell_number_format(row_cells[col_idx - 1]))
+    return tuple(result)
+
+
+def _looks_like_currency_format(fmt: str | None) -> bool:
+    if not fmt:
+        return False
+    norm = normalize_text(fmt)
+    return ("R" in norm and "0" in norm) or "MOEDA" in norm or "CURRENCY" in norm
+
+
+def _format_plain_identifier_value(value: object) -> object:
+    """Mantém IDs/recibos como identificadores, não como valor monetário."""
+    if value is None:
+        return None
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
+def _apply_source_number_format(cell, output_col: int, source_formats: Sequence[str | None] | None = None) -> None:
+    """Evita que ID TRANSAÇÃO e RECIBO saiam formatados como dinheiro.
+
+    O layout usado como modelo pode ter as colunas B/C com formato contábil.
+    Para esses campos, copiamos o formato da base original; quando não houver
+    formato confiável, usamos Geral/Texto, que exibe o valor como código.
+    """
+    if output_col not in (2, 3):
+        return
+
+    fmt = None
+    if source_formats and len(source_formats) >= output_col:
+        fmt = source_formats[output_col - 1]
+
+    value = _format_plain_identifier_value(cell.value)
+    cell.value = value
+
+    if fmt and not _looks_like_currency_format(fmt):
+        cell.number_format = fmt
+    elif output_col == 2:
+        cell.number_format = "@" if value not in (None, "") else "General"
+    else:
+        cell.number_format = "General"
+
+
+def _row_values(row_item: object) -> Tuple[object, ...]:
+    return getattr(row_item, "values", row_item)
+
+
+def _row_number_formats(row_item: object) -> Tuple[str | None, ...]:
+    return getattr(row_item, "number_formats", ())
+
 def _resolve_month_sheet_name(wb, target_month: str) -> str | None:
     """Resolve um mês solicitado para a guia equivalente dentro de uma base."""
     target_norm = normalize_text(target_month)
@@ -469,7 +559,8 @@ def parse_selected_months(
             rows_without_record = 0
             saw_record_row = False
 
-            for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
+            for row_cells in ws.iter_rows(min_row=header_row + 1, values_only=False):
+                row = tuple(_cell_value(cell) for cell in row_cells)
                 company = _value(row, company_col)
                 if company is None or not str(company).strip():
                     rows_without_record += 1
@@ -493,6 +584,7 @@ def parse_selected_months(
                 key = company_key(display)
                 employee = _value(row, employee_col)
                 out = _to_output_row(row, mapping)
+                number_formats = _output_number_formats(row_cells, mapping)
 
                 # Rejeita divisórias/cabeçalhos. Essas linhas também contam como
                 # parte de uma possível cauda artificial e não impedem o corte.
@@ -521,7 +613,7 @@ def parse_selected_months(
                 companies.setdefault(key, display)
                 out_list = list(out)
                 out_list[11] = display
-                records.append(ExamRecord(month, key, display, tuple(out_list)))
+                records.append(ExamRecord(month, key, display, tuple(out_list), number_formats))
     finally:
         wb.close()
 
@@ -773,7 +865,7 @@ def _make_blank_separator_row(ws, row_idx: int) -> None:
 def _write_solo_sheet(
     ws,
     company: str,
-    rows: Sequence[Tuple[object, ...]],
+    rows: Sequence[object],
     preserve_layout: bool = False,
     empty_title_only: bool = False,
 ) -> None:
@@ -795,11 +887,14 @@ def _write_solo_sheet(
     if rows or not empty_title_only:
         _format_output_header_row(ws, 2, header_styles)
 
-        for r_idx, values in enumerate(rows, 3):
+        for r_idx, row_item in enumerate(rows, 3):
+            values = _row_values(row_item)
+            source_formats = _row_number_formats(row_item)
             for c, value in enumerate(values, 1):
                 cell = ws.cell(r_idx, c)
                 cell.value = value
                 cell._style = copy(data_styles[c - 1])
+                _apply_source_number_format(cell, c, source_formats)
             if data_height is not None:
                 ws.row_dimensions[r_idx].height = data_height
 
@@ -818,7 +913,7 @@ def _write_solo_sheet(
 
 def _write_group_sheet(
     ws,
-    company_sections: Sequence[Tuple[str, Sequence[Tuple[object, ...]]]],
+    company_sections: Sequence[Tuple[str, Sequence[object]]],
     preserve_layout: bool = False,
     empty_title_only: bool = False,
 ) -> None:
@@ -845,11 +940,14 @@ def _write_group_sheet(
             _format_output_header_row(ws, current_row, header_styles)
             current_row += 1
 
-            for values in rows:
+            for row_item in rows:
+                values = _row_values(row_item)
+                source_formats = _row_number_formats(row_item)
                 for c, value in enumerate(values, 1):
                     cell = ws.cell(current_row, c)
                     cell.value = value
                     cell._style = copy(data_styles[c - 1])
+                    _apply_source_number_format(cell, c, source_formats)
                 if data_height is not None:
                     ws.row_dimensions[current_row].height = data_height
                 current_row += 1
@@ -883,10 +981,10 @@ def generate_solo_workbook(
     base_workbook_bytes: bytes | None = None,
     empty_title_only: bool = False,
 ) -> bytes | None:
-    by_month: Dict[str, List[Tuple[object, ...]]] = {m: [] for m in months}
+    by_month: Dict[str, List[ExamRecord]] = {m: [] for m in months}
     for rec in records:
         if rec.company_key == company_key_value and rec.month in by_month:
-            by_month[rec.month].append(rec.values)
+            by_month[rec.month].append(rec)
 
     selected_months = [m for m in months if by_month[m] or include_empty_months]
     if not selected_months:
@@ -915,12 +1013,12 @@ def generate_group_workbook(
     empty_title_only: bool = False,
 ) -> bytes | None:
     key_set = set(company_keys)
-    by_month_company: Dict[str, Dict[str, List[Tuple[object, ...]]]] = {
+    by_month_company: Dict[str, Dict[str, List[ExamRecord]]] = {
         m: {k: [] for k in company_keys} for m in months
     }
     for rec in records:
         if rec.month in by_month_company and rec.company_key in key_set:
-            by_month_company[rec.month][rec.company_key].append(rec.values)
+            by_month_company[rec.month][rec.company_key].append(rec)
 
     selected_months = []
     for month in months:

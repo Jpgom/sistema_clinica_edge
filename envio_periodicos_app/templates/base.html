@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}EDGE · Envio Periódicos{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('dashboard') }}">
+      <span class="brand-mark">E</span>
+      <span><strong>EDGE</strong><small>Envio Periódicos</small></span>
+    </a>
+    <nav class="nav">
+      <a class="nav-link" href="/"><span>←</span> Sistema principal</a>
+      <div class="nav-label">Operação</div>
+      <a class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}"><span>⌂</span> Início</a>
+      <a class="nav-link {% if request.endpoint in ['units','unit_dashboard','unit_edit'] %}active{% endif %}" href="{{ url_for('units') }}"><span>▦</span> Unidades</a>
+      <a class="nav-link {% if request.endpoint in ['companies','company_edit'] %}active{% endif %}" href="{{ url_for('companies') }}"><span>▤</span> Empresas</a>
+      <div class="nav-label">Controle</div>
+      <a class="nav-link {% if request.endpoint=='logs' %}active{% endif %}" href="{{ url_for('logs') }}"><span>↗</span> Envios</a>
+      <a class="nav-link {% if request.endpoint=='settings' %}active{% endif %}" href="{{ url_for('settings') }}"><span>⚙</span> E-mail</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="version">{{ APP_VERSION }} · EDGE Saúde Ocupacional</div>
+      {% if local_auth_enabled() %}<a class="logout-link" href="{{ url_for('logout') }}">Sair</a>{% endif %}
+    </div>
+  </aside>
+
+  <section class="main">
+    <header class="topbar">
+      <button class="mobile-menu" type="button" onclick="document.body.classList.toggle('menu-open')">☰</button>
+      <div><strong>Envio de periódicos</strong><span class="topbar-note">Convocação, encaminhamentos, comparecimento e e-mails</span></div>
+      <a class="btn btn-primary btn-sm desktop-only" href="{{ url_for('campaign_new') }}">+ Nova competência</a>
+    </header>
+    <main class="content">
+      {% with messages=get_flashed_messages(with_categories=true) %}
+        {% for category,message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </section>
+</div>
+
+<!-- Feedback para operações normais (uploads, edição, exclusões). -->
+<div id="operationOverlay" class="operation-overlay hidden" aria-live="polite">
+  <div class="operation-card">
+    <div class="spinner"></div>
+    <div><strong id="operationTitle">Processando...</strong><p id="operationText">Aguarde. Não é necessário clicar novamente.</p></div>
+  </div>
+</div>
+
+<!-- Progresso persistente dos disparos de e-mail. O envio continua mesmo se a aba for fechada. -->
+<div id="sendProgressModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="sendProgressTitle">
+  <div class="progress-modal">
+    <div class="progress-head">
+      <div><div class="eyebrow">ENVIO DE E-MAILS</div><h2 id="sendProgressTitle">Processando envios</h2></div>
+      <button class="modal-close" type="button" onclick="hideSendProgress()" aria-label="Fechar">×</button>
+    </div>
+    <div id="sendProgressState" class="progress-state">Preparando...</div>
+    <div class="progress-track"><div id="sendProgressBar" class="progress-bar" style="width:0%"></div></div>
+    <div class="progress-numbers">
+      <div><span>Progresso</span><strong id="sendProgressPercent">0%</strong></div>
+      <div><span>E-mails enviados</span><strong id="sendProgressMessages">0</strong></div>
+      <div><span>Empresas enviadas</span><strong id="sendProgressCompanies">0</strong></div>
+      <div><span>Erros / revisar</span><strong id="sendProgressErrors">0</strong></div>
+    </div>
+    <div class="progress-current"><span>Agora</span><strong id="sendProgressCurrent">Aguardando...</strong></div>
+    <div id="sendProgressEvents" class="progress-events"></div>
+    <div id="sendProgressNotice" class="progress-notice">Você pode fechar esta janela ou até a aba. O processamento continuará no servidor.</div>
+    <div class="progress-actions"><button type="button" class="btn btn-ghost" onclick="hideSendProgress()">Continuar navegando</button><button id="sendProgressRefresh" type="button" class="btn btn-primary hidden" onclick="location.reload()">Atualizar página</button></div>
+  </div>
+</div>
+
+<script>
+  window.EDGE_JOB_STATUS_TEMPLATE = {{ url_for('send_job_status',job_id='JOBID')|tojson }};
+  let edgeJobTimer = null;
+  let edgeCurrentJob = null;
+
+  document.addEventListener('click', function(e){
+    if(document.body.classList.contains('menu-open') && !e.target.closest('.sidebar') && !e.target.closest('.mobile-menu')) document.body.classList.remove('menu-open');
+  });
+
+  // Evita duplo clique em qualquer POST tradicional e mostra que a ação está em execução.
+  document.addEventListener('submit', function(e){
+    const form=e.target;
+    if(!(form instanceof HTMLFormElement) || (form.method||'get').toLowerCase()!=='post' || form.dataset.asyncSend==='1') return;
+    if(e.defaultPrevented) return;
+    if(form.dataset.submitting==='1') { e.preventDefault(); return; }
+    if(!form.checkValidity()) return;
+    form.dataset.submitting='1';
+    setTimeout(()=>{
+      form.querySelectorAll('button[type="submit"],input[type="submit"]').forEach(b=>{ b.disabled=true; b.dataset.originalText=b.textContent||b.value||''; if(b.tagName==='BUTTON') b.textContent='Processando...'; });
+      const overlay=document.getElementById('operationOverlay');
+      const hasFile=!!form.querySelector('input[type="file"]');
+      document.getElementById('operationTitle').textContent=hasFile?'Enviando e processando arquivo...':'Salvando alteração...';
+      document.getElementById('operationText').textContent=hasFile?'O arquivo está sendo validado. Se ele já tiver sido processado, o sistema não duplicará os dados.':'Aguarde a confirmação do sistema. Não clique novamente.';
+      overlay.classList.remove('hidden');
+    },30);
+  });
+
+  // Ao voltar pelo botão do navegador, reabilita formulários eventualmente preservados pelo cache.
+  window.addEventListener('pageshow',()=>{
+    document.getElementById('operationOverlay')?.classList.add('hidden');
+    document.querySelectorAll('form[data-submitting="1"]').forEach(form=>{form.dataset.submitting='0';form.querySelectorAll('button:disabled').forEach(b=>{b.disabled=false;if(b.dataset.originalText)b.textContent=b.dataset.originalText;});});
+  });
+
+  async function startSendProcess(url, options={}, confirmText='Confirmar o envio?'){
+    if(confirmText && !confirm(confirmText)) return;
+    const modal=document.getElementById('sendProgressModal');
+    modal.classList.remove('hidden');
+    resetSendProgress();
+    document.getElementById('sendProgressState').textContent='Criando fila segura de envio...';
+    const fd=new FormData();
+    if(options.company_id) fd.append('company_id',options.company_id);
+    if(options.force) fd.append('force','1');
+    try{
+      const res=await fetch(url,{method:'POST',body:fd,headers:{'X-Requested-With':'fetch'}});
+      const data=await res.json();
+      if(!res.ok || !data.ok) throw new Error(data.error||'Não foi possível iniciar o envio.');
+      openSendProgress(data.job_id);
+    }catch(err){
+      document.getElementById('sendProgressState').textContent='Não foi possível iniciar';
+      document.getElementById('sendProgressCurrent').textContent=err.message;
+      document.getElementById('sendProgressNotice').textContent='Nenhum novo disparo foi iniciado. Você pode fechar esta janela e corrigir a informação.';
+    }
+  }
+
+  function resetSendProgress(){
+    if(edgeJobTimer){clearTimeout(edgeJobTimer);edgeJobTimer=null;}
+    document.getElementById('sendProgressBar').style.width='0%';
+    document.getElementById('sendProgressPercent').textContent='0%';
+    document.getElementById('sendProgressMessages').textContent='0';
+    document.getElementById('sendProgressCompanies').textContent='0';
+    document.getElementById('sendProgressErrors').textContent='0';
+    document.getElementById('sendProgressCurrent').textContent='Aguardando...';
+    document.getElementById('sendProgressEvents').innerHTML='';
+    document.getElementById('sendProgressRefresh').classList.add('hidden');
+    document.getElementById('sendProgressNotice').textContent='Você pode fechar esta janela ou até a aba. O processamento continuará no servidor.';
+  }
+
+  function openSendProgress(jobId){
+    edgeCurrentJob=jobId;
+    document.getElementById('sendProgressModal').classList.remove('hidden');
+    pollSendJob(jobId);
+  }
+  function hideSendProgress(){document.getElementById('sendProgressModal').classList.add('hidden');}
+
+  async function pollSendJob(jobId){
+    if(edgeCurrentJob!==jobId) return;
+    try{
+      const url=window.EDGE_JOB_STATUS_TEMPLATE.replace('JOBID',encodeURIComponent(jobId));
+      const res=await fetch(url,{cache:'no-store'}); const data=await res.json();
+      if(!res.ok || !data.ok) throw new Error('Não foi possível consultar o andamento.');
+      const j=data.job;
+      const statusNames={QUEUED:'Na fila',RUNNING:'Enviando',COMPLETED:'Concluído',COMPLETED_WITH_ERRORS:'Concluído com erros',NEEDS_REVIEW:'Conferência necessária',FAILED:'Falha'};
+      document.getElementById('sendProgressState').textContent=statusNames[j.status]||j.status;
+      document.getElementById('sendProgressBar').style.width=data.percent+'%';
+      document.getElementById('sendProgressPercent').textContent=data.percent+'%';
+      document.getElementById('sendProgressMessages').textContent=j.sent_messages||0;
+      document.getElementById('sendProgressCompanies').textContent=j.sent_companies||0;
+      document.getElementById('sendProgressErrors').textContent=(j.error_companies||0)+(j.review_companies||0);
+      document.getElementById('sendProgressCurrent').textContent=j.current_label||j.message||'Aguardando...';
+      const events=(data.events||[]).map(ev=>`<div class="progress-event ${ev.level||'info'}"><span>${escapeHtml(ev.created_at||'')}</span><strong>${escapeHtml(ev.message||'')}</strong></div>`).join('');
+      document.getElementById('sendProgressEvents').innerHTML=events;
+      if(data.done){
+        document.getElementById('sendProgressBar').style.width='100%';document.getElementById('sendProgressPercent').textContent='100%';
+        document.getElementById('sendProgressRefresh').classList.remove('hidden');
+        if(j.status==='NEEDS_REVIEW') document.getElementById('sendProgressNotice').textContent='Há um envio de estado incerto. Confira a caixa Enviados do Gmail antes de tentar reenviar.';
+        else document.getElementById('sendProgressNotice').textContent=`${j.message||'Processamento concluído.'} Sem e-mail: ${j.no_email||0}. Já enviados/ignorados: ${j.skipped_companies||0}.`;
+        edgeJobTimer=null; return;
+      }
+      edgeJobTimer=setTimeout(()=>pollSendJob(jobId),900);
+    }catch(err){
+      document.getElementById('sendProgressCurrent').textContent='Reconectando ao acompanhamento...';
+      edgeJobTimer=setTimeout(()=>pollSendJob(jobId),2000);
+    }
+  }
+  function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

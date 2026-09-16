@@ -1,0 +1,16 @@
+EDGE Convocações de Periódicos - Validação V5.1
+
+ALTERAÇÕES VALIDADAS
+1. Nova competência: após processar a base, redireciona para a competência sem auto_export.
+2. Adicionar base em competência existente: após processar, volta para a competência sem iniciar download.
+3. Planilha para encaminhamentos: permanece disponível apenas pelos links/botões explícitos de download.
+4. Exclusão definitiva: exige o texto EXCLUIR no navegador e no servidor.
+5. Exclusão definitiva: bloqueada enquanto houver envio ativo.
+6. Exclusão definitiva: remove email_logs da competência antes de excluir a competência.
+7. Demais dados ligados à competência são removidos pelas chaves ON DELETE CASCADE.
+8. Diretório de anexos da competência é removido fisicamente e não vai para a lixeira.
+9. Se a transação de banco falhar após a pasta ser isolada, o sistema tenta restaurar a pasta original.
+10. app.py validado com py_compile.
+
+OBSERVAÇÃO
+O cadastro geral das empresas não é excluído ao apagar uma competência.

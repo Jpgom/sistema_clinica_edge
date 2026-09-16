@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}{{ unit.name }} · EDGE{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('dashboard') }}">Início</a><span>/</span><strong>{{ unit.name }}</strong></div>
+<div class="page-head">
+  <div><div class="eyebrow">UNIDADE</div><h1>{{ unit.name }}</h1><p>Competências e indicadores exclusivos desta unidade.</p></div>
+  <div class="actions"><a class="btn btn-ghost" href="{{ url_for('unit_edit',unit_id=unit.id) }}">Editar unidade</a><a class="btn btn-primary" href="{{ url_for('campaign_new',unit_id=unit.id) }}">+ Nova competência</a></div>
+</div>
+
+{% if latest %}
+<div class="section-head"><div><h2>Competência mais recente</h2><p>{{ month_label(latest.month,latest.year) }}</p></div><a class="btn btn-secondary btn-sm" href="{{ url_for('campaign_detail',campaign_id=latest.id) }}">Abrir competência</a></div>
+<div class="kpi-grid">
+  <div class="kpi-card"><span>Empresas</span><strong>{{ latest.companies_count }}</strong></div>
+  <div class="kpi-card"><span>Convocados</span><strong>{{ latest.convocations_count }}</strong></div>
+  <div class="kpi-card"><span>Compareceram</span><strong>{{ latest.attended_count }}</strong></div>
+  <div class="kpi-card"><span>Pendentes</span><strong>{{ latest.convocations_count-latest.attended_count }}</strong></div>
+</div>
+{% endif %}
+
+<div class="section-head"><div><h2>Competências</h2><p>{{ campaigns|length }} competência(s) cadastrada(s) em {{ unit.name }}.</p></div></div>
+<div class="card no-pad">
+{% if campaigns %}<div class="table-wrap"><table class="table"><thead><tr><th>Competência</th><th>Empresas</th><th>Convocados</th><th>Compareceram</th><th>Pendentes</th><th>Encaminhamentos</th><th>Envios</th><th></th></tr></thead><tbody>
+{% for c in campaigns %}<tr><td><strong>{{ month_label(c.month,c.year) }}</strong>{% if c.title %}<small class="row-subtitle">{{ c.title }}</small>{% endif %}</td><td>{{ c.companies_count }}</td><td>{{ c.convocations_count }}</td><td><span class="number-ok">{{ c.attended_count }}</span></td><td><span class="number-warn">{{ c.convocations_count-c.attended_count }}</span></td><td>{{ c.attachment_count }}</td><td>{{ c.sent_messages }}</td><td class="right"><a class="btn btn-sm btn-secondary" href="{{ url_for('campaign_detail',campaign_id=c.id) }}">Abrir</a></td></tr>{% endfor %}
+</tbody></table></div>{% else %}<div class="empty-state"><strong>Nenhuma competência ainda.</strong><span>Crie a primeira competência desta unidade para começar.</span><a class="btn btn-primary btn-sm" href="{{ url_for('campaign_new',unit_id=unit.id) }}">Criar competência</a></div>{% endif %}
+</div>
+{% endblock %}

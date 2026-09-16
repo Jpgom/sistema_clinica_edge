@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}Início · EDGE{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">VISÃO GERAL</div><h1>Escolha uma unidade</h1><p>Entre em uma unidade para visualizar e administrar somente as competências dela.</p></div>
+  <a class="btn btn-secondary" href="{{ url_for('units') }}">Gerenciar unidades</a>
+</div>
+
+<div class="summary-strip">
+  <div><span>Empresas ativas</span><strong>{{ companies_count }}</strong></div>
+  <div><span>Com e-mail</span><strong>{{ email_count }}</strong></div>
+  <div><span>Mensagens enviadas</span><strong>{{ sent_count }}</strong></div>
+  <div><span>Unidades</span><strong>{{ units|length }}</strong></div>
+</div>
+
+<div class="section-head"><div><h2>Unidades</h2><p>Competências, convocações e acompanhamento ficam separados por unidade.</p></div></div>
+<div class="unit-grid">
+  {% for u in units %}
+  <a class="unit-card" href="{{ url_for('unit_dashboard',unit_id=u.id) }}">
+    <div class="unit-card-top"><span class="unit-initial">{{ u.name[:1] }}</span><span class="arrow">→</span></div>
+    <h2>{{ u.name }}</h2>
+    {% if u.latest_month %}<div class="unit-latest">Última competência: <strong>{{ month_label(u.latest_month,u.latest_year) }}</strong></div>{% else %}<div class="unit-latest">Nenhuma competência criada</div>{% endif %}
+    <div class="unit-stats">
+      <div><strong>{{ u.campaigns_count }}</strong><span>competências</span></div>
+      <div><strong>{{ u.companies_count }}</strong><span>empresas</span></div>
+      <div><strong>{{ u.convocations_count }}</strong><span>convocados</span></div>
+      <div><strong>{{ u.pending_count }}</strong><span>pendentes</span></div>
+    </div>
+  </a>
+  {% else %}<div class="empty-state">Nenhuma unidade ativa. <a href="{{ url_for('unit_edit') }}">Cadastrar unidade</a>.</div>{% endfor %}
+</div>
+{% endblock %}

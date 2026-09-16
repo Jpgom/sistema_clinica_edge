@@ -1,0 +1,5 @@
+{% extends 'base.html' %}{% block title %}{% if unit %}Editar unidade{% else %}Nova unidade{% endif %} · EDGE{% endblock %}{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('units') }}">Unidades</a><span>/</span><strong>{% if unit %}Editar{% else %}Nova{% endif %}</strong></div>
+<div class="page-head"><div><div class="eyebrow">CADASTRO</div><h1>{% if unit %}Editar unidade{% else %}Nova unidade{% endif %}</h1><p>As competências ficam separadas por unidade de atendimento.</p></div></div>
+<div class="card" style="max-width:650px"><form method="post"><div class="form-group"><label>Nome da unidade</label><input class="form-control" name="name" required value="{{ unit.name if unit else '' }}" placeholder="Ex.: SANTARÉM"></div><label class="toggle-row"><input type="checkbox" name="active" {% if not unit or unit.active %}checked{% endif %}><span><strong>Unidade ativa</strong><small>Pode receber novas competências.</small></span></label><div class="form-actions"><a class="btn btn-ghost" href="{{ url_for('units') }}">Cancelar</a><button class="btn btn-primary">Salvar</button></div></form></div>
+{% endblock %}

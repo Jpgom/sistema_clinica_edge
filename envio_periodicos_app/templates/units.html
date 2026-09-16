@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Unidades · EDGE{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">CADASTRO</div><h1>Unidades</h1><p>BELÉM e MACAPÁ já vêm cadastradas. Novas unidades podem ser adicionadas quando necessário.</p></div><a class="btn btn-primary" href="{{ url_for('unit_edit') }}">+ Nova unidade</a></div>
+<div class="card no-pad">
+  <div class="table-wrap"><table class="table"><thead><tr><th>Unidade</th><th>Competências</th><th>Status</th><th class="right">Ações</th></tr></thead><tbody>
+  {% for u in units %}<tr><td><a class="entity-link" href="{{ url_for('unit_dashboard',unit_id=u.id) }}"><span class="mini-mark">{{ u.name[:1] }}</span><span><strong>{{ u.name }}</strong><small>Abrir painel da unidade</small></span></a></td><td>{{ u.campaigns_count }}</td><td>{% if u.active %}<span class="status status-ok">Ativa</span>{% else %}<span class="status">Inativa</span>{% endif %}</td><td class="right"><div class="actions right-actions"><a class="btn btn-sm btn-secondary" href="{{ url_for('unit_dashboard',unit_id=u.id) }}">Abrir</a><a class="btn btn-sm btn-ghost" href="{{ url_for('unit_edit',unit_id=u.id) }}">Editar</a><form method="post" action="{{ url_for('unit_toggle',unit_id=u.id) }}"><input type="hidden" name="active" value="{{ 0 if u.active else 1 }}"><button class="btn btn-sm {% if u.active %}btn-ghost-danger{% else %}btn-success{% endif %}">{% if u.active %}Desativar{% else %}Ativar{% endif %}</button></form></div></td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

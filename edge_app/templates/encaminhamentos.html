@@ -29,9 +29,19 @@
       {% with messages = get_flashed_messages() %}{% for m in messages %}<div class="alert error">{{ m }}</div>{% endfor %}{% endwith %}
       <form action="{{ url_for('encaminhamentos_async') }}" method="POST" enctype="multipart/form-data">
         <div class="form-grid">
-          <div class="field col-4"><label for="file">Planilha Base do Mês</label><input type="file" id="file" name="file" accept=".xls,.xlsx" required></div>
+          <div class="field col-4"><label for="file">Planilha Base de Encaminhamentos</label><input type="file" id="file" name="file" accept=".xls,.xlsx" required></div>
+          <div class="field col-2">
+            <label for="formato_saida">Formato dos encaminhamentos</label>
+            <select id="formato_saida" name="formato_saida">
+              <option value="pdf" selected>PDF</option>
+              <option value="docx">Word (.docx)</option>
+            </select>
+          </div>
         </div>
-        <div class="helper-box" style="margin-top:16px">Usa a coluna <strong>Complementares</strong>, separando por <strong>;</strong>.</div>
+        <div class="helper-box" style="margin-top:16px">
+          A base deve conter <strong>EMPRESA</strong>, <strong>CNPJ</strong>, <strong>NOME</strong>, <strong>CARGO</strong> e <strong>COMPLEMENTARES</strong>.
+          O download será um arquivo <strong>encaminhamentos.zip</strong>; dentro dele, cada empresa sairá como um ZIP separado, nomeado somente pelo CNPJ sem pontuação.
+        </div>
         <div class="actions"><button class="btn btn--primary" type="submit">Gerar encaminhamentos</button></div>
       </form>
     </section>

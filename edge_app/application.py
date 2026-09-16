@@ -1383,57 +1383,229 @@ def quebrar_complementares(texto):
     texto = str(texto).strip()
     if not texto or texto.lower() == "nan":
         return []
-    return [x.strip() for x in re.split(r";+", texto) if x.strip()]
+    # A base pode vir separada por ;, quebra de linha, vírgula ou barra vertical.
+    partes = re.split(r"[;\n\r|]+", texto)
+    if len(partes) == 1 and "," in texto and not re.search(r"\d+,\d+", texto):
+        partes = texto.split(",")
+    return [x.strip().upper() for x in partes if str(x).strip()]
 
-def gerar_encaminhamentos(file):
+
+def _cnpj_pasta_encaminhamento(valor):
+    """Nome seguro da pasta/zip da empresa: somente números do CNPJ."""
+    numeros = somente_numeros(valor)
+    return numeros if numeros else "SEM_CNPJ"
+
+
+def _valor_linha_encaminhamento(row, coluna):
+    if not coluna:
+        return ""
+    try:
+        valor = row[coluna]
+    except Exception:
+        return ""
+    try:
+        if pd.isna(valor):
+            return ""
+    except Exception:
+        pass
+    return str(valor).strip()
+
+
+def _nome_arquivo_unico(pasta, nome_base, extensao):
+    pasta = Path(pasta)
+    nome_limpo = limpar_nome_pasta_arquivo(nome_base or "SEM NOME") or "SEM NOME"
+    destino = pasta / f"{nome_limpo}.{extensao}"
+    contador = 1
+    while destino.exists():
+        destino = pasta / f"{nome_limpo} ({contador}).{extensao}"
+        contador += 1
+    return destino
+
+
+def _gerar_encaminhamento_docx(contexto, destino):
+    template = DocxTemplate(TEMPLATE_PATH)
+    template.render(contexto)
+    template.save(str(destino))
+
+
+def _gerar_encaminhamento_pdf(contexto, destino):
+    """Gera PDF nativo, sem depender de LibreOffice no servidor."""
+    styles = getSampleStyleSheet()
+    normal = ParagraphStyle(
+        "enc_normal",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=9,
+        leading=11,
+    )
+    header = ParagraphStyle(
+        "enc_header",
+        parent=normal,
+        fontName="Helvetica-Bold",
+        fontSize=11,
+        leading=13,
+        alignment=TA_CENTER,
+    )
+    title = ParagraphStyle(
+        "enc_title",
+        parent=header,
+        fontSize=14,
+        leading=16,
+    )
+    small = ParagraphStyle(
+        "enc_small",
+        parent=normal,
+        fontSize=8,
+        leading=10,
+    )
+    doc = SimpleDocTemplate(
+        str(destino),
+        pagesize=A4,
+        leftMargin=14 * mm,
+        rightMargin=14 * mm,
+        topMargin=12 * mm,
+        bottomMargin=12 * mm,
+    )
+    exames = ["EXAME CLÍNICO"] + [contexto.get(f"comp{i}", "") for i in range(1, 10) if contexto.get(f"comp{i}", "")]
+    exames_txt = "<br/>".join(exames) if exames else "EXAME CLÍNICO"
+    empresa = contexto.get("empresa", "")
+    cnpj = contexto.get("cnpj", "")
+    funcionario = contexto.get("funcionario", "")
+    funcao = contexto.get("funcao", "")
+
+    story = [
+        Paragraph("EDGE SEGURANÇA, SAÚDE E MEDICINA DO TRABALHO", title),
+        Spacer(1, 4 * mm),
+        Paragraph("Guia de Encaminhamento", header),
+        Spacer(1, 4 * mm),
+        Paragraph("Dados Pessoais", header),
+        Spacer(1, 3 * mm),
+    ]
+    data = [
+        [Paragraph("Protocolo", normal), "", "", "", ""],
+        [Paragraph("Empresa:", normal), Paragraph(empresa, normal), "", Paragraph("CNPJ", normal), Paragraph(cnpj, normal)],
+        [Paragraph("Funcionário:", normal), Paragraph(funcionario, normal), "", Paragraph("Função", normal), Paragraph(funcao, normal)],
+        [Paragraph("Local do Exame", header), "", "", "", ""],
+        [Paragraph("Prestador", normal), Paragraph("EDGE, SEGURANÇA SAÚDE E MEDICINA DO TRABALHO", normal), "", "", ""],
+        [Paragraph("Endereço<br/>Fone", normal), Paragraph("Avenida Feliciano Coelho, Nº327, Trem, Macapá - AP<br/>91 98113-3744", normal), "", "", ""],
+        [Paragraph("Horário", normal), Paragraph("8h às 11h e 14h às 16h", normal), "", "", ""],
+        [Paragraph("Tipo de Exame", header), "", "", "", ""],
+        [Paragraph("Tipo de Exame: PERIÓDICO", normal), "", "", "", ""],
+        [Paragraph("Exames Selecionados:", header), "", "", "", ""],
+        [Paragraph(exames_txt, normal), "", "", "", ""],
+    ]
+    table = Table(data, colWidths=[35*mm, 55*mm, 12*mm, 25*mm, 55*mm])
+    table.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#D9EAD3")),
+        ("BACKGROUND", (0, 3), (-1, 3), colors.HexColor("#D9EAD3")),
+        ("BACKGROUND", (0, 7), (-1, 7), colors.HexColor("#D9EAD3")),
+        ("BACKGROUND", (0, 9), (-1, 9), colors.HexColor("#D9EAD3")),
+        ("SPAN", (1, 1), (2, 1)),
+        ("SPAN", (1, 2), (2, 2)),
+        ("SPAN", (0, 3), (-1, 3)),
+        ("SPAN", (1, 4), (-1, 4)),
+        ("SPAN", (1, 5), (-1, 5)),
+        ("SPAN", (1, 6), (-1, 6)),
+        ("SPAN", (0, 7), (-1, 7)),
+        ("SPAN", (0, 8), (-1, 8)),
+        ("SPAN", (0, 9), (-1, 9)),
+        ("SPAN", (0, 10), (-1, 10)),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+        ("ALIGN", (0, 3), (-1, 3), "CENTER"),
+        ("ALIGN", (0, 7), (-1, 7), "CENTER"),
+        ("ALIGN", (0, 9), (-1, 9), "CENTER"),
+    ]))
+    story.append(table)
+    doc.build(story)
+
+
+def gerar_encaminhamentos(file, formato_saida="docx"):
     file.seek(0)
     df = pd.read_excel(file)
 
     col_empresa = encontrar_coluna(df, ["empresa"], obrigatoria=True)
-    col_cnpj = encontrar_coluna(df, ["cnpj", "cpf"])
+    col_cnpj = encontrar_coluna(df, ["cnpj", "cpf"], obrigatoria=True)
     col_nome = encontrar_coluna(df, ["funcionario", "funcionário", "nome"], obrigatoria=True)
     col_funcao = encontrar_coluna(df, ["funcao", "função", "cargo"])
-    col_comp = encontrar_coluna(df, ["complementares"], obrigatoria=False)
+    col_comp = encontrar_coluna(df, ["complementares", "exames", "exames_obg", "exames obrigatorios", "exames obrigatórios"], obrigatoria=False)
+
+    formato_saida = str(formato_saida or "docx").strip().lower()
+    if formato_saida not in {"docx", "pdf"}:
+        formato_saida = "docx"
 
     temp_dir = tempfile.mkdtemp()
-    out_root = os.path.join(temp_dir, "encaminhamentos")
-    os.makedirs(out_root, exist_ok=True)
+    empresas_root = Path(temp_dir) / "empresas"
+    empresas_root.mkdir(parents=True, exist_ok=True)
+
+    registros_por_empresa = {}
+    relatorio = []
 
     for _, row in df.iterrows():
-        empresa = "" if pd.isna(row[col_empresa]) else str(row[col_empresa]).strip()
-        funcionario = "" if pd.isna(row[col_nome]) else str(row[col_nome]).strip()
-        cnpj = "" if not col_cnpj or pd.isna(row[col_cnpj]) else str(row[col_cnpj]).strip()
-        funcao = "" if not col_funcao or pd.isna(row[col_funcao]) else str(row[col_funcao]).strip()
-        complementares_txt = "" if not col_comp or pd.isna(row[col_comp]) else str(row[col_comp]).strip()
+        empresa = _valor_linha_encaminhamento(row, col_empresa)
+        funcionario = _valor_linha_encaminhamento(row, col_nome)
+        cnpj_raw = _valor_linha_encaminhamento(row, col_cnpj)
+        funcao = _valor_linha_encaminhamento(row, col_funcao)
+        complementares_txt = _valor_linha_encaminhamento(row, col_comp)
+        if not funcionario:
+            continue
 
-        lista = quebrar_complementares(complementares_txt)
-        comps = {f"comp{i+1}": lista[i] if i < len(lista) else "" for i in range(9)}
+        cnpj_pasta = _cnpj_pasta_encaminhamento(cnpj_raw)
+        cnpj_formatado = formatar_documento(cnpj_raw) or cnpj_raw
+        registros_por_empresa.setdefault(cnpj_pasta, []).append({
+            "empresa": empresa.upper(),
+            "cnpj": cnpj_formatado,
+            "funcionario": funcionario.upper(),
+            "funcao": funcao.upper(),
+            "complementares": quebrar_complementares(complementares_txt),
+        })
 
-        pasta_empresa = os.path.join(out_root, limpar_nome_pasta_arquivo(empresa or "SEM EMPRESA"))
-        os.makedirs(pasta_empresa, exist_ok=True)
+    if not registros_por_empresa:
+        raise ValueError("Nenhum encaminhamento foi encontrado na planilha. Confira as colunas EMPRESA, CNPJ, NOME e COMPLEMENTARES.")
 
-        contexto = {"empresa": empresa, "cnpj": cnpj, "funcionario": funcionario, "funcao": funcao, **comps}
+    for cnpj_pasta, registros in registros_por_empresa.items():
+        pasta_empresa = empresas_root / cnpj_pasta
+        pasta_empresa.mkdir(parents=True, exist_ok=True)
+        for item in registros:
+            comps = {f"comp{i+1}": item["complementares"][i] if i < len(item["complementares"]) else "" for i in range(9)}
+            contexto = {
+                "empresa": item["empresa"],
+                "cnpj": item["cnpj"],
+                "funcionario": item["funcionario"],
+                "funcao": item["funcao"],
+                **comps,
+            }
+            base_nome = f"ENCAMINHAMENTO {contexto['funcionario'] or 'SEM NOME'}"
+            destino = _nome_arquivo_unico(pasta_empresa, base_nome, formato_saida)
+            if formato_saida == "pdf":
+                _gerar_encaminhamento_pdf(contexto, destino)
+            else:
+                _gerar_encaminhamento_docx(contexto, destino)
+        relatorio.append(f"{cnpj_pasta}: {len(registros)} encaminhamento(s)")
 
-        template = DocxTemplate(TEMPLATE_PATH)
-        template.render(contexto)
-
-        nome_base = f"ENCAMINHAMENTO {limpar_nome_pasta_arquivo(funcionario or 'SEM NOME')}.docx"
-        destino = os.path.join(pasta_empresa, nome_base)
-        contador = 1
-        while os.path.exists(destino):
-            nome_base = f"ENCAMINHAMENTO {limpar_nome_pasta_arquivo(funcionario or 'SEM NOME')} ({contador}).docx"
-            destino = os.path.join(pasta_empresa, nome_base)
-            contador += 1
-        template.save(destino)
-
-    zip_path = os.path.join(temp_dir, "encaminhamentos.zip")
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
-        for root, _, files in os.walk(out_root):
-            for name in files:
-                full = os.path.join(root, name)
-                rel = os.path.relpath(full, out_root)
-                z.write(full, rel)
-    return zip_path
+    # ZIP principal: dentro dele vai 1 ZIP por empresa/CNPJ, e dentro de cada ZIP fica a pasta do CNPJ com os encaminhamentos.
+    zip_principal = Path(temp_dir) / "encaminhamentos.zip"
+    with zipfile.ZipFile(zip_principal, "w", zipfile.ZIP_DEFLATED) as zip_out:
+        for pasta_empresa in sorted(empresas_root.iterdir(), key=lambda p: p.name):
+            if not pasta_empresa.is_dir():
+                continue
+            zip_empresa_path = Path(temp_dir) / f"{pasta_empresa.name}.zip"
+            with zipfile.ZipFile(zip_empresa_path, "w", zipfile.ZIP_DEFLATED) as zip_empresa:
+                for arquivo in sorted(pasta_empresa.iterdir(), key=lambda p: p.name):
+                    if arquivo.is_file():
+                        zip_empresa.write(arquivo, f"{pasta_empresa.name}/{arquivo.name}")
+            zip_out.write(zip_empresa_path, zip_empresa_path.name)
+        resumo_texto = (
+            "ENCAMINHAMENTOS GERADOS\n"
+            "========================\n"
+            f"Formato dos arquivos: {formato_saida.upper()}\n"
+            f"Empresas/CNPJs: {len(registros_por_empresa)}\n"
+            f"Total de encaminhamentos: {sum(len(v) for v in registros_por_empresa.values())}\n\n"
+            + "\n".join(relatorio)
+        )
+        zip_out.writestr("RESUMO_ENCAMINHAMENTOS.txt", resumo_texto)
+    return str(zip_principal)
 
 # =========================
 # RENUMERADOR
@@ -3855,8 +4027,9 @@ def encaminhamentos():
         if not ok:
             flash(msg)
             return redirect(url_for("encaminhamentos"))
+        formato_saida = request.form.get("formato_saida", "docx")
         try:
-            zip_path = gerar_encaminhamentos(file)
+            zip_path = gerar_encaminhamentos(file, formato_saida=formato_saida)
             return send_file(zip_path, as_attachment=True, download_name="encaminhamentos.zip")
         except Exception:
             logger.exception("Erro ao gerar encaminhamentos")
@@ -4229,6 +4402,7 @@ def encaminhamentos_async():
     if not ok:
         flash(msg)
         return redirect(url_for("encaminhamentos"))
+    formato_saida = request.form.get("formato_saida", "docx")
     job_root = Path(tempfile.mkdtemp(prefix="job_encaminhamentos_", dir=JOBS_DIR))
     upload = job_root / secure_filename(file.filename)
     file.save(upload)
@@ -4237,8 +4411,8 @@ def encaminhamentos_async():
         progress(20, "Lendo base do mês...")
         with open(upload, "rb") as fh:
             fh.filename = upload.name
-            progress(45, "Gerando documentos Word...")
-            zip_path = gerar_encaminhamentos(fh)
+            progress(45, f"Gerando encaminhamentos em {formato_saida.upper()}...")
+            zip_path = gerar_encaminhamentos(fh, formato_saida=formato_saida)
         final_path = job_root / "encaminhamentos.zip"
         shutil.copy2(zip_path, final_path)
         progress(90, "Finalizando pacote...")

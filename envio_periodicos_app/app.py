@@ -427,6 +427,25 @@ def digits(value):
     return re.sub(r"\D", "", str(value or ""))
 
 
+def safe_int(value, default=0):
+    """Converte valores de formulário/configuração sem derrubar a página."""
+    try:
+        if value is None:
+            return int(default)
+        text = str(value).strip()
+        if not text:
+            return int(default)
+        # Aceita valores que eventualmente venham como 587.0, 587, ou com espaços.
+        return int(float(text.replace(",", ".")))
+    except Exception:
+        return int(default)
+
+
+def normalize_smtp_security(value):
+    value = str(value or "starttls").strip().lower()
+    return value if value in {"starttls", "ssl", "none"} else "starttls"
+
+
 def format_cnpj(value):
     d = digits(value)
     if len(d) != 14:
@@ -1622,7 +1641,24 @@ def email_preview(campaign_id,company_id,kind):
 
 
 def smtp_config():
-    return {"host":setting_get("smtp_host","smtp.gmail.com") or "smtp.gmail.com","port":int(setting_get("smtp_port","587") or 587),"username":setting_get("smtp_username"),"password":decrypt_secret(setting_get("smtp_password")),"security":setting_get("smtp_security","starttls"),"sender_name":setting_get("sender_name","EDGE Saúde Ocupacional"),"sender_email":setting_get("sender_email") or setting_get("smtp_username"),"test_mode":setting_get("test_mode","1")=="1","test_email":setting_get("test_email")}
+    # Configuração robusta: qualquer valor antigo/corrompido no SQLite volta para padrão
+    # em vez de gerar Internal Server Error na tela de e-mail.
+    host = (setting_get("smtp_host", "smtp.gmail.com") or "smtp.gmail.com").strip()
+    port = safe_int(setting_get("smtp_port", "587"), 587)
+    security = normalize_smtp_security(setting_get("smtp_security", "starttls"))
+    username = (setting_get("smtp_username") or "").strip()
+    sender_email = (setting_get("sender_email") or username or "").strip()
+    return {
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": decrypt_secret(setting_get("smtp_password")),
+        "security": security,
+        "sender_name": setting_get("sender_name", "EDGE Saúde Ocupacional") or "EDGE Saúde Ocupacional",
+        "sender_email": sender_email,
+        "test_mode": setting_get("test_mode", "1") == "1",
+        "test_email": (setting_get("test_email") or "").strip(),
+    }
 
 
 def smtp_send(to_email,cc_value,subject,html_body,text_body,attachments=None):
@@ -2036,16 +2072,59 @@ def pending_export(campaign_id):
 
 
 # ---------------------------- CONFIGURAÇÕES / HISTÓRICO ----------------------------
-@app.route("/settings",methods=["GET","POST"])
+@app.route("/settings", methods=["GET", "POST"])
 def settings():
-    if request.method=="POST" and any_active_send_job():
-        flash("Aguarde a conclusão dos envios em andamento antes de alterar a conta de e-mail.","warning"); return redirect(url_for("settings"))
-    if request.method=="POST":
-        for key in ["smtp_host","smtp_port","smtp_username","smtp_security","sender_name","sender_email","test_email","email_signature"]: setting_set(key,request.form.get(key,"").strip())
-        setting_set("test_mode","1" if request.form.get("test_mode") else "0"); password=request.form.get("smtp_password","")
-        if password: setting_set("smtp_password",encrypt_secret(password))
-        flash("Configurações salvas.","success"); return redirect(url_for("settings"))
-    cfg=smtp_config(); return render_template("settings.html",cfg=cfg,has_password=bool(setting_get("smtp_password")),signature=setting_get("email_signature","EDGE Saúde Ocupacional"))
+    if request.method == "POST" and any_active_send_job():
+        flash("Aguarde a conclusão dos envios em andamento antes de alterar a conta de e-mail.", "warning")
+        return redirect(url_for("settings"))
+
+    if request.method == "POST":
+        try:
+            smtp_host = (request.form.get("smtp_host") or "smtp.gmail.com").strip() or "smtp.gmail.com"
+            smtp_port = safe_int(request.form.get("smtp_port"), 587)
+            smtp_security = normalize_smtp_security(request.form.get("smtp_security"))
+            smtp_username = (request.form.get("smtp_username") or "").strip()
+            sender_email = (request.form.get("sender_email") or smtp_username).strip()
+
+            if not smtp_username:
+                flash("Informe o usuário Gmail antes de salvar.", "danger")
+                cfg = smtp_config()
+                return render_template("settings.html", cfg=cfg, has_password=bool(setting_get("smtp_password")), signature=setting_get("email_signature", "EDGE Saúde Ocupacional"))
+
+            if sender_email and not valid_email(sender_email):
+                flash("O e-mail do remetente está inválido.", "danger")
+                cfg = smtp_config()
+                return render_template("settings.html", cfg=cfg, has_password=bool(setting_get("smtp_password")), signature=setting_get("email_signature", "EDGE Saúde Ocupacional"))
+
+            setting_set("smtp_host", smtp_host)
+            setting_set("smtp_port", str(smtp_port))
+            setting_set("smtp_username", smtp_username)
+            setting_set("smtp_security", smtp_security)
+            setting_set("sender_name", (request.form.get("sender_name") or "EDGE Saúde Ocupacional").strip())
+            setting_set("sender_email", sender_email)
+            setting_set("test_email", (request.form.get("test_email") or "").strip())
+            setting_set("email_signature", (request.form.get("email_signature") or "EDGE Saúde Ocupacional").strip())
+            setting_set("test_mode", "1" if request.form.get("test_mode") else "0")
+
+            password = request.form.get("smtp_password", "")
+            if password:
+                # Senha de app do Google normalmente vem com espaços; removemos apenas espaços
+                # de digitação para evitar falha de autenticação, sem expor a senha.
+                setting_set("smtp_password", encrypt_secret(password.replace(" ", "").strip()))
+
+            flash("Configurações de e-mail salvas com sucesso.", "success")
+            return redirect(url_for("settings"))
+        except Exception as e:
+            app.logger.exception("Erro ao salvar configurações de e-mail")
+            flash(f"Não foi possível salvar as configurações de e-mail: {e}", "danger")
+
+    cfg = smtp_config()
+    return render_template(
+        "settings.html",
+        cfg=cfg,
+        has_password=bool(setting_get("smtp_password")),
+        signature=setting_get("email_signature", "EDGE Saúde Ocupacional"),
+    )
 
 
 @app.post("/settings/test-email")
@@ -2080,6 +2159,19 @@ def change_password():
     elif len(new)<6: flash("A nova senha deve ter pelo menos 6 caracteres.","danger")
     else: setting_set("admin_password_hash",generate_password_hash(new)); flash("Senha alterada.","success")
     return redirect(url_for("settings"))
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    app.logger.exception("Erro interno no módulo Envio Periódicos")
+    if request.path.startswith("/settings"):
+        try:
+            flash("Ocorreu um erro na tela de e-mail. Revise os campos e tente novamente. Se persistir, confira os logs do Render.", "danger")
+            cfg = smtp_config()
+            return render_template("settings.html", cfg=cfg, has_password=bool(setting_get("smtp_password")), signature=setting_get("email_signature", "EDGE Saúde Ocupacional")), 500
+        except Exception:
+            pass
+    return "Erro interno no módulo Envio Periódicos. Verifique os logs do Render.", 500
 
 
 @app.errorhandler(413)

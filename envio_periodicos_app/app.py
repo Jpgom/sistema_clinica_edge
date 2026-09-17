@@ -70,6 +70,21 @@ app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("ENVIO_PERIODICOS_MAX_UPLO
 APP_VERSION = "V5.1"
 
 
+def safe_int(value, default=0):
+    """Converte valores de formulário/configuração sem derrubar a página."""
+    try:
+        if value is None:
+            return int(default)
+        text = str(value).strip()
+        if not text:
+            return int(default)
+        # Aceita valores que eventualmente venham como 587.0, 587, ou com espaços.
+        return int(float(text.replace(",", ".")))
+    except Exception:
+        return int(default)
+
+
+
 def local_auth_enabled():
     """Senha local para uso standalone. Em integração com site protegido, defina EDGE_LOCAL_AUTH=0."""
     return str(os.environ.get("EDGE_LOCAL_AUTH", "1")).strip().lower() not in {"0", "false", "no", "off"}
@@ -447,19 +462,6 @@ def decrypt_secret(value):
 def digits(value):
     return re.sub(r"\D", "", str(value or ""))
 
-
-def safe_int(value, default=0):
-    """Converte valores de formulário/configuração sem derrubar a página."""
-    try:
-        if value is None:
-            return int(default)
-        text = str(value).strip()
-        if not text:
-            return int(default)
-        # Aceita valores que eventualmente venham como 587.0, 587, ou com espaços.
-        return int(float(text.replace(",", ".")))
-    except Exception:
-        return int(default)
 
 
 def normalize_smtp_security(value):

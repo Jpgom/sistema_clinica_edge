@@ -6,6 +6,7 @@
   <div><div class="eyebrow">COMPETÊNCIA · {{ campaign.unit_name }}</div><h1>{{ month_label(campaign.month,campaign.year) }}</h1><p>{% if campaign.title %}{{ campaign.title }} · {% endif %}Base, encaminhamentos, envios e comparecimento no mesmo lugar.</p></div>
   <div class="actions">
     <a class="btn btn-primary" href="{{ url_for('referral_base_export',campaign_id=campaign.id) }}">↓ Planilha para encaminhamentos</a>
+    <button class="btn btn-secondary" type="button" onclick="openReferralModal()">Gerar encaminhamentos</button>
     <a class="btn btn-ghost" href="{{ url_for('campaign_edit',campaign_id=campaign.id) }}">Editar competência</a>
     <a class="btn btn-secondary" href="{{ url_for('campaign_export',campaign_id=campaign.id) }}">Exportar relatório</a>
   </div>
@@ -29,7 +30,7 @@
 <div class="workflow-grid workflow-v4">
   <section class="workflow-card workflow-primary">
     <div class="step">1</div><div><h3>Base da competência</h3><p>Suba as planilhas. Nomes repetidos na mesma empresa entram uma única vez na convocação.</p></div>
-    <div class="workflow-actions"><form method="post" enctype="multipart/form-data" action="{{ url_for('campaign_add_sources',campaign_id=campaign.id) }}"><input class="form-control compact-input" type="file" name="files" accept=".xlsx,.zip" multiple required><button class="btn btn-secondary btn-sm">Adicionar base</button></form><a class="mini-action" href="{{ url_for('referral_base_export',campaign_id=campaign.id) }}">↓ Baixar planilha para encaminhamentos</a></div>
+    <div class="workflow-actions"><form method="post" enctype="multipart/form-data" action="{{ url_for('campaign_add_sources',campaign_id=campaign.id) }}"><input class="form-control compact-input" type="file" name="files" accept=".xlsx,.zip" multiple required><button class="btn btn-secondary btn-sm">Adicionar base</button></form><div class="mini-action-row"><a class="mini-action" href="{{ url_for('referral_base_export',campaign_id=campaign.id) }}">↓ Baixar planilha para encaminhamentos</a><button class="mini-action button-link" type="button" onclick="openReferralModal()">Gerar encaminhamentos</button></div></div>
   </section>
   <section class="workflow-card"><div class="step">2</div><div><h3>Encaminhamentos / complementares</h3><p>Envie o ZIP geral. O CNPJ no arquivo ou pasta identifica automaticamente a empresa.</p></div><div class="workflow-actions"><form method="post" enctype="multipart/form-data" action="{{ url_for('attachments_import_zip',campaign_id=campaign.id) }}"><input class="form-control compact-input" type="file" name="file" accept=".zip" required><button class="btn btn-secondary btn-sm">Importar encaminhamentos</button></form></div></section>
   <section class="workflow-card"><div class="step">3</div><div><h3>Enviar convocações</h3><p>O e-mail leva somente o nome do colaborador. Empresas com o mesmo e-mail são agrupadas.</p></div><div class="workflow-actions"><button type="button" class="btn btn-success btn-sm" onclick="startSendProcess('{{ url_for('send_job_start',campaign_id=campaign.id,kind='initial') }}',{},'Enviar as convocações pendentes desta competência?')">Enviar pendentes</button></div></section>
@@ -51,10 +52,47 @@
   </tbody></table></div>
 </div>
 
+
+
+<div id="referralModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="referralModalTitle">
+  <div class="progress-modal referral-modal">
+    <div class="progress-head">
+      <div><div class="eyebrow">ENCAMINHAMENTOS</div><h2 id="referralModalTitle">Gerar encaminhamentos da competência</h2></div>
+      <button class="modal-close" type="button" onclick="closeReferralModal()" aria-label="Fechar">×</button>
+    </div>
+    <div class="referral-steps">
+      <div><strong>1</strong><span>Baixe a planilha para encaminhamentos.</span></div>
+      <div><strong>2</strong><span>Preencha a coluna COMPLEMENTARES.</span></div>
+      <div><strong>3</strong><span>Envie a planilha preenchida aqui.</span></div>
+    </div>
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('campaign_generate_referrals',campaign_id=campaign.id) }}" class="referral-form">
+      <div class="form-group">
+        <label>Planilha Base de Encaminhamentos preenchida</label>
+        <input class="form-control" type="file" name="file" accept=".xlsx,.xls" required>
+        <div class="help">Use a planilha baixada nesta competência, depois de preencher os exames complementares.</div>
+      </div>
+      <div class="form-group">
+        <label>Formato de saída</label>
+        <select class="form-control" name="formato_saida">
+          <option value="pdf" selected>PDF</option>
+          <option value="docx">Word (.docx)</option>
+        </select>
+        <div class="help">O download será um ZIP chamado encaminhamentos.zip, com um ZIP por empresa/CNPJ.</div>
+      </div>
+      <div class="progress-actions">
+        <button type="button" class="btn btn-ghost" onclick="closeReferralModal()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Gerar encaminhamentos</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <details class="danger-panel"><summary>Opções avançadas</summary><div class="danger-content danger-delete-content"><div><strong>Excluir competência definitivamente</strong><p>Apaga esta competência, empresas vinculadas, colaboradores, comparecimentos, histórico de envios e encaminhamentos armazenados. O cadastro geral das empresas permanece.</p><p class="muted"><strong>Atenção:</strong> esta ação não envia os arquivos para a lixeira e não pode ser desfeita pelo sistema.</p></div><form method="post" action="{{ url_for('campaign_delete',campaign_id=campaign.id) }}" onsubmit="return confirmPermanentCampaignDelete(this)"><label class="form-label" for="confirm_delete">Digite <strong>EXCLUIR</strong> para confirmar</label><input class="form-control" id="confirm_delete" name="confirm_delete" autocomplete="off" placeholder="EXCLUIR" required><button class="btn btn-danger" type="submit">Excluir definitivamente</button></form></div></details>
 {% endblock %}
 {% block scripts %}<script>
 function filterCompanies(){const q=(document.getElementById('companyFilter').value||'').toLowerCase();document.querySelectorAll('#companiesTable tbody tr').forEach(r=>r.style.display=(r.dataset.search||'').includes(q)?'':'none');}
+function openReferralModal(){document.getElementById('referralModal')?.classList.remove('hidden');}
+function closeReferralModal(){document.getElementById('referralModal')?.classList.add('hidden');}
 function confirmPermanentCampaignDelete(form){
   const field=form.querySelector('[name="confirm_delete"]');
   if(!field || field.value.trim().toUpperCase()!=='EXCLUIR'){

@@ -22,3 +22,14 @@
 .danger-delete-content .form-label{font-size:.88rem;font-weight:600}
 .danger-delete-content .muted{margin-top:8px}
 @media(max-width:760px){.danger-delete-content form{min-width:100%}}
+
+
+/* Integração Encaminhamentos dentro da competência */
+.mini-action-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.button-link{border:0;background:none;cursor:pointer;font:inherit;padding:0}
+.referral-modal{width:min(620px,100%)}
+.referral-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0;background:#f7f9fb;border:1px solid var(--line);border-radius:12px;padding:10px}
+.referral-steps div{display:flex;gap:8px;align-items:flex-start;font-size:11px;color:var(--muted);line-height:1.35}
+.referral-steps strong{flex:0 0 24px;width:24px;height:24px;border-radius:999px;background:var(--navy);color:#fff;display:grid;place-items:center;font-size:11px}
+.referral-form{display:grid;gap:4px}
+@media(max-width:680px){.referral-steps{grid-template-columns:1fr}.page-head.campaign-head .actions{width:100%}.page-head.campaign-head .actions .btn{width:100%}}

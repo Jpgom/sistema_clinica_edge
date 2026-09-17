@@ -30,7 +30,7 @@ from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from cryptography.fernet import Fernet
 
-APP_NAME = "EDGE - Envio Periódicos"
+APP_NAME = "EDGE - Envio periódicos"
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("ENVIO_PERIODICOS_DATA_DIR") or os.environ.get("DATA_DIR") or (BASE_DIR / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -2047,6 +2047,44 @@ def referral_base_export(campaign_id):
     return send_file(bio,as_attachment=True,download_name=filename,mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
+@app.post("/campaigns/<int:campaign_id>/gerar-encaminhamentos")
+def campaign_generate_referrals(campaign_id):
+    """Gera encaminhamentos diretamente dentro da competência do Envio periódicos.
+
+    Usa a mesma rotina da função Encaminhamentos do site principal para manter
+    o padrão de saída: encaminhamentos.zip, com um ZIP por empresa/CNPJ e
+    arquivos internos em PDF ou Word.
+    """
+    get_campaign_or_404(campaign_id)
+    f = request.files.get("file")
+    formato_saida = (request.form.get("formato_saida") or "pdf").strip().lower()
+    if formato_saida not in {"pdf", "docx"}:
+        formato_saida = "pdf"
+    if not f or not f.filename:
+        flash("Selecione a Planilha para encaminhamentos preenchida.", "danger")
+        return redirect(url_for("campaign_detail", campaign_id=campaign_id))
+    if not f.filename.lower().endswith((".xlsx", ".xls")):
+        flash("Envie uma planilha .xlsx ou .xls para gerar os encaminhamentos.", "danger")
+        return redirect(url_for("campaign_detail", campaign_id=campaign_id))
+    try:
+        # Reaproveita exatamente a rotina já validada no site principal.
+        from edge_app.application import gerar_encaminhamentos
+        zip_path = gerar_encaminhamentos(f, formato_saida=formato_saida)
+        return send_file(
+            zip_path,
+            as_attachment=True,
+            download_name="encaminhamentos.zip",
+            mimetype="application/zip",
+        )
+    except Exception as exc:
+        app.logger.exception("Erro ao gerar encaminhamentos pela competência %s", campaign_id)
+        flash(
+            "Não foi possível gerar os encaminhamentos. Confira se a planilha possui as colunas EMPRESA, CNPJ, NOME, CARGO e COMPLEMENTARES.",
+            "danger",
+        )
+        return redirect(url_for("campaign_detail", campaign_id=campaign_id))
+
+
 @app.route("/campaigns/<int:campaign_id>/export.xlsx")
 def campaign_export(campaign_id):
     campaign=get_campaign_or_404(campaign_id); conn=db()
@@ -2163,7 +2201,7 @@ def change_password():
 
 @app.errorhandler(500)
 def internal_error(e):
-    app.logger.exception("Erro interno no módulo Envio Periódicos")
+    app.logger.exception("Erro interno no módulo Envio periódicos")
     if request.path.startswith("/settings"):
         try:
             flash("Ocorreu um erro na tela de e-mail. Revise os campos e tente novamente. Se persistir, confira os logs do Render.", "danger")
@@ -2171,7 +2209,7 @@ def internal_error(e):
             return render_template("settings.html", cfg=cfg, has_password=bool(setting_get("smtp_password")), signature=setting_get("email_signature", "EDGE Saúde Ocupacional")), 500
         except Exception:
             pass
-    return "Erro interno no módulo Envio Periódicos. Verifique os logs do Render.", 500
+    return "Erro interno no módulo Envio periódicos. Verifique os logs do Render.", 500
 
 
 @app.errorhandler(413)

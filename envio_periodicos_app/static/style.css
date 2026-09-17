@@ -33,3 +33,11 @@
 .referral-steps strong{flex:0 0 24px;width:24px;height:24px;border-radius:999px;background:var(--navy);color:#fff;display:grid;place-items:center;font-size:11px}
 .referral-form{display:grid;gap:4px}
 @media(max-width:680px){.referral-steps{grid-template-columns:1fr}.page-head.campaign-head .actions{width:100%}.page-head.campaign-head .actions .btn{width:100%}}
+
+/* V5.2 - navegação rápida e comparecimento sem filtro de tipo */
+.back-button{flex:0 0 auto;white-space:nowrap}
+.info-note{display:grid;gap:3px;margin:14px 0 2px;padding:12px 13px;border:1px solid #cfe0f5;background:#edf5ff;color:#315a7d;border-radius:10px;font-size:11px;line-height:1.45}
+.info-note strong{color:#15314b;font-size:12px}
+.info-note span{display:block}
+.help-divider{height:1px;background:var(--line);margin:13px 0}
+@media(max-width:620px){.back-button{padding:8px 10px}.topbar{flex-wrap:wrap}.topbar>div{min-width:0}}

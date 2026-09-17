@@ -67,7 +67,7 @@ fernet = Fernet(FERNET_KEY.encode())
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET
 app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("ENVIO_PERIODICOS_MAX_UPLOAD_MB", "120")) * 1024 * 1024
-APP_VERSION = "V5.1"
+APP_VERSION = "V5.2"
 
 
 def safe_int(value, default=0):
@@ -2007,7 +2007,7 @@ def campaign_send_all(campaign_id,kind):
 ATTENDANCE_ALIASES={"cnpj":{"CNPJ","CNPJEMPRESA"},"cpf":{"CPF"},"name":{"NOME","NOMEFUNCIONARIO","COLABORADOR","FUNCIONARIO"},"type":{"TIPOEXAME","EXAME","TIPODEEXAME","TIPO"},"date":{"DATA","DATAATENDIMENTO","DATAEXAME"}}
 
 
-def process_attendance_file(campaign_id,storage,periodic_only=True):
+def process_attendance_file(campaign_id,storage,periodic_only=False):
     raw=storage.read(); digest=file_sha256(raw); conn=db()
     try:
         conn.execute("BEGIN IMMEDIATE")
@@ -2024,9 +2024,8 @@ def process_attendance_file(campaign_id,storage,periodic_only=True):
             for row in ws.iter_rows(min_row=header_row+1,values_only=True):
                 cnpj=digits(row[mapping["cnpj"]]) if "cnpj" in mapping and mapping["cnpj"]<len(row) else ""; cpf=digits(row[mapping["cpf"]]) if "cpf" in mapping and mapping["cpf"]<len(row) else ""; name=str(row[mapping["name"]] or "").strip().upper() if "name" in mapping and mapping["name"]<len(row) else ""
                 if not cpf and not name: continue
-                if periodic_only and "type" in mapping and mapping["type"]<len(row):
-                    typ=normalize_text(row[mapping["type"]])
-                    if typ and "PERIOD" not in typ: continue
+                # A partir da V5.2, todos os atendimentos da planilha de controle são considerados.
+                # Não há filtro por tipo de exame; admissional, periódico, retorno, mudança etc. podem marcar comparecimento.
                 att_date=parse_date(row[mapping["date"]] if "date" in mapping and mapping["date"]<len(row) else None); match=None; method=""
                 if cnpj and cpf:
                     match=conn.execute("""SELECT v.id FROM convocations v JOIN companies c ON c.id=v.company_id WHERE v.campaign_id=? AND c.cnpj=? AND v.cpf=? LIMIT 1""",(campaign_id,cnpj,cpf)).fetchone(); method="CNPJ+CPF"
@@ -2060,9 +2059,9 @@ def attendance(campaign_id):
         if not f or not f.filename: flash("Selecione a planilha de controle.","danger")
         else:
             try:
-                matched,unmatched,repeated=process_attendance_file(campaign_id,f,periodic_only=request.form.get("periodic_only")=="1")
+                matched,unmatched,repeated=process_attendance_file(campaign_id,f,periodic_only=False)
                 if repeated: flash(f"Esta mesma planilha de controle já havia sido processada. Nenhuma alteração duplicada foi feita. Resultado anterior: {matched} encontrado(s), {unmatched} não encontrado(s).","warning")
-                else: flash(f"Comparação concluída: {matched} convocado(s) marcado(s) como compareceram; {unmatched} registro(s) não encontrado(s).","success")
+                else: flash(f"Comparação concluída: {matched} convocado(s) marcado(s) como compareceram; {unmatched} registro(s) não encontrado(s). Todos os tipos de exame da planilha foram considerados.","success")
                 return redirect(url_for("campaign_detail",campaign_id=campaign_id))
             except Exception as e: flash(f"Não foi possível comparar a planilha: {e}","danger")
     return render_template("attendance.html",campaign=campaign)

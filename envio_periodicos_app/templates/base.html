@@ -4,9 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}EDGE · Envio periódicos{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}?v={{ APP_VERSION|urlencode }}">
 </head>
 <body>
+{% set edge_back_url = url_for('dashboard') %}
+{% if request.endpoint == 'campaign_detail' and campaign is defined %}
+  {% set edge_back_url = url_for('unit_dashboard', unit_id=campaign.unit_id) %}
+{% elif request.endpoint in ['attendance','campaign_company','campaign_edit','campaign_errors','email_preview','employee_edit'] and campaign is defined %}
+  {% set edge_back_url = url_for('campaign_detail', campaign_id=campaign.id) %}
+{% elif request.endpoint in ['unit_dashboard','unit_edit'] %}
+  {% set edge_back_url = url_for('units') %}
+{% elif request.endpoint in ['company_edit'] %}
+  {% set edge_back_url = url_for('companies') %}
+{% endif %}
 <div class="app-shell">
   <aside class="sidebar">
     <a class="brand" href="{{ url_for('dashboard') }}">
@@ -32,6 +42,7 @@
   <section class="main">
     <header class="topbar">
       <button class="mobile-menu" type="button" onclick="document.body.classList.toggle('menu-open')">☰</button>
+      {% if request.endpoint not in ['dashboard','login','setup'] %}<button class="btn btn-ghost btn-sm back-button" type="button" onclick="edgeSmartBack()">← Voltar</button>{% endif %}
       <div><strong>Envio de periódicos</strong><span class="topbar-note">Convocação, encaminhamentos, comparecimento e e-mails</span></div>
       <a class="btn btn-primary btn-sm desktop-only" href="{{ url_for('campaign_new') }}">+ Nova competência</a>
     </header>
@@ -76,8 +87,22 @@
 
 <script>
   window.EDGE_JOB_STATUS_TEMPLATE = {{ url_for('send_job_status',job_id='JOBID')|tojson }};
+  window.EDGE_BACK_FALLBACK = {{ edge_back_url|tojson }};
   let edgeJobTimer = null;
   let edgeCurrentJob = null;
+
+  function edgeSmartBack(){
+    try{
+      if(document.referrer){
+        const ref=new URL(document.referrer);
+        if(ref.origin===location.origin && ref.href!==location.href){
+          history.back();
+          return;
+        }
+      }
+    }catch(err){}
+    location.href=window.EDGE_BACK_FALLBACK || {{ url_for('dashboard')|tojson }};
+  }
 
   document.addEventListener('click', function(e){
     if(document.body.classList.contains('menu-open') && !e.target.closest('.sidebar') && !e.target.closest('.mobile-menu')) document.body.classList.remove('menu-open');

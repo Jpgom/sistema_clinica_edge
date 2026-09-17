@@ -76,11 +76,17 @@ def local_auth_enabled():
 
 
 def db():
-    # Aguarda concorrência curta em vez de falhar com "database is locked".
-    conn = sqlite3.connect(DB_PATH, timeout=30)
+    # Recria as pastas se o Render reiniciar ou montar o disco após o import.
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
+    BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+    TRASH_DIR.mkdir(parents=True, exist_ok=True)
+    # Evita a tela ficar carregando por muito tempo quando o SQLite estiver travado.
+    timeout = safe_int(os.environ.get("ENVIO_PERIODICOS_SQLITE_TIMEOUT"), 8)
+    conn = sqlite3.connect(DB_PATH, timeout=timeout)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA busy_timeout=30000")
+    conn.execute(f"PRAGMA busy_timeout={max(1000, timeout * 1000)}")
     return conn
 
 
@@ -365,11 +371,18 @@ def init_db():
     if "updated_at" not in ccols:
         conn.execute("ALTER TABLE campaigns ADD COLUMN updated_at TEXT")
     # V4: preserva uma base detalhada por NOME + CARGO para gerar a planilha de encaminhamentos.
-    conn.execute(
-        """INSERT OR IGNORE INTO campaign_base_rows(campaign_id,company_id,cpf,employee_name,sector,role,admission_date,source_file,created_at)
-           SELECT campaign_id,company_id,cpf,employee_name,sector,COALESCE(role,''),admission_date,source_file,? FROM convocations""",
-        (now,),
-    )
+    # Em produção, evita refazer esta carga a cada deploy, pois bases grandes podem travar a abertura do módulo.
+    try:
+        has_base_rows = conn.execute("SELECT 1 FROM campaign_base_rows LIMIT 1").fetchone()
+        has_convocations = conn.execute("SELECT 1 FROM convocations LIMIT 1").fetchone()
+        if (not has_base_rows) and has_convocations:
+            conn.execute(
+                """INSERT OR IGNORE INTO campaign_base_rows(campaign_id,company_id,cpf,employee_name,sector,role,admission_date,source_file,created_at)
+                   SELECT campaign_id,company_id,cpf,employee_name,sector,COALESCE(role,''),admission_date,source_file,? FROM convocations""",
+                (now,),
+            )
+    except Exception:
+        app.logger.exception("Falha ao sincronizar campaign_base_rows na inicialização")
     # V5: deduplicação operacional e fila persistente de envios.
     if "file_hash" not in table_columns(conn, "campaign_attachments"):
         conn.execute("ALTER TABLE campaign_attachments ADD COLUMN file_hash TEXT")
@@ -379,6 +392,14 @@ def init_db():
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_hash ON attendance_imports(campaign_id,file_hash) WHERE file_hash IS NOT NULL AND file_hash<>''")
     conn.execute("DROP INDEX IF EXISTS idx_active_send_job")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_active_send_job ON send_jobs(campaign_id) WHERE status IN ('QUEUED','RUNNING')")
+    # Índices para abrir o painel rapidamente mesmo com muitas competências/convocações.
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_unit_order ON campaigns(unit_id, year DESC, month DESC, id DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_campaign_companies_campaign_company ON campaign_companies(campaign_id, company_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_convocations_campaign_company_attended ON convocations(campaign_id, company_id, attended)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_campaign_base_rows_campaign_company ON campaign_base_rows(campaign_id, company_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_campaign_attachments_campaign_company ON campaign_attachments(campaign_id, company_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_campaign_status_batch ON email_logs(campaign_id, status, batch_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_send_job_groups_job_status ON send_job_groups(job_id, status)")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.commit()
     conn.close()
@@ -722,6 +743,18 @@ def protect_app():
         return redirect(url_for("login", next=request.path))
 
 
+@app.errorhandler(Exception)
+def handle_unexpected_error(exc):
+    app.logger.exception("Erro inesperado no módulo Envio periódicos")
+    return (
+        "<h1>Erro no Envio periódicos</h1>"
+        "<p>O sistema encontrou um erro, mas a página não ficará travada.</p>"
+        f"<pre>{html.escape(str(exc))}</pre>"
+        '<p><a href="/">Voltar ao sistema principal</a></p>',
+        500,
+    )
+
+
 @app.route("/setup", methods=["GET", "POST"])
 def setup():
     if not local_auth_enabled():
@@ -767,23 +800,71 @@ def logout():
 
 @app.route("/")
 def dashboard():
-    conn = db()
-    units = conn.execute(
-        """SELECT u.*,
-                  (SELECT COUNT(*) FROM campaigns c WHERE c.unit_id=u.id) campaigns_count,
-                  (SELECT COUNT(DISTINCT cc.company_id) FROM campaign_companies cc JOIN campaigns c ON c.id=cc.campaign_id WHERE c.unit_id=u.id) companies_count,
-                  (SELECT COUNT(*) FROM convocations v JOIN campaigns c ON c.id=v.campaign_id WHERE c.unit_id=u.id) convocations_count,
-                  (SELECT COUNT(*) FROM convocations v JOIN campaigns c ON c.id=v.campaign_id WHERE c.unit_id=u.id AND v.attended=0) pending_count,
-                  (SELECT c.id FROM campaigns c WHERE c.unit_id=u.id ORDER BY c.year DESC,c.month DESC,c.id DESC LIMIT 1) latest_campaign_id,
-                  (SELECT c.month FROM campaigns c WHERE c.unit_id=u.id ORDER BY c.year DESC,c.month DESC,c.id DESC LIMIT 1) latest_month,
-                  (SELECT c.year FROM campaigns c WHERE c.unit_id=u.id ORDER BY c.year DESC,c.month DESC,c.id DESC LIMIT 1) latest_year
-           FROM units u WHERE u.active=1 ORDER BY u.name"""
-    ).fetchall()
-    companies_count = conn.execute("SELECT COUNT(*) n FROM companies WHERE active=1").fetchone()["n"]
-    email_count = conn.execute("SELECT COUNT(*) n FROM companies WHERE active=1 AND COALESCE(email,'')<>''").fetchone()["n"]
-    sent_count = conn.execute("SELECT COUNT(DISTINCT COALESCE(batch_id,'LEGACY-'||id)) n FROM email_logs WHERE status='ENVIADO'").fetchone()["n"]
-    conn.close()
-    return render_template("dashboard.html", units=units, companies_count=companies_count, email_count=email_count, sent_count=sent_count)
+    try:
+        conn = db()
+        unit_rows = conn.execute("SELECT * FROM units WHERE active=1 ORDER BY name").fetchall()
+        units = [dict(u) for u in unit_rows]
+
+        campaigns_count = {r["unit_id"]: r["n"] for r in conn.execute("SELECT unit_id,COUNT(*) n FROM campaigns GROUP BY unit_id").fetchall()}
+        companies_count_by_unit = {r["unit_id"]: r["n"] for r in conn.execute("""SELECT c.unit_id,COUNT(DISTINCT cc.company_id) n
+             FROM campaigns c JOIN campaign_companies cc ON cc.campaign_id=c.id GROUP BY c.unit_id""").fetchall()}
+        convocations_count_by_unit = {r["unit_id"]: r["n"] for r in conn.execute("""SELECT c.unit_id,COUNT(*) n
+             FROM campaigns c JOIN convocations v ON v.campaign_id=c.id GROUP BY c.unit_id""").fetchall()}
+        pending_count_by_unit = {r["unit_id"]: r["n"] for r in conn.execute("""SELECT c.unit_id,COUNT(*) n
+             FROM campaigns c JOIN convocations v ON v.campaign_id=c.id WHERE v.attended=0 GROUP BY c.unit_id""").fetchall()}
+
+        latest_by_unit = {}
+        for r in conn.execute("SELECT id,unit_id,month,year FROM campaigns ORDER BY unit_id,year DESC,month DESC,id DESC").fetchall():
+            latest_by_unit.setdefault(r["unit_id"], r)
+
+        for u in units:
+            uid = u["id"]
+            latest = latest_by_unit.get(uid)
+            u["campaigns_count"] = campaigns_count.get(uid, 0)
+            u["companies_count"] = companies_count_by_unit.get(uid, 0)
+            u["convocations_count"] = convocations_count_by_unit.get(uid, 0)
+            u["pending_count"] = pending_count_by_unit.get(uid, 0)
+            u["latest_campaign_id"] = latest["id"] if latest else None
+            u["latest_month"] = latest["month"] if latest else None
+            u["latest_year"] = latest["year"] if latest else None
+
+        companies_count = conn.execute("SELECT COUNT(*) n FROM companies WHERE active=1").fetchone()["n"]
+        email_count = conn.execute("SELECT COUNT(*) n FROM companies WHERE active=1 AND COALESCE(email,'')<>''").fetchone()["n"]
+        sent_count = conn.execute("SELECT COUNT(DISTINCT COALESCE(batch_id,'LEGACY-'||id)) n FROM email_logs WHERE status='ENVIADO'").fetchone()["n"]
+        conn.close()
+        return render_template("dashboard.html", units=units, companies_count=companies_count, email_count=email_count, sent_count=sent_count)
+    except Exception as exc:
+        app.logger.exception("Falha ao abrir o painel do Envio periódicos")
+        return (
+            "<h1>Não foi possível abrir o Envio periódicos</h1>"
+            "<p>O sistema encontrou um erro ao acessar o banco do módulo.</p>"
+            "<p>Confira no Render se o disco está montado em <b>/var/data</b> e se "
+            "<b>ENVIO_PERIODICOS_DATA_DIR</b> está como <b>/var/data/envio_periodicos</b>.</p>"
+            f"<pre>{html.escape(str(exc))}</pre>"
+            '<p><a href="/">Voltar ao sistema principal</a></p>',
+            500,
+        )
+
+
+@app.route("/health")
+def health():
+    try:
+        conn = db()
+        conn.execute("SELECT 1").fetchone()
+        tables = [r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()]
+        conn.close()
+        return jsonify({
+            "ok": True,
+            "version": APP_VERSION,
+            "data_dir": str(DATA_DIR),
+            "db_path": str(DB_PATH),
+            "db_exists": DB_PATH.exists(),
+            "db_size": DB_PATH.stat().st_size if DB_PATH.exists() else 0,
+            "tables": tables,
+        })
+    except Exception as exc:
+        app.logger.exception("Falha no health do Envio periódicos")
+        return jsonify({"ok": False, "error": str(exc), "data_dir": str(DATA_DIR), "db_path": str(DB_PATH)}), 500
 
 
 # ---------------------------- UNIDADES ----------------------------

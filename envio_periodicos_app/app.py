@@ -2007,47 +2007,152 @@ def campaign_send_all(campaign_id,kind):
 ATTENDANCE_ALIASES={"cnpj":{"CNPJ","CNPJEMPRESA"},"cpf":{"CPF"},"name":{"NOME","NOMEFUNCIONARIO","COLABORADOR","FUNCIONARIO"},"type":{"TIPOEXAME","EXAME","TIPODEEXAME","TIPO"},"date":{"DATA","DATAATENDIMENTO","DATAEXAME"}}
 
 
-def process_attendance_file(campaign_id,storage,periodic_only=False):
-    raw=storage.read(); digest=file_sha256(raw); conn=db()
+def process_attendance_file(campaign_id, storage, periodic_only=False):
+    """Compara a planilha de controle sem travar o SQLite.
+
+    Antes a planilha era lida dentro de um BEGIN IMMEDIATE e, para cada linha
+    sem CPF direto, o sistema consultava todos os convocados novamente. Em
+    planilhas grandes isso deixava o módulo parecendo carregamento infinito e
+    ainda bloqueava outras telas. Agora a planilha é analisada em memória, os
+    convocados são carregados uma única vez em dicionários e o banco só é
+    bloqueado no momento curto de gravar o resultado.
+    """
+    raw = storage.read()
+    digest = file_sha256(raw)
+    file_name = secure_filename(storage.filename) or "controle.xlsx"
+
+    conn = db()
+    try:
+        previous = conn.execute(
+            "SELECT matched_count,unmatched_count FROM attendance_imports WHERE campaign_id=? AND file_hash=?",
+            (campaign_id, digest),
+        ).fetchone()
+        if previous:
+            return previous["matched_count"], previous["unmatched_count"], True
+
+        # Carrega todos os convocados uma única vez para comparação rápida.
+        convos = conn.execute(
+            """SELECT v.id, v.cpf, v.employee_name, c.cnpj
+               FROM convocations v
+               JOIN companies c ON c.id = v.company_id
+               WHERE v.campaign_id=?""",
+            (campaign_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    cnpj_cpf_map = {}
+    cpf_map = {}
+    name_map = {}
+    for v in convos:
+        vid = v["id"]
+        cpf = digits(v["cpf"] or "")
+        cnpj = digits(v["cnpj"] or "")
+        name_norm = normalize_text(v["employee_name"] or "")
+        if cnpj and cpf:
+            cnpj_cpf_map[(cnpj, cpf)] = vid
+        if cpf:
+            cpf_map.setdefault(cpf, set()).add(vid)
+        if name_norm:
+            name_map.setdefault(name_norm, set()).add(vid)
+
+    try:
+        wb = load_workbook(io.BytesIO(raw), data_only=True, read_only=True)
+    except Exception as exc:
+        raise RuntimeError(f"Não foi possível ler a planilha de controle: {exc}")
+
+    sheets_used = 0
+    matched = {}  # id -> (data, método)
+    unmatched_rows = []
+
+    for ws in wb.worksheets:
+        header_row, mapping = detect_header_and_map(ws, ATTENDANCE_ALIASES, required_any=["cpf", "name"])
+        if not header_row or not ({"cpf", "name"} & mapping.keys()):
+            continue
+        sheets_used += 1
+
+        for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
+            cnpj = digits(row[mapping["cnpj"]]) if "cnpj" in mapping and mapping["cnpj"] < len(row) else ""
+            cpf = digits(row[mapping["cpf"]]) if "cpf" in mapping and mapping["cpf"] < len(row) else ""
+            name = str(row[mapping["name"]] or "").strip().upper() if "name" in mapping and mapping["name"] < len(row) else ""
+            if not cpf and not name:
+                continue
+
+            # Todos os atendimentos da planilha de controle são considerados.
+            # Não existe mais filtro por tipo de exame.
+            att_date = parse_date(row[mapping["date"]] if "date" in mapping and mapping["date"] < len(row) else None)
+            match_id = None
+            method = ""
+
+            if cnpj and cpf:
+                match_id = cnpj_cpf_map.get((cnpj, cpf))
+                if match_id:
+                    method = "CNPJ+CPF"
+
+            if not match_id and cpf:
+                ids = cpf_map.get(cpf, set())
+                if len(ids) == 1:
+                    match_id = next(iter(ids))
+                    method = "CPF"
+
+            if not match_id and name:
+                ids = name_map.get(normalize_text(name), set())
+                if len(ids) == 1:
+                    match_id = next(iter(ids))
+                    method = "NOME"
+
+            if match_id:
+                matched.setdefault(match_id, (att_date.isoformat() if att_date else None, method))
+            else:
+                unmatched_rows.append((cnpj, cpf, name, "Não encontrado entre os convocados desta competência"))
+
+    if sheets_used == 0:
+        raise RuntimeError("Não encontrei uma aba com CPF ou NOME para comparação.")
+
+    conn = db()
     try:
         conn.execute("BEGIN IMMEDIATE")
-        previous=conn.execute("SELECT matched_count,unmatched_count FROM attendance_imports WHERE campaign_id=? AND file_hash=?",(campaign_id,digest)).fetchone()
+        previous = conn.execute(
+            "SELECT matched_count,unmatched_count FROM attendance_imports WHERE campaign_id=? AND file_hash=?",
+            (campaign_id, digest),
+        ).fetchone()
         if previous:
-            conn.rollback(); return previous["matched_count"],previous["unmatched_count"],True
-        wb=load_workbook(io.BytesIO(raw),data_only=True,read_only=True)
-        cur=conn.execute("INSERT INTO attendance_imports(campaign_id,file_name,imported_at,file_hash) VALUES(?,?,?,?)",(campaign_id,secure_filename(storage.filename) or "controle.xlsx",now_iso(),digest)); import_id=cur.lastrowid
-        matched_ids=set(); unmatched=0; sheets_used=0
-        for ws in wb.worksheets:
-            header_row,mapping=detect_header_and_map(ws,ATTENDANCE_ALIASES,required_any=["cpf","name"])
-            if not header_row or not ({"cpf","name"}&mapping.keys()): continue
-            sheets_used+=1
-            for row in ws.iter_rows(min_row=header_row+1,values_only=True):
-                cnpj=digits(row[mapping["cnpj"]]) if "cnpj" in mapping and mapping["cnpj"]<len(row) else ""; cpf=digits(row[mapping["cpf"]]) if "cpf" in mapping and mapping["cpf"]<len(row) else ""; name=str(row[mapping["name"]] or "").strip().upper() if "name" in mapping and mapping["name"]<len(row) else ""
-                if not cpf and not name: continue
-                # A partir da V5.2, todos os atendimentos da planilha de controle são considerados.
-                # Não há filtro por tipo de exame; admissional, periódico, retorno, mudança etc. podem marcar comparecimento.
-                att_date=parse_date(row[mapping["date"]] if "date" in mapping and mapping["date"]<len(row) else None); match=None; method=""
-                if cnpj and cpf:
-                    match=conn.execute("""SELECT v.id FROM convocations v JOIN companies c ON c.id=v.company_id WHERE v.campaign_id=? AND c.cnpj=? AND v.cpf=? LIMIT 1""",(campaign_id,cnpj,cpf)).fetchone(); method="CNPJ+CPF"
-                if not match and cpf:
-                    candidates=conn.execute("SELECT id FROM convocations WHERE campaign_id=? AND cpf=?",(campaign_id,cpf)).fetchall()
-                    if len(candidates)==1: match=candidates[0]; method="CPF"
-                if not match and name:
-                    norm=normalize_text(name); candidates=conn.execute("SELECT id,employee_name FROM convocations WHERE campaign_id=?",(campaign_id,)).fetchall(); hits=[x for x in candidates if normalize_text(x["employee_name"])==norm]
-                    if len(hits)==1: match=hits[0]; method="NOME"
-                if match:
-                    matched_ids.add(match["id"]); conn.execute("UPDATE convocations SET attended=1,attendance_date=COALESCE(?,attendance_date),match_method=? WHERE id=?",(att_date.isoformat() if att_date else None,method,match["id"]))
-                else:
-                    unmatched+=1; conn.execute("INSERT INTO attendance_unmatched(attendance_import_id,cnpj,cpf,employee_name,reason) VALUES(?,?,?,?,?)",(import_id,cnpj,cpf,name,"Não encontrado entre os convocados desta competência"))
-        if sheets_used==0:
-            raise RuntimeError("Não encontrei uma aba com CPF ou NOME para comparação.")
-        conn.execute("UPDATE attendance_imports SET matched_count=?,unmatched_count=? WHERE id=?",(len(matched_ids),unmatched,import_id)); conn.commit(); return len(matched_ids),unmatched,False
+            conn.rollback()
+            return previous["matched_count"], previous["unmatched_count"], True
+
+        cur = conn.execute(
+            "INSERT INTO attendance_imports(campaign_id,file_name,imported_at,file_hash) VALUES(?,?,?,?)",
+            (campaign_id, file_name, now_iso(), digest),
+        )
+        import_id = cur.lastrowid
+
+        for convocation_id, (att_date, method) in matched.items():
+            conn.execute(
+                "UPDATE convocations SET attended=1,attendance_date=COALESCE(?,attendance_date),match_method=? WHERE id=?",
+                (att_date, method, convocation_id),
+            )
+
+        if unmatched_rows:
+            conn.executemany(
+                "INSERT INTO attendance_unmatched(attendance_import_id,cnpj,cpf,employee_name,reason) VALUES(?,?,?,?,?)",
+                [(import_id, cnpj, cpf, name, reason) for cnpj, cpf, name, reason in unmatched_rows],
+            )
+
+        conn.execute(
+            "UPDATE attendance_imports SET matched_count=?,unmatched_count=? WHERE id=?",
+            (len(matched), len(unmatched_rows), import_id),
+        )
+        conn.commit()
+        return len(matched), len(unmatched_rows), False
     except Exception:
-        try: conn.rollback()
-        except Exception: pass
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         raise
     finally:
         conn.close()
+
 
 
 @app.route("/campaigns/<int:campaign_id>/attendance",methods=["GET","POST"])

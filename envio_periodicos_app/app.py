@@ -105,6 +105,60 @@ def db():
     return conn
 
 
+
+
+def db_runtime(max_seconds=5):
+    """Conexão usada em telas. Cancela consultas longas para evitar carregamento infinito."""
+    conn = db()
+    started = time.time()
+    try:
+        limit = max(1, safe_int(max_seconds, 5))
+        conn.set_progress_handler(lambda: 1 if (time.time() - started) > limit else 0, 10000)
+    except Exception:
+        pass
+    return conn
+
+def close_db_safely(conn):
+    try:
+        conn.set_progress_handler(None, 0)
+    except Exception:
+        pass
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+def mark_stale_jobs_for_review(stale_seconds=300):
+    """Libera jobs antigos que ficam prendendo a abertura da competência."""
+    try:
+        conn = db()
+        now_dt = datetime.now()
+        jobs = conn.execute("SELECT id, status, heartbeat_at, started_at, created_at FROM send_jobs WHERE status IN ('QUEUED','RUNNING')").fetchall()
+        changed = 0
+        for j in jobs:
+            stamp = j['heartbeat_at'] or j['started_at'] or j['created_at']
+            try:
+                age = (now_dt - datetime.strptime(stamp, "%Y-%m-%d %H:%M:%S")).total_seconds() if stamp else stale_seconds + 1
+            except Exception:
+                age = stale_seconds + 1
+            if age < stale_seconds:
+                continue
+            msg = "Envio antigo interrompido. Confira a caixa Enviados do Gmail antes de reenviar."
+            conn.execute("UPDATE send_job_groups SET status='REVIEW', error=?, updated_at=? WHERE job_id=? AND status IN ('PENDING','SENDING')", (msg, now_iso(), j['id']))
+            conn.execute("UPDATE email_logs SET status='REVISAR', error=? WHERE batch_id IN (SELECT batch_id FROM send_job_groups WHERE job_id=? AND batch_id IS NOT NULL) AND status='ENVIANDO'", (msg, j['id']))
+            conn.execute("UPDATE send_jobs SET status='NEEDS_REVIEW', message=?, current_label=NULL, finished_at=?, heartbeat_at=? WHERE id=?", (msg, now_iso(), now_iso(), j['id']))
+            try:
+                add_job_event(conn, j['id'], msg, "warning")
+            except Exception:
+                pass
+            changed += 1
+        conn.commit(); conn.close()
+        return changed
+    except Exception:
+        try: conn.close()
+        except Exception: pass
+        return 0
 def table_columns(conn, table):
     return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
 
@@ -414,6 +468,9 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_campaign_base_rows_campaign_company ON campaign_base_rows(campaign_id, company_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_campaign_attachments_campaign_company ON campaign_attachments(campaign_id, company_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_campaign_status_batch ON email_logs(campaign_id, status, batch_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_email_logs_campaign_company_type_status ON email_logs(campaign_id, company_id, email_type, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_send_jobs_status_created ON send_jobs(status, created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_campaign_companies_company_campaign ON campaign_companies(company_id, campaign_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_send_job_groups_job_status ON send_job_groups(job_id, status)")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.commit()
@@ -803,18 +860,18 @@ def logout():
 @app.route("/")
 def dashboard():
     try:
-        conn = db()
+        # Evita que um envio antigo ou interrompido deixe o painel preso.
+        mark_stale_jobs_for_review(stale_seconds=300)
+        conn = db_runtime(4)
         unit_rows = conn.execute("SELECT * FROM units WHERE active=1 ORDER BY name").fetchall()
         units = [dict(u) for u in unit_rows]
 
+        # Painel inicial leve: não faz contagem pesada de todos os colaboradores.
         campaigns_count = {r["unit_id"]: r["n"] for r in conn.execute("SELECT unit_id,COUNT(*) n FROM campaigns GROUP BY unit_id").fetchall()}
-        companies_count_by_unit = {r["unit_id"]: r["n"] for r in conn.execute("""SELECT c.unit_id,COUNT(DISTINCT cc.company_id) n
-             FROM campaigns c JOIN campaign_companies cc ON cc.campaign_id=c.id GROUP BY c.unit_id""").fetchall()}
-        convocations_count_by_unit = {r["unit_id"]: r["n"] for r in conn.execute("""SELECT c.unit_id,COUNT(*) n
-             FROM campaigns c JOIN convocations v ON v.campaign_id=c.id GROUP BY c.unit_id""").fetchall()}
-        pending_count_by_unit = {r["unit_id"]: r["n"] for r in conn.execute("""SELECT c.unit_id,COUNT(*) n
-             FROM campaigns c JOIN convocations v ON v.campaign_id=c.id WHERE v.attended=0 GROUP BY c.unit_id""").fetchall()}
-
+        companies_count_by_unit = {r["unit_id"]: r["n"] for r in conn.execute(
+            """SELECT c.unit_id,COUNT(DISTINCT cc.company_id) n
+               FROM campaigns c JOIN campaign_companies cc ON cc.campaign_id=c.id GROUP BY c.unit_id"""
+        ).fetchall()}
         latest_by_unit = {}
         for r in conn.execute("SELECT id,unit_id,month,year FROM campaigns ORDER BY unit_id,year DESC,month DESC,id DESC").fetchall():
             latest_by_unit.setdefault(r["unit_id"], r)
@@ -824,37 +881,38 @@ def dashboard():
             latest = latest_by_unit.get(uid)
             u["campaigns_count"] = campaigns_count.get(uid, 0)
             u["companies_count"] = companies_count_by_unit.get(uid, 0)
-            u["convocations_count"] = convocations_count_by_unit.get(uid, 0)
-            u["pending_count"] = pending_count_by_unit.get(uid, 0)
+            u["convocations_count"] = "—"
+            u["pending_count"] = "—"
             u["latest_campaign_id"] = latest["id"] if latest else None
             u["latest_month"] = latest["month"] if latest else None
             u["latest_year"] = latest["year"] if latest else None
 
         companies_count = conn.execute("SELECT COUNT(*) n FROM companies WHERE active=1").fetchone()["n"]
         email_count = conn.execute("SELECT COUNT(*) n FROM companies WHERE active=1 AND COALESCE(email,'')<>''").fetchone()["n"]
-        sent_count = conn.execute("SELECT COUNT(DISTINCT COALESCE(batch_id,'LEGACY-'||id)) n FROM email_logs WHERE status='ENVIADO'").fetchone()["n"]
-        conn.close()
+        sent_count = "—"
+        close_db_safely(conn)
         return render_template("dashboard.html", units=units, companies_count=companies_count, email_count=email_count, sent_count=sent_count)
     except Exception as exc:
         app.logger.exception("Falha ao abrir o painel do Envio periódicos")
         return (
             "<h1>Não foi possível abrir o Envio periódicos</h1>"
-            "<p>O sistema encontrou um erro ao acessar o banco do módulo.</p>"
-            "<p>Confira no Render se o disco está montado em <b>/var/data</b> e se "
-            "<b>ENVIO_PERIODICOS_DATA_DIR</b> está como <b>/var/data/envio_periodicos</b>.</p>"
+            "<p>O sistema interrompeu uma consulta lenta para não ficar carregando infinito.</p>"
+            "<p>Acesse <b>/envio-periodicos/health</b> para conferir o banco e, se necessário, reinicie o serviço no Render.</p>"
             f"<pre>{html.escape(str(exc))}</pre>"
             '<p><a href="/">Voltar ao sistema principal</a></p>',
             500,
         )
 
-
 @app.route("/health")
 def health():
     try:
-        conn = db()
+        changed = mark_stale_jobs_for_review(stale_seconds=120)
+        conn = db_runtime(4)
         conn.execute("SELECT 1").fetchone()
-        tables = [r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()]
-        conn.close()
+        active_jobs = conn.execute("SELECT COUNT(*) n FROM send_jobs WHERE status IN ('QUEUED','RUNNING')").fetchone()["n"] if table_exists(conn, "send_jobs") else 0
+        campaigns = conn.execute("SELECT COUNT(*) n FROM campaigns").fetchone()["n"] if table_exists(conn, "campaigns") else 0
+        units_count = conn.execute("SELECT COUNT(*) n FROM units").fetchone()["n"] if table_exists(conn, "units") else 0
+        close_db_safely(conn)
         return jsonify({
             "ok": True,
             "version": APP_VERSION,
@@ -862,12 +920,25 @@ def health():
             "db_path": str(DB_PATH),
             "db_exists": DB_PATH.exists(),
             "db_size": DB_PATH.stat().st_size if DB_PATH.exists() else 0,
-            "tables": tables,
+            "units": units_count,
+            "campaigns": campaigns,
+            "active_jobs": active_jobs,
+            "stale_jobs_moved_to_review": changed,
         })
     except Exception as exc:
         app.logger.exception("Falha no health do Envio periódicos")
         return jsonify({"ok": False, "error": str(exc), "data_dir": str(DATA_DIR), "db_path": str(DB_PATH)}), 500
 
+
+@app.route("/repair")
+def repair():
+    """Rota simples para destravar envio antigo sem apagar dados."""
+    changed = mark_stale_jobs_for_review(stale_seconds=0)
+    return (
+        "<h1>Reparo do Envio periódicos</h1>"
+        f"<p>{changed} envio(s) em fila/execução foram movidos para CONFERÊNCIA, sem apagar competências.</p>"
+        '<p><a href="/envio-periodicos/">Abrir Envio periódicos</a></p>'
+    )
 
 # ---------------------------- UNIDADES ----------------------------
 @app.route("/units")
@@ -883,24 +954,35 @@ def units():
 
 @app.route("/units/<int:unit_id>")
 def unit_dashboard(unit_id):
-    conn = db()
-    unit = conn.execute("SELECT * FROM units WHERE id=?", (unit_id,)).fetchone()
-    if not unit:
-        conn.close(); abort(404)
-    campaigns = conn.execute(
-        """SELECT c.*,
-                  (SELECT COUNT(*) FROM campaign_companies cc WHERE cc.campaign_id=c.id) companies_count,
-                  (SELECT COUNT(*) FROM convocations v WHERE v.campaign_id=c.id) convocations_count,
-                  (SELECT COUNT(*) FROM convocations v WHERE v.campaign_id=c.id AND v.attended=1) attended_count,
-                  (SELECT COUNT(*) FROM campaign_attachments a WHERE a.campaign_id=c.id) attachment_count,
-                  (SELECT COUNT(DISTINCT COALESCE(l.batch_id,'LEGACY-'||l.id)) FROM email_logs l WHERE l.campaign_id=c.id AND l.status='ENVIADO') sent_messages
-           FROM campaigns c WHERE c.unit_id=? ORDER BY c.year DESC,c.month DESC,c.id DESC""",
-        (unit_id,),
-    ).fetchall()
-    latest = campaigns[0] if campaigns else None
-    conn.close()
-    return render_template("unit_dashboard.html", unit=unit, campaigns=campaigns, latest=latest)
-
+    try:
+        mark_stale_jobs_for_review(stale_seconds=300)
+        conn = db_runtime(5)
+        unit = conn.execute("SELECT * FROM units WHERE id=?", (unit_id,)).fetchone()
+        if not unit:
+            close_db_safely(conn); abort(404)
+        # Lista leve das competências. As contagens detalhadas ficam dentro da competência.
+        campaigns = conn.execute(
+            """SELECT c.*,
+                      (SELECT COUNT(*) FROM campaign_companies cc WHERE cc.campaign_id=c.id) companies_count,
+                      0 convocations_count,
+                      0 attended_count,
+                      (SELECT COUNT(*) FROM campaign_attachments a WHERE a.campaign_id=c.id) attachment_count,
+                      0 sent_messages
+               FROM campaigns c WHERE c.unit_id=? ORDER BY c.year DESC,c.month DESC,c.id DESC""",
+            (unit_id,),
+        ).fetchall()
+        latest = campaigns[0] if campaigns else None
+        close_db_safely(conn)
+        return render_template("unit_dashboard.html", unit=unit, campaigns=campaigns, latest=latest)
+    except Exception as exc:
+        app.logger.exception("Falha ao abrir unidade no Envio periódicos")
+        return (
+            "<h1>Não foi possível abrir a unidade</h1>"
+            "<p>O sistema interrompeu uma consulta lenta para evitar carregamento infinito.</p>"
+            f"<pre>{html.escape(str(exc))}</pre>"
+            '<p><a href="/envio-periodicos/">Voltar ao Envio periódicos</a></p>',
+            500,
+        )
 
 @app.route("/units/new", methods=["GET", "POST"])
 @app.route("/units/<int:unit_id>/edit", methods=["GET", "POST"])
@@ -1968,6 +2050,7 @@ def send_job_start(campaign_id,kind):
     company_id=request.form.get("company_id",type=int); force=request.form.get("force")=="1"
     try:
         job_id,created=create_send_job(campaign_id,kind,company_id,force)
+        start_send_worker()
         return jsonify({"ok":True,"job_id":job_id,"created":created})
     except Exception as e:
         return jsonify({"ok":False,"error":str(e)}),400
@@ -2404,8 +2487,8 @@ def too_large(e):
     flash("Arquivo muito grande. Limite: 120 MB.","danger"); return redirect(request.referrer or url_for("dashboard"))
 
 
-# O worker é persistente no servidor; o navegador pode ser fechado sem interromper o envio.
-start_send_worker()
+# O worker agora inicia sob demanda quando um envio é solicitado.
+# Isso evita travar a abertura do módulo em deploy/restart com banco grande ou job antigo.
 
 
 if __name__=="__main__":

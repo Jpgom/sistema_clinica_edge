@@ -102,5 +102,5 @@ function confirmPermanentCampaignDelete(form){
   }
   return confirm('Esta competência será apagada definitivamente, inclusive histórico e encaminhamentos. Deseja continuar?');
 }
-{% if request.args.get('job') %}setTimeout(()=>openSendProgress({{ request.args.get('job')|tojson }}),150);{% elif active_jobs %}setTimeout(()=>openSendProgress('{{ active_jobs[0].id }}'),250);{% endif %}
+{% if request.args.get('job') %}setTimeout(()=>openSendProgress({{ request.args.get('job')|tojson }}),150);{% endif %}
 </script>{% endblock %}

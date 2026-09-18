@@ -29,3 +29,145 @@
 .models-layout{grid-template-columns:320px 340px minmax(0,1fr)}
 .mini-list{display:grid;gap:8px;margin-top:14px}.mini-list-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px}.mini-list-item strong{display:block;font-size:12px}.mini-list-item small{display:block;color:var(--muted);font-size:10px;margin-top:2px}.archive-save-controls{grid-template-columns:minmax(150px,1fr) 150px 110px 110px;min-width:660px}.archive-save-controls .btn.primary,.archive-save-controls>a.btn{grid-column:auto}.archive-save-controls #archiveSaveBtn{grid-column:1/4}.archive-save-controls a.btn{grid-column:4/5}.archive-filters{grid-template-columns:1fr 1fr 1.25fr 1fr 120px auto}
 @media(max-width:1150px){.models-layout{grid-template-columns:1fr}.archive-save-controls{grid-template-columns:1fr 1fr;min-width:0}.archive-save-controls #archiveSaveBtn,.archive-save-controls a.btn{grid-column:1/-1}.archive-filters{grid-template-columns:1fr 1fr}}
+
+
+/* Integração visual com o Sistema EDGE principal */
+.edge-integrated-body{
+  margin:0;
+  background:#f5f7fb;
+  color:#111827;
+  font-family:Inter,"Segoe UI",Arial,sans-serif;
+}
+.edge-integrated-layout{
+  min-height:100vh;
+  display:grid;
+  grid-template-columns:260px minmax(0,1fr);
+  background:linear-gradient(90deg,#eaf5ff 0,#f4f8ff 260px,#f5f7fb 260px,#f5f7fb 100%);
+}
+.edge-integrated-sidebar{
+  position:sticky;
+  top:0;
+  height:100vh;
+  padding:24px 18px;
+  background:rgba(255,255,255,.88);
+  backdrop-filter:blur(18px);
+  border-right:1px solid rgba(230,235,242,.95);
+  box-shadow:8px 0 32px rgba(79,124,255,.06);
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+  z-index:50;
+}
+.edge-brand{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-height:52px;
+  padding:6px 8px;
+  text-decoration:none;
+  color:#263044;
+  font-weight:900;
+  letter-spacing:-.03em;
+}
+.edge-brand img{
+  width:46px;
+  height:46px;
+  border-radius:15px;
+  object-fit:cover;
+  background:#fff;
+  box-shadow:0 10px 26px rgba(16,24,40,.10);
+}
+.edge-brand strong{display:block;font-size:18px;line-height:1.1}
+.edge-brand small{display:block;color:#98a2b3;font-size:12px;font-weight:800;letter-spacing:0;margin-top:2px}
+.edge-menu{display:flex;flex-direction:column;gap:8px;overflow:auto;padding-right:3px}
+.edge-menu-link{
+  min-height:42px;
+  padding:0 12px;
+  border-radius:14px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  text-decoration:none;
+  color:#667085;
+  font-weight:850;
+  font-size:13px;
+  transition:background .16s ease,color .16s ease,transform .16s ease,box-shadow .16s ease;
+}
+.edge-menu-link:hover{background:#f0f5ff;color:#4169e1;transform:translateX(2px)}
+.edge-menu-link.active{background:#eef4ff;color:#4169e1;box-shadow:inset 3px 0 0 #4f7cff}
+.edge-sidebar-footer{margin-top:auto;display:grid;gap:10px;color:#98a2b3;font-size:11px;font-weight:800}
+.edge-back-home{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:42px;
+  padding:0 14px;
+  border-radius:14px;
+  background:#4f7cff;
+  color:#fff;
+  text-decoration:none;
+  font-size:13px;
+  font-weight:900;
+  box-shadow:0 14px 30px rgba(79,124,255,.20);
+}
+.edge-back-home:hover{background:#4169e1;transform:translateY(-1px)}
+.edge-integrated-main{
+  min-width:0;
+  padding:24px clamp(20px,3vw,48px) 56px;
+  max-width:1600px;
+}
+.edge-module-topbar{
+  margin:0 0 22px;
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:18px;
+  padding:22px 24px;
+  border:1px solid #e6ebf2;
+  border-radius:24px;
+  background:rgba(255,255,255,.92);
+  box-shadow:0 18px 48px rgba(16,24,40,.06);
+}
+.edge-breadcrumb{
+  display:block;
+  color:#4f7cff;
+  font-size:11px;
+  font-weight:950;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  margin-bottom:6px;
+}
+.edge-module-topbar h1{
+  margin:0;
+  color:#0b0f19;
+  font-size:clamp(28px,3.6vw,48px);
+  line-height:1.02;
+  letter-spacing:-.055em;
+}
+.edge-module-topbar p{
+  margin:8px 0 0;
+  color:#667085;
+  font-size:14px;
+  max-width:760px;
+}
+.edge-topbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap;max-width:520px}
+.edge-integrated-main .page-head{
+  padding:0;
+  margin:0 0 22px;
+}
+.edge-integrated-main .page-head h1{font-size:30px}
+.edge-integrated-main .page-head .eyebrow{color:#4f7cff}
+@media(max-width:980px){
+  .edge-integrated-layout{display:block;background:#f5f7fb}
+  .edge-integrated-sidebar{position:relative;height:auto;border-right:0;border-bottom:1px solid #e6ebf2;padding:14px 16px}
+  .edge-menu{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:none;overflow:visible}
+  .edge-sidebar-footer{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .edge-integrated-main{padding:18px 16px 46px}
+  .edge-module-topbar{flex-direction:column;padding:18px}
+  .edge-topbar-actions{justify-content:flex-start;max-width:none}
+}
+@media(max-width:620px){
+  .edge-menu{grid-template-columns:1fr}
+  .edge-module-topbar h1{font-size:30px}
+  .edge-topbar-actions .btn{width:100%}
+}

@@ -3,42 +3,57 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}EDGE Extrator{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <title>{% block title %}EDGE | Separar exames{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=edge-integrado-1">
 </head>
-<body>
-<div class="shell">
-  <aside class="sidebar">
-    <a class="brand" href="{{ url_for('index') }}">
-      <span class="brand-mark">E</span>
-      <span><strong>EDGE</strong><small>Extrator de Exames</small></span>
+<body class="edge-integrated-body">
+<div class="edge-integrated-layout">
+  <aside class="edge-integrated-sidebar">
+    <a class="edge-brand" href="/">
+      <img src="/static/logo_edge.png" alt="EDGE Medicina do Trabalho" onerror="this.style.display='none'">
+      <span><strong>EDGE</strong><small>Sistema unificado</small></span>
     </a>
-    <nav>
-      <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{{ url_for('index') }}">
-        <span class="nav-icon">⌂</span><span>Processamento</span>
-      </a>
-      <a class="nav-link {% if request.path.startswith('/arquivo') %}active{% endif %}" href="{{ url_for('archive_page') }}">
-        <span class="nav-icon">▤</span><span>Arquivo de Exames</span>
-      </a>
-      <a class="nav-link {% if request.path.startswith('/modelos') %}active{% endif %}" href="{{ url_for('models_page') }}">
-        <span class="nav-icon">▦</span><span>Modelos</span>
-      </a>
-      <a class="nav-link {% if request.path.startswith('/configuracoes') %}active{% endif %}" href="{{ url_for('settings_page') }}">
-        <span class="nav-icon">⚙</span><span>Configurações</span>
-      </a>
+    <nav class="edge-menu" aria-label="Menu principal EDGE">
+      <a class="edge-menu-link" href="/">🏠 Início</a>
+      <a class="edge-menu-link" href="/envio-periodicos/">📧 Envio periódicos</a>
+      <a class="edge-menu-link active" href="{{ request.script_root or '/separar-exames' }}/">📂 Separar exames</a>
+      <a class="edge-menu-link" href="/exames-a-prazo">🧾 Exames a Prazo</a>
+      <a class="edge-menu-link" href="/encaminhamentos">📄 Encaminhamentos</a>
+      <a class="edge-menu-link" href="/encaminhamento-especialista">📝 Enc. individual</a>
+      <a class="edge-menu-link" href="/encaminhamento-complementares">🧪 Enc. complementares</a>
+      <a class="edge-menu-link" href="/renumerador">🔢 Renumerador</a>
+      <a class="edge-menu-link" href="/esocial">🗂️ E-SOCIAL</a>
+      <a class="edge-menu-link" href="/laudo-pcd">♿ Laudo PCD</a>
+      <a class="edge-menu-link" href="/fisico-mental">🩺 Físico e Mental</a>
+      <a class="edge-menu-link" href="/atestado-medico">🧾 Atestado Médico</a>
+      <a class="edge-menu-link" href="/pgr/">🧾 PGR / SST</a>
     </nav>
-    <div class="sidebar-footer">
-      <div class="version-pill">v{{ version }}</div>
-      <small>TURBO SAFE+</small>
+    <div class="edge-sidebar-footer">
+      <a class="edge-back-home" href="/">← Voltar para o site EDGE</a>
+      <small>Separar exames · v{{ version }}</small>
     </div>
   </aside>
-  <main class="main">
+
+  <main class="edge-integrated-main">
+    <div class="edge-module-topbar">
+      <div>
+        <span class="edge-breadcrumb">EDGE / Separar exames</span>
+        <h1>Separar exames</h1>
+        <p>Função integrada ao sistema EDGE para separar, revisar e arquivar exames por unidade, mês, empresa e tipo.</p>
+      </div>
+      <div class="edge-topbar-actions">
+        <a class="btn ghost" href="/">← Início EDGE</a>
+        <a class="btn ghost" href="{{ request.script_root or '/separar-exames' }}/arquivo">Arquivo de Exames</a>
+        <a class="btn ghost" href="{{ request.script_root or '/separar-exames' }}/modelos">Modelos</a>
+        <a class="btn ghost" href="{{ request.script_root or '/separar-exames' }}/configuracoes">Configurações</a>
+      </div>
+    </div>
     {% block content %}{% endblock %}
   </main>
 </div>
 <div id="toast" class="toast" aria-live="polite"></div>
 <script>window.EDGE_BASE_PATH = {{ (request.script_root or "")|tojson }};</script>
-<script src="{{ url_for('static', filename='common.js') }}?v=fix404"></script>
+<script src="{{ url_for('static', filename='common.js') }}?v=edge-integrado-1"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

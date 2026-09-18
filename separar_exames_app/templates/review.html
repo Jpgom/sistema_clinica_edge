@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}EDGE | Revisão{% endblock %}
 {% block content %}
-<header class="page-head"><div><p class="eyebrow">CONFERÊNCIA</p><h1>Revisar pendências</h1><p class="lead">Confirme as páginas necessárias. Tudo que você salvar aqui entra na mesma extração e no mesmo ZIP dos arquivos já aprovados.</p></div><a class="btn ghost" href="/?job={{ job_id }}">Voltar aos resultados</a></header>
-<div id="reviewEmpty" class="card empty-state hidden"><div>✓</div><h2>Revisão concluída</h2><p>Não há mais páginas aguardando revisão. Os arquivos confirmados já foram adicionados à extração atual.</p><a class="btn primary" href="/?job={{ job_id }}">Voltar e baixar os arquivos</a></div>
+<header class="page-head"><div><p class="eyebrow">CONFERÊNCIA</p><h1>Revisar pendências</h1><p class="lead">Confirme as páginas necessárias. Tudo que você salvar aqui entra na mesma extração e no mesmo ZIP dos arquivos já aprovados.</p></div><a class="btn ghost" href="{{ url_for('index', job=job_id) }}">Voltar aos resultados</a></header>
+<div id="reviewEmpty" class="card empty-state hidden"><div>✓</div><h2>Revisão concluída</h2><p>Não há mais páginas aguardando revisão. Os arquivos confirmados já foram adicionados à extração atual.</p><a class="btn primary" href="{{ url_for('index', job=job_id) }}">Voltar e baixar os arquivos</a></div>
 <div id="reviewWorkspace" class="review-layout hidden">
   <aside class="card review-list"><h3>Páginas para revisar</h3><div id="reviewItems"></div></aside>
   <section class="card review-main">
@@ -17,4 +17,4 @@
 </div>
 <script>window.EDGE_JOB_ID = {{ job_id|tojson }};</script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='review.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='review.js') }}?v=fix404"></script>{% endblock %}

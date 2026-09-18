@@ -83,7 +83,7 @@
           <td><strong>${esc(x.company_name || 'Empresa não identificada')}</strong><small>${x.company_document ? `${esc(x.company_document_kind)} ${esc(x.company_document)}` : 'CPF/CNPJ não informado'}</small></td>
           <td><span class="exam-pill">${esc(x.exam_type || 'OUTROS')}</span>${x.exam_subtype ? `<small>${esc(x.exam_subtype)}</small>` : ''}</td>
           <td><strong>${esc(x.competency)}</strong><small>${esc(x.original_filename)}</small></td>
-          <td><div class="archive-row-actions"><a class="btn tiny ghost" target="_blank" href="/arquivo/documento/${x.id}/visualizar">Visualizar</a><a class="btn tiny primary" href="/arquivo/documento/${x.id}/baixar">Baixar</a><button class="btn tiny danger ghost doc-delete" type="button" data-id="${x.id}" data-name="${esc(x.employee_name || x.original_filename || 'documento')}">Apagar</button></div></td>
+          <td><div class="archive-row-actions"><a class="btn tiny ghost" target="_blank" href="${edgeUrl(`/arquivo/documento/${x.id}/visualizar`)}">Visualizar</a><a class="btn tiny primary" href="${edgeUrl(`/arquivo/documento/${x.id}/baixar`)}">Baixar</a><button class="btn tiny danger ghost doc-delete" type="button" data-id="${x.id}" data-name="${esc(x.employee_name || x.original_filename || 'documento')}">Apagar</button></div></td>
         </tr>`).join('') : '<tr><td colspan="7" class="table-empty">Nenhum exame arquivado com estes filtros.</td></tr>';
       selectAll.checked = false;
       updateSelected();
@@ -105,7 +105,7 @@
   function downloadUrl(ids=[]) {
     const p = params(false);
     if (ids.length) p.set('ids', ids.join(','));
-    return '/arquivo/baixar.zip?' + p.toString();
+    return edgeUrl('/arquivo/baixar.zip?' + p.toString());
   }
   async function refreshAfterDelete(count) {
     edgeToast(`${count} documento(s) apagado(s) do arquivo.`);

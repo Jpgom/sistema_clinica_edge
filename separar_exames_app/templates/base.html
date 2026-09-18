@@ -9,21 +9,21 @@
 <body>
 <div class="shell">
   <aside class="sidebar">
-    <a class="brand" href="/">
+    <a class="brand" href="{{ url_for('index') }}">
       <span class="brand-mark">E</span>
       <span><strong>EDGE</strong><small>Extrator de Exames</small></span>
     </a>
     <nav>
-      <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">
+      <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{{ url_for('index') }}">
         <span class="nav-icon">⌂</span><span>Processamento</span>
       </a>
-      <a class="nav-link {% if request.path.startswith('/arquivo') %}active{% endif %}" href="/arquivo">
+      <a class="nav-link {% if request.path.startswith('/arquivo') %}active{% endif %}" href="{{ url_for('archive_page') }}">
         <span class="nav-icon">▤</span><span>Arquivo de Exames</span>
       </a>
-      <a class="nav-link {% if request.path.startswith('/modelos') %}active{% endif %}" href="/modelos">
+      <a class="nav-link {% if request.path.startswith('/modelos') %}active{% endif %}" href="{{ url_for('models_page') }}">
         <span class="nav-icon">▦</span><span>Modelos</span>
       </a>
-      <a class="nav-link {% if request.path.startswith('/configuracoes') %}active{% endif %}" href="/configuracoes">
+      <a class="nav-link {% if request.path.startswith('/configuracoes') %}active{% endif %}" href="{{ url_for('settings_page') }}">
         <span class="nav-icon">⚙</span><span>Configurações</span>
       </a>
     </nav>
@@ -37,7 +37,8 @@
   </main>
 </div>
 <div id="toast" class="toast" aria-live="polite"></div>
-<script src="{{ url_for('static', filename='common.js') }}"></script>
+<script>window.EDGE_BASE_PATH = {{ (request.script_root or "")|tojson }};</script>
+<script src="{{ url_for('static', filename='common.js') }}?v=fix404"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

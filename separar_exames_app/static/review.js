@@ -29,7 +29,7 @@
     selected = items.find(x => x.id === id);
     if (!selected) return;
     document.querySelectorAll('.review-item').forEach(b => b.classList.toggle('active', b.dataset.id === id));
-    document.getElementById('reviewImage').src = `/api/jobs/${jobId}/page/${id}.png?t=${Date.now()}`;
+    document.getElementById('reviewImage').src = edgeUrl(`/api/jobs/${jobId}/page/${id}.png?t=${Date.now()}`);
     document.getElementById('reviewSource').textContent = `${selected.source_pdf} • página ${selected.page_number}`;
     document.getElementById('reviewEmployee').textContent = selected.employee_name || 'Funcionário não confirmado';
     document.getElementById('reviewReason').textContent = selected.reason || '';

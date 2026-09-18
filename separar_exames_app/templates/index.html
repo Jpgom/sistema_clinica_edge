@@ -11,7 +11,7 @@
     <span class="status-chip {{ 'ok' if ocr_available else 'warn' }}">
       <span class="dot"></span>{{ 'OCR disponível' if ocr_available else 'OCR não localizado' }}
     </span>
-    <a class="btn ghost" href="/configuracoes">Configurações</a>
+    <a class="btn ghost" href="{{ url_for('settings_page') }}">Configurações</a>
   </div>
 </header>
 
@@ -36,7 +36,7 @@
       <div><span>Guia</span><select id="sheetSelect"></select></div>
       <div class="meta-stats"><strong id="employeeCount">0</strong> funcionários <span>•</span> <strong id="examCount">0</strong> exames</div>
     </div>
-    <a class="inline-link" href="/modelo-planilha">Baixar modelo de planilha</a>
+    <a class="inline-link" href="{{ url_for('download_sheet_model') }}">Baixar modelo de planilha</a>
   </article>
 
   <article class="card step-card">
@@ -98,7 +98,7 @@
       <label><span>Mês</span><select id="archiveMonth"></select></label>
       <label><span>Ano</span><select id="archiveYear"></select></label>
       <button id="archiveSaveBtn" class="btn primary" type="button">Salvar no Arquivo de Exames</button>
-      <a class="btn ghost" href="/arquivo">Abrir Arquivo de Exames</a>
+      <a class="btn ghost" href="{{ url_for('archive_page') }}">Abrir Arquivo de Exames</a>
     </div>
   </article>
   <article class="card table-card">
@@ -107,4 +107,4 @@
   </article>
 </section>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='index.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='index.js') }}?v=fix404"></script>{% endblock %}

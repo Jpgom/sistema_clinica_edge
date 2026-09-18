@@ -8,7 +8,7 @@
     <p class="lead">Pesquise, filtre, baixe ou apague documentos já arquivados. Os downloads são organizados automaticamente por empresa e por tipo de exame.</p>
   </div>
   <div class="head-actions">
-    <a class="btn ghost" href="/">Processar novos exames</a>
+    <a class="btn ghost" href="{{ url_for('index') }}">Processar novos exames</a>
   </div>
 </header>
 
@@ -66,4 +66,4 @@
   </div>
 </section>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='archive.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='archive.js') }}?v=fix404"></script>{% endblock %}

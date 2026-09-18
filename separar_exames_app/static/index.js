@@ -235,8 +235,8 @@
     document.getElementById('kpiPending').textContent = s.pending;
     document.getElementById('kpiDuplicates').textContent = s.duplicates;
     document.getElementById('kpiMissing').textContent = s.missing;
-    document.getElementById('zipBtn').href = data.download_zip;
-    document.getElementById('reportBtn').href = data.download_report;
+    document.getElementById('zipBtn').href = edgeUrl(data.download_zip);
+    document.getElementById('reportBtn').href = edgeUrl(data.download_report);
 
     if (activeFolder) activeFolder.textContent = data.folder_name || 'Extração atual';
     activeBar?.classList.remove('hidden');
@@ -246,7 +246,7 @@
     const review = document.getElementById('reviewBtn');
     if (s.pending + s.duplicates > 0) {
       review.classList.remove('hidden');
-      review.href = data.review_url;
+      review.href = edgeUrl(data.review_url);
     } else {
       review.classList.add('hidden');
     }
@@ -265,7 +265,7 @@
         ? 'success'
         : (a.status === 'PENDENTE' ? 'warning' : 'neutral');
       const file = a.output_file
-        ? `<a href="/download/${data.id}/file/${encodeURIComponent(a.output_file).replaceAll('%2F', '/')}" class="file-link">${escapeHtml(a.output_file)}</a>`
+        ? `<a href="${edgeUrl(`/download/${data.id}/file/${encodeURIComponent(a.output_file).replaceAll('%2F', '/')}`)}" class="file-link">${escapeHtml(a.output_file)}</a>`
         : '—';
       return `<tr><td><strong>${escapeHtml(a.employee_name || '—')}</strong><small>${escapeHtml(a.company || '')}</small></td><td>${escapeHtml(a.exam_type || '—')}</td><td>${escapeHtml(a.exam_subtype || '—')}</td><td><span class="badge ${statusClass}">${escapeHtml(prettyStatus(a.status))}</span></td><td>${file}</td></tr>`;
     }).join('') : '<tr><td colspan="5" class="table-empty">Nenhum resultado relevante para exibir.</td></tr>';

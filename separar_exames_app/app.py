@@ -42,6 +42,7 @@ WORK_DIR = Path(os.environ.get("SEPARAR_EXAMES_WORK_DIR") or (DATA_DIR / "trabal
 LIST_DIR = WORK_DIR / "listas"
 JOBS_DIR = WORK_DIR / "jobs"
 CONFIG_FILE = DATA_DIR / "web_config.json"
+UNITS_FILE = DATA_DIR / "unidades.json"
 SECRET_FILE = WORK_DIR / ".web_secret"
 JOB_STATE_FILENAME = "job_state.json"
 
@@ -68,6 +69,7 @@ core.CONFIG_JSON = DATA_DIR / "config.json"
 core.MODELS_DIR.mkdir(parents=True, exist_ok=True)
 if not core.MODELS_JSON.exists():
     core.MODELS_JSON.write_text("[]", encoding="utf-8")
+core.refresh_exam_types()
 
 def _default_archive_dir() -> Path:
     configured = (os.environ.get("SEPARAR_EXAMES_ARCHIVE_DIR") or os.environ.get("EDGE_ARCHIVE_DIR") or "").strip()
@@ -110,6 +112,61 @@ DEFAULT_CONFIG = {
     "auto_threshold": 80,
     "employee_threshold": 82,
 }
+
+
+
+def _unit_id(value: str) -> str:
+    raw = core.normalize_for_match(value)
+    raw = re.sub(r"[^A-Z0-9]+", "_", raw).strip("_")
+    return raw[:50] or "GERAL"
+
+
+def _load_units() -> list[dict[str, str]]:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if not UNITS_FILE.exists():
+        defaults = [
+            {"id": "BELEM", "name": "Belém"},
+            {"id": "MACAPA", "name": "Macapá"},
+        ]
+        UNITS_FILE.write_text(json.dumps(defaults, ensure_ascii=False, indent=2), encoding="utf-8")
+        return defaults
+    try:
+        raw = json.loads(UNITS_FILE.read_text(encoding="utf-8"))
+        items = raw.get("units") if isinstance(raw, dict) else raw
+        units: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for item in items or []:
+            name = str(item.get("name") if isinstance(item, dict) else item or "").strip()
+            uid = str(item.get("id") if isinstance(item, dict) else _unit_id(name)).strip() or _unit_id(name)
+            if name and uid and uid not in seen:
+                units.append({"id": uid, "name": name})
+                seen.add(uid)
+        if units:
+            return units
+    except Exception:
+        pass
+    return [{"id": "GERAL", "name": "Geral"}]
+
+
+def _save_units(units: list[dict[str, str]]) -> None:
+    clean: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in units:
+        name = str(item.get("name") or "").strip()
+        uid = str(item.get("id") or _unit_id(name)).strip() or _unit_id(name)
+        if name and uid and uid not in seen:
+            clean.append({"id": uid, "name": name})
+            seen.add(uid)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    UNITS_FILE.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _unit_by_id(unit_id: str) -> dict[str, str] | None:
+    unit_id = str(unit_id or "").strip()
+    for u in _load_units():
+        if u["id"] == unit_id:
+            return u
+    return None
 
 JOBS: dict[str, dict[str, Any]] = {}
 JOBS_LOCK = threading.RLock()
@@ -547,7 +604,7 @@ def settings_page():
 
 @app.get("/modelos")
 def models_page():
-    return render_template("models.html", version="5.0 WEB", exam_types=core.EXAM_TYPES)
+    return render_template("models.html", version="5.0 WEB", exam_types=core.get_exam_types())
 
 
 @app.get("/arquivo")
@@ -559,7 +616,7 @@ def archive_page():
 def review_page(job_id: str):
     _get_job(job_id)
     session["active_job_id"] = job_id
-    return render_template("review.html", version="5.0 WEB", job_id=job_id, exam_types=core.EXAM_TYPES)
+    return render_template("review.html", version="5.0 WEB", job_id=job_id, exam_types=core.get_exam_types())
 
 
 @app.get("/api/config")
@@ -869,12 +926,16 @@ def api_archive_job(job_id: str):
         return jsonify({"error": "Escolha o mês e o ano antes de salvar no arquivo."}), 400
     if month < 1 or month > 12 or year < 2000 or year > 2100:
         return jsonify({"error": "Competência inválida."}), 400
+    unit_id = str(data.get("unit_id") or data.get("unit") or "").strip()
+    unit = _unit_by_id(unit_id)
+    if not unit:
+        return jsonify({"error": "Escolha a unidade antes de salvar no arquivo."}), 400
     docs = _archive_candidates(job)
     if not docs:
         return jsonify({"error": "Não há arquivos extraídos e aprovados para arquivar."}), 400
     try:
-        result = ARCHIVE.save_documents(docs, year, month, source_job_id=job_id)
-        result["competency"] = f"{month:02d}/{year}"
+        result = ARCHIVE.save_documents(docs, year, month, source_job_id=job_id, unit_id=unit["id"], unit_name=unit["name"])
+        result["competency"] = f"{unit["name"]} - {month:02d}/{year}"
         result["archive_saved"] = ARCHIVE.count_for_job(job_id)
         result["archive_eligible"] = len(docs)
         return jsonify({"ok": True, **result})
@@ -882,14 +943,59 @@ def api_archive_job(job_id: str):
         return jsonify({"error": str(exc)}), 400
 
 
+
+@app.get("/api/unidades")
+def api_units():
+    archived = {u["id"]: u for u in ARCHIVE.units()}
+    units = []
+    for u in _load_units():
+        x = dict(u)
+        x["archive_count"] = int(archived.get(u["id"], {}).get("count", 0))
+        units.append(x)
+    return jsonify({"units": units})
+
+
+@app.post("/api/unidades")
+def api_add_unit():
+    data = request.get_json(silent=True) or request.form
+    name = str(data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Informe o nome da unidade."}), 400
+    units = _load_units()
+    uid = _unit_id(name)
+    if any(u["id"] == uid for u in units):
+        return jsonify({"error": "Esta unidade já está cadastrada."}), 400
+    units.append({"id": uid, "name": name})
+    _save_units(units)
+    return jsonify({"ok": True, "unit": {"id": uid, "name": name}, "units": _load_units()})
+
+
+@app.delete("/api/unidades/<unit_id>")
+def api_delete_unit(unit_id: str):
+    units = _load_units()
+    unit_id = str(unit_id or "").strip()
+    if unit_id in {"BELEM", "MACAPA", "GERAL"}:
+        return jsonify({"error": "Esta unidade padrão não pode ser excluída."}), 400
+    if any(u.get("id") == unit_id and int(u.get("count", 0)) for u in ARCHIVE.units()):
+        return jsonify({"error": "Esta unidade possui arquivos arquivados e não pode ser excluída."}), 400
+    kept = [u for u in units if u["id"] != unit_id]
+    if len(kept) == len(units):
+        return jsonify({"error": "Unidade não encontrada."}), 404
+    _save_units(kept)
+    return jsonify({"ok": True, "units": _load_units()})
+
+
 @app.get("/api/archive/meta")
 def api_archive_meta():
     year = request.args.get("year", type=int)
     month = request.args.get("month", type=int)
+    unit_id = request.args.get("unit", "")
     return jsonify({
-        "periods": ARCHIVE.periods(),
-        "companies": ARCHIVE.companies(year=year, month=month),
-        "exam_types": ARCHIVE.exam_types(),
+        "units": _load_units(),
+        "periods": ARCHIVE.periods(unit_id=unit_id),
+        "companies": ARCHIVE.companies(year=year, month=month, unit_id=unit_id),
+        "exam_types": ARCHIVE.exam_types(unit_id=unit_id),
+        "all_exam_types": list(core.get_exam_types()),
         "receipt_filters": ["RECIBOS", "A PRAZO"],
     })
 
@@ -900,10 +1006,11 @@ def api_archive_search():
     month = request.args.get("month", type=int)
     page = request.args.get("page", default=1, type=int)
     page_size = request.args.get("page_size", default=100, type=int)
+    unit_id = request.args.get("unit", "")
     data = ARCHIVE.search(
         q=request.args.get("q", ""), year=year, month=month,
         company_key=request.args.get("company", ""), exam_type=request.args.get("exam_type", ""),
-        receipt_filter=request.args.get("receipt_filter", ""),
+        receipt_filter=request.args.get("receipt_filter", ""), unit_id=unit_id,
         page=page, page_size=page_size,
     )
     return jsonify(data)
@@ -937,6 +1044,7 @@ def api_archive_delete_many():
             company_key=str(data.get("company") or ""),
             exam_type=str(data.get("exam_type") or ""),
             receipt_filter=str(data.get("receipt_filter") or ""),
+            unit_id=str(data.get("unit") or ""),
         )
         ids = [int(r.get("id", 0)) for r in rows if int(r.get("id", 0))]
 
@@ -970,6 +1078,7 @@ def archive_download_zip():
     company = request.args.get("company", "")
     exam_type = request.args.get("exam_type", "")
     receipt_filter = request.args.get("receipt_filter", "")
+    unit_id = request.args.get("unit", "")
     raw_ids = request.args.get("ids", "")
     ids = []
     if raw_ids:
@@ -978,7 +1087,7 @@ def archive_download_zip():
                 ids.append(int(x))
             except Exception:
                 pass
-    rows = ARCHIVE.filtered_rows(q=q, year=year, month=month, company_key=company, exam_type=exam_type, receipt_filter=receipt_filter, ids=ids or None)
+    rows = ARCHIVE.filtered_rows(q=q, year=year, month=month, company_key=company, exam_type=exam_type, receipt_filter=receipt_filter, unit_id=unit_id, ids=ids or None)
     if not rows:
         return jsonify({"error": "Nenhum exame encontrado para este download."}), 404
 
@@ -999,21 +1108,57 @@ def archive_download_zip():
     else:
         period_label = "TODOS OS PERIODOS"
 
+    unit_label = ""
+    if unit_id:
+        unit = _unit_by_id(unit_id)
+        unit_label = f"{unit['name']} - " if unit else ""
     if selected_company_name:
-        folder_label = f"{period_label} - {selected_company_name}"
+        folder_label = f"{unit_label}{period_label} - {selected_company_name}"
     elif ids:
-        folder_label = f"{period_label} - EXAMES SELECIONADOS"
+        folder_label = f"{unit_label}{period_label} - EXAMES SELECIONADOS"
     else:
-        folder_label = f"{period_label} - EXAMES FILTRADOS"
+        folder_label = f"{unit_label}{period_label} - EXAMES FILTRADOS"
     safe_label = core.safe_component(folder_label, "EXAMES FILTRADOS", 150)
     mem = ARCHIVE.make_zip(rows, label=safe_label)
     return send_file(mem, mimetype="application/zip", as_attachment=True, download_name=f"{safe_label}.zip", max_age=0)
 
 
+
+@app.get("/api/tipos-exames")
+def api_exam_types():
+    return jsonify({"types": core.get_custom_exam_types()})
+
+
+@app.post("/api/tipos-exames")
+def api_add_exam_type():
+    data = request.get_json(silent=True) or request.form
+    aliases_raw = data.get("aliases") or ""
+    if isinstance(aliases_raw, str):
+        aliases = [x.strip() for x in re.split(r"[,;\n]+", aliases_raw) if x.strip()]
+    else:
+        aliases = [str(x).strip() for x in aliases_raw if str(x).strip()]
+    try:
+        name = core.add_custom_exam_type(str(data.get("name") or ""), aliases=aliases)
+        return jsonify({"ok": True, "name": name, "types": core.get_custom_exam_types()})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.delete("/api/tipos-exames/<path:name>")
+def api_delete_exam_type(name: str):
+    try:
+        ok = core.delete_custom_exam_type(name)
+        if not ok:
+            return jsonify({"error": "Tipo padrão ou não encontrado não pode ser excluído."}), 400
+        return jsonify({"ok": True, "types": core.get_custom_exam_types()})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
 @app.get("/api/modelos")
 def api_models():
     models = core.load_models()
-    return jsonify({"models": [asdict(m) for m in models]})
+    return jsonify({"models": [asdict(m) for m in models], "exam_types": list(core.get_exam_types())})
 
 
 @app.post("/api/modelos")

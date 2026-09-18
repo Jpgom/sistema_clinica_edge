@@ -25,3 +25,7 @@
 
 /* v4.5 - recibos e filtros */
 .receipt-pill{display:inline-flex;align-items:center;border-radius:999px;padding:5px 9px;background:#eef5fd;color:#245b96;font-size:10px;font-weight:800;white-space:nowrap}.receipt-pill.on-credit{background:#fff4df;color:#8a5b00}.archive-table{min-width:1180px}
+/* Atualização: tipos de exames e unidades no arquivo permanente */
+.models-layout{grid-template-columns:320px 340px minmax(0,1fr)}
+.mini-list{display:grid;gap:8px;margin-top:14px}.mini-list-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px}.mini-list-item strong{display:block;font-size:12px}.mini-list-item small{display:block;color:var(--muted);font-size:10px;margin-top:2px}.archive-save-controls{grid-template-columns:minmax(150px,1fr) 150px 110px 110px;min-width:660px}.archive-save-controls .btn.primary,.archive-save-controls>a.btn{grid-column:auto}.archive-save-controls #archiveSaveBtn{grid-column:1/4}.archive-save-controls a.btn{grid-column:4/5}.archive-filters{grid-template-columns:1fr 1fr 1.25fr 1fr 120px auto}
+@media(max-width:1150px){.models-layout{grid-template-columns:1fr}.archive-save-controls{grid-template-columns:1fr 1fr;min-width:0}.archive-save-controls #archiveSaveBtn,.archive-save-controls a.btn{grid-column:1/-1}.archive-filters{grid-template-columns:1fr 1fr}}

@@ -122,17 +122,19 @@ class ArchiveStore:
         data = self._read_index()
         return len({d.get("sha256") for d in data["documents"] if d.get("source_job_id") == job_id and d.get("sha256")})
 
-    def save_documents(self, documents: Iterable[dict[str, Any]], year: int, month: int, source_job_id: str = "") -> dict[str, Any]:
+    def save_documents(self, documents: Iterable[dict[str, Any]], year: int, month: int, source_job_id: str = "", unit_id: str = "", unit_name: str = "") -> dict[str, Any]:
         year, month = int(year), int(month)
         if year < 2000 or year > 2100 or month < 1 or month > 12:
             raise ValueError("Competência inválida.")
+        unit_id = safe_part(unit_id or unit_name or "GERAL", "GERAL", 50)
+        unit_name = str(unit_name or unit_id or "GERAL").strip() or "GERAL"
         added: list[dict[str, Any]] = []
         skipped: list[dict[str, Any]] = []
         errors: list[dict[str, Any]] = []
         with self.lock:
             data = self._read_index()
             docs = data["documents"]
-            existing_hashes = {(int(d.get("year", 0)), int(d.get("month", 0)), str(d.get("sha256", ""))): d for d in docs}
+            existing_hashes = {(str(d.get("unit_id") or "GERAL"), int(d.get("year", 0)), int(d.get("month", 0)), str(d.get("sha256", ""))): d for d in docs}
             changed = False
             for raw in documents:
                 try:
@@ -140,7 +142,7 @@ class ArchiveStore:
                     if not src.is_file():
                         raise FileNotFoundError(f"Arquivo não encontrado: {src.name}")
                     digest = file_sha256(src)
-                    existing = existing_hashes.get((year, month, digest))
+                    existing = existing_hashes.get((unit_id, year, month, digest))
                     if existing:
                         skipped.append({"id": int(existing["id"]), "filename": existing.get("original_filename", src.name), "reason": "Já arquivado nesta competência"})
                         continue
@@ -152,13 +154,13 @@ class ArchiveStore:
                     else:
                         company_label = safe_part(company_name, "EMPRESA NAO IDENTIFICADA", 90)
                     exam_type = str(raw.get("exam_type") or "OUTROS").strip().upper() or "OUTROS"
-                    period_dir = self.files_root / str(year) / f"{month:02d}" / company_label / safe_part(exam_type, "OUTROS", 50)
+                    period_dir = self.files_root / safe_part(unit_name, "GERAL", 70) / str(year) / f"{month:02d}" / company_label / safe_part(exam_type, "OUTROS", 50)
                     target = self._unique_target(period_dir, src.name)
                     shutil.copy2(src, target)
                     doc_id = int(data.get("next_id", 1))
                     data["next_id"] = doc_id + 1
                     item = {
-                        "id": doc_id, "year": year, "month": month,
+                        "id": doc_id, "year": year, "month": month, "unit_id": unit_id, "unit_name": unit_name,
                         "company_name": company_name, "company_document": company_document,
                         "company_document_kind": document_kind(company_document), "company_key": company_key,
                         "employee_name": str(raw.get("employee_name") or "").strip(),
@@ -172,7 +174,7 @@ class ArchiveStore:
                         "created_at": datetime.now().isoformat(timespec="seconds"),
                     }
                     docs.append(item)
-                    existing_hashes[(year, month, digest)] = item
+                    existing_hashes[(unit_id, year, month, digest)] = item
                     added.append({"id": doc_id, "filename": src.name})
                     changed = True
                 except Exception as exc:
@@ -181,16 +183,19 @@ class ArchiveStore:
                 self._write_index(data)
         return {"added": added, "skipped": skipped, "errors": errors, "added_count": len(added), "skipped_count": len(skipped), "error_count": len(errors)}
 
-    def periods(self) -> list[dict[str, int]]:
+    def periods(self, unit_id: str = "") -> list[dict[str, int]]:
         counts: dict[tuple[int, int], int] = {}
         for d in self._read_index()["documents"]:
+            if unit_id and str(d.get("unit_id") or "GERAL") != str(unit_id):
+                continue
             key = (int(d["year"]), int(d["month"]))
             counts[key] = counts.get(key, 0) + 1
         return [{"year": y, "month": m, "count": n} for (y, m), n in sorted(counts.items(), reverse=True)]
 
-    def companies(self, year: int | None = None, month: int | None = None) -> list[dict[str, Any]]:
+    def companies(self, year: int | None = None, month: int | None = None, unit_id: str = "") -> list[dict[str, Any]]:
         grouped: dict[str, dict[str, Any]] = {}
         for d in self._read_index()["documents"]:
+            if unit_id and str(d.get("unit_id") or "GERAL") != str(unit_id): continue
             if year and int(d["year"]) != int(year): continue
             if month and int(d["month"]) != int(month): continue
             key = str(d["company_key"])
@@ -201,11 +206,20 @@ class ArchiveStore:
             x = dict(x); x["document"] = format_document(x["document_raw"]); items.append(x)
         return sorted(items, key=lambda x: norm(x["name"]))
 
-    def exam_types(self) -> list[str]:
-        return sorted({str(d.get("exam_type") or "") for d in self._read_index()["documents"] if d.get("exam_type")})
+    def units(self) -> list[dict[str, Any]]:
+        grouped: dict[str, dict[str, Any]] = {}
+        for d in self._read_index()["documents"]:
+            uid = str(d.get("unit_id") or "GERAL")
+            x = grouped.setdefault(uid, {"id": uid, "name": str(d.get("unit_name") or uid or "GERAL"), "count": 0})
+            x["count"] += 1
+        return sorted(grouped.values(), key=lambda x: norm(x.get("name", "")))
+
+    def exam_types(self, unit_id: str = "") -> list[str]:
+        return sorted({str(d.get("exam_type") or "") for d in self._read_index()["documents"] if d.get("exam_type") and (not unit_id or str(d.get("unit_id") or "GERAL") == str(unit_id))})
 
     def _matches(self, d: dict[str, Any], *, q: str = "", year: int | None = None, month: int | None = None,
-                 company_key: str = "", exam_type: str = "", receipt_filter: str = "", ids: list[int] | None = None) -> bool:
+                 company_key: str = "", exam_type: str = "", receipt_filter: str = "", unit_id: str = "", ids: list[int] | None = None) -> bool:
+        if unit_id and str(d.get("unit_id") or "GERAL") != str(unit_id): return False
         if year and int(d.get("year", 0)) != int(year): return False
         if month and int(d.get("month", 0)) != int(month): return False
         if company_key and d.get("company_key") != company_key: return False
@@ -229,6 +243,7 @@ class ArchiveStore:
     def _public(self, d: dict[str, Any]) -> dict[str, Any]:
         return {
             "id": int(d["id"]), "year": int(d["year"]), "month": int(d["month"]),
+            "unit_id": str(d.get("unit_id") or "GERAL"), "unit_name": str(d.get("unit_name") or d.get("unit_id") or "GERAL"),
             "competency": f"{int(d['month']):02d}/{int(d['year'])}",
             "company_name": d.get("company_name", ""), "company_document": format_document(d.get("company_document", "")),
             "company_document_raw": d.get("company_document", ""), "company_document_kind": d.get("company_document_kind", "CPF/CNPJ"),
@@ -239,9 +254,9 @@ class ArchiveStore:
         }
 
     def search(self, *, q: str = "", year: int | None = None, month: int | None = None,
-               company_key: str = "", exam_type: str = "", receipt_filter: str = "", page: int = 1, page_size: int = 100) -> dict[str, Any]:
+               company_key: str = "", exam_type: str = "", receipt_filter: str = "", unit_id: str = "", page: int = 1, page_size: int = 100) -> dict[str, Any]:
         page, page_size = max(1, int(page)), max(1, min(250, int(page_size)))
-        matches = [d for d in self._read_index()["documents"] if self._matches(d, q=q, year=year, month=month, company_key=company_key, exam_type=exam_type, receipt_filter=receipt_filter)]
+        matches = [d for d in self._read_index()["documents"] if self._matches(d, q=q, year=year, month=month, company_key=company_key, exam_type=exam_type, receipt_filter=receipt_filter, unit_id=unit_id)]
         matches.sort(key=lambda d: (-int(d["year"]), -int(d["month"]), norm(d.get("company_name", "")), norm(d.get("employee_name", "")), norm(d.get("exam_type", "")), int(d["id"])))
         total = len(matches); pages = max(1, (total + page_size - 1)//page_size); page=min(page,pages)
         part = matches[(page-1)*page_size:page*page_size]
@@ -263,9 +278,9 @@ class ArchiveStore:
         return None
 
     def filtered_rows(self, *, q: str = "", year: int | None = None, month: int | None = None,
-                      company_key: str = "", exam_type: str = "", receipt_filter: str = "", ids: list[int] | None = None) -> list[dict[str, Any]]:
+                      company_key: str = "", exam_type: str = "", receipt_filter: str = "", unit_id: str = "", ids: list[int] | None = None) -> list[dict[str, Any]]:
         wanted = [int(i) for i in (ids or [])]
-        items = [d for d in self._read_index()["documents"] if self._matches(d, q=q, year=year, month=month, company_key=company_key, exam_type=exam_type, receipt_filter=receipt_filter, ids=wanted or None)]
+        items = [d for d in self._read_index()["documents"] if self._matches(d, q=q, year=year, month=month, company_key=company_key, exam_type=exam_type, receipt_filter=receipt_filter, unit_id=unit_id, ids=wanted or None)]
         items.sort(key=lambda d: (norm(d.get("company_name", "")), norm(d.get("employee_name", "")), norm(d.get("exam_type", "")), int(d["id"])))
         return items
 

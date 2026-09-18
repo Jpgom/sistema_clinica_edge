@@ -1,5 +1,6 @@
 (() => {
   const q = document.getElementById('archiveQuery');
+  const unit = document.getElementById('unitFilter');
   const period = document.getElementById('periodFilter');
   const company = document.getElementById('companyFilter');
   const exam = document.getElementById('examFilter');
@@ -30,6 +31,7 @@
   function params(includePage=true) {
     const p = new URLSearchParams();
     if (q.value.trim()) p.set('q', q.value.trim());
+    if (unit.value) p.set('unit', unit.value);
     const pm = parsePeriod();
     if (pm.year) p.set('year', pm.year);
     if (pm.month) p.set('month', pm.month);
@@ -48,22 +50,26 @@
   async function loadMeta() {
     const pm = parsePeriod();
     const qp = new URLSearchParams();
+    if (unit.value) qp.set('unit', unit.value);
     if (pm.year) qp.set('year', pm.year);
     if (pm.month) qp.set('month', pm.month);
     const data = await edgeJson('/api/archive/meta?' + qp.toString());
+    const oldUnit = unit.value;
     const oldCompany = company.value;
     const oldExam = exam.value;
+    unit.innerHTML = '<option value="">Todas as unidades</option>' + (data.units || []).map(u => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
+    if ([...unit.options].some(o => o.value === oldUnit)) unit.value = oldUnit;
     period.innerHTML = '<option value="">Todos os períodos</option>' + data.periods.map(x => `<option value="${x.year}-${String(x.month).padStart(2,'0')}">${String(x.month).padStart(2,'0')}/${x.year} · ${x.count} arquivo(s)</option>`).join('');
     if (pm.year) period.value = `${pm.year}-${String(pm.month).padStart(2,'0')}`;
     company.innerHTML = '<option value="">Todas as empresas</option>' + data.companies.map(x => `<option value="${esc(x.key)}">${esc(x.name)}${x.document ? ` · ${esc(x.document_kind)} ${esc(x.document)}` : ''} · ${x.count}</option>`).join('');
     if ([...company.options].some(o => o.value === oldCompany)) company.value = oldCompany;
     const quick = new Set(['ASO','AUDIOMETRIA','ESPIROMETRIA','ACUIDADE VISUAL']);
-    const types = [...new Set([...data.exam_types, ...quick])].sort();
+    const types = [...new Set([...(data.exam_types || []), ...(data.all_exam_types || []), ...quick])].sort();
     exam.innerHTML = '<option value="">Todos os exames</option>' + types.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
     if ([...exam.options].some(o => o.value === oldExam)) exam.value = oldExam;
   }
   async function load() {
-    rows.innerHTML = '<tr><td colspan="7" class="table-empty">Carregando arquivo...</td></tr>';
+    rows.innerHTML = '<tr><td colspan="8" class="table-empty">Carregando arquivo...</td></tr>';
     try {
       const data = await edgeJson('/api/archive?' + params().toString());
       total.textContent = data.total;
@@ -82,15 +88,16 @@
           <td><span class="receipt-pill ${String(x.receipt||'').toUpperCase()==='A PRAZO' ? 'on-credit' : ''}">${esc(x.receipt || '—')}</span></td>
           <td><strong>${esc(x.company_name || 'Empresa não identificada')}</strong><small>${x.company_document ? `${esc(x.company_document_kind)} ${esc(x.company_document)}` : 'CPF/CNPJ não informado'}</small></td>
           <td><span class="exam-pill">${esc(x.exam_type || 'OUTROS')}</span>${x.exam_subtype ? `<small>${esc(x.exam_subtype)}</small>` : ''}</td>
+          <td><strong>${esc(x.unit_name || '—')}</strong></td>
           <td><strong>${esc(x.competency)}</strong><small>${esc(x.original_filename)}</small></td>
           <td><div class="archive-row-actions"><a class="btn tiny ghost" target="_blank" href="${edgeUrl(`/arquivo/documento/${x.id}/visualizar`)}">Visualizar</a><a class="btn tiny primary" href="${edgeUrl(`/arquivo/documento/${x.id}/baixar`)}">Baixar</a><button class="btn tiny danger ghost doc-delete" type="button" data-id="${x.id}" data-name="${esc(x.employee_name || x.original_filename || 'documento')}">Apagar</button></div></td>
-        </tr>`).join('') : '<tr><td colspan="7" class="table-empty">Nenhum exame arquivado com estes filtros.</td></tr>';
+        </tr>`).join('') : '<tr><td colspan="8" class="table-empty">Nenhum exame arquivado com estes filtros.</td></tr>';
       selectAll.checked = false;
       updateSelected();
       document.querySelectorAll('.doc-check').forEach(c => c.addEventListener('change', updateSelected));
       document.querySelectorAll('.doc-delete').forEach(b => b.addEventListener('click', () => deleteOne(b.dataset.id, b.dataset.name)));
     } catch (e) {
-      rows.innerHTML = `<tr><td colspan="7" class="table-empty">${esc(e.message)}</td></tr>`;
+      rows.innerHTML = `<tr><td colspan="8" class="table-empty">${esc(e.message)}</td></tr>`;
       edgeToast(e.message, 'error');
     }
   }
@@ -132,7 +139,7 @@
   async function deleteCurrentFilters() {
     const n = Number(total.textContent || 0);
     if (!n) return edgeToast('Nenhum documento para apagar.', 'error');
-    const hasAnyFilter = q.value.trim() || period.value || company.value || exam.value || receipt.value;
+    const hasAnyFilter = q.value.trim() || unit.value || period.value || company.value || exam.value || receipt.value;
     const warning = hasAnyFilter
       ? `Apagar definitivamente os ${n} documento(s) que correspondem aos filtros atuais?`
       : `ATENÇÃO: nenhum filtro está aplicado. Isso apagará TODOS os ${n} documentos arquivados. Continuar?`;
@@ -147,12 +154,13 @@
     } catch (e) { edgeToast(e.message, 'error'); }
   }
 
+  unit.addEventListener('change', async () => { currentPage=1; period.value=''; company.value=''; await loadMeta(); await load(); });
   period.addEventListener('change', async () => { currentPage=1; await loadMeta(); await load(); });
   company.addEventListener('change', () => { currentPage=1; load(); });
   exam.addEventListener('change', () => { currentPage=1; syncQuick(); load(); });
   receipt.addEventListener('change', () => { currentPage=1; load(); });
   q.addEventListener('input', () => { clearTimeout(debounce); debounce=setTimeout(() => {currentPage=1; load();}, 260); });
-  document.getElementById('clearFilters').addEventListener('click', async () => { q.value=''; period.value=''; company.value=''; exam.value=''; receipt.value=''; currentPage=1; await loadMeta(); syncQuick(); await load(); });
+  document.getElementById('clearFilters').addEventListener('click', async () => { q.value=''; unit.value=''; period.value=''; company.value=''; exam.value=''; receipt.value=''; currentPage=1; await loadMeta(); syncQuick(); await load(); });
   document.querySelectorAll('.quick-chip').forEach(b => b.addEventListener('click', () => { exam.value=b.dataset.exam || ''; currentPage=1; syncQuick(); load(); }));
   function syncQuick() { document.querySelectorAll('.quick-chip').forEach(b => b.classList.toggle('active', (b.dataset.exam||'') === exam.value)); }
   selectAll.addEventListener('change', () => { document.querySelectorAll('.doc-check').forEach(c => c.checked=selectAll.checked); updateSelected(); });

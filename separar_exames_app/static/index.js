@@ -17,6 +17,8 @@
   const activeBar = document.getElementById('activeExtractionBar');
   const activeFolder = document.getElementById('activeFolderName');
   const clearBtn = document.getElementById('clearBtn');
+  const archiveUnit = document.getElementById('archiveUnit');
+  const addUnitBtn = document.getElementById('addUnitBtn');
   const archiveMonth = document.getElementById('archiveMonth');
   const archiveYear = document.getElementById('archiveYear');
   const archiveSaveBtn = document.getElementById('archiveSaveBtn');
@@ -113,6 +115,33 @@
     archiveYear.value = String(y);
   }
 
+
+  async function loadArchiveUnits(preferred = '') {
+    if (!archiveUnit) return;
+    try {
+      const data = await edgeJson('/api/unidades');
+      const units = data.units || [];
+      archiveUnit.innerHTML = units.length
+        ? units.map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.name)}</option>`).join('')
+        : '<option value="GERAL">Geral</option>';
+      if (preferred && [...archiveUnit.options].some(o => o.value === preferred)) archiveUnit.value = preferred;
+    } catch (e) {
+      archiveUnit.innerHTML = '<option value="GERAL">Geral</option>';
+    }
+  }
+
+  addUnitBtn?.addEventListener('click', async () => {
+    const name = window.prompt('Nome da nova unidade:');
+    if (!name || !name.trim()) return;
+    try {
+      const data = await edgeJson('/api/unidades', {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name: name.trim()})
+      });
+      await loadArchiveUnits(data.unit?.id || '');
+      edgeToast('Unidade cadastrada.');
+    } catch (e) { edgeToast(e.message, 'error'); }
+  });
+
   function updateArchiveInfo(data) {
     if (!archiveSaveInfo || !archiveSaveBtn) return;
     const eligible = Number(data.archive_eligible || 0);
@@ -130,16 +159,19 @@
 
   archiveSaveBtn?.addEventListener('click', async () => {
     if (!currentJobId) return edgeToast('Nenhuma extração ativa para arquivar.', 'error');
+    const unit_id = archiveUnit?.value || '';
     const month = Number(archiveMonth.value);
     const year = Number(archiveYear.value);
+    if (!unit_id) return edgeToast('Escolha a unidade.', 'error');
     if (!month || !year) return edgeToast('Escolha o mês e o ano.', 'error');
-    const label = `${String(month).padStart(2,'0')}/${year}`;
+    const unitName = archiveUnit?.selectedOptions?.[0]?.textContent || 'Unidade';
+    const label = `${unitName} - ${String(month).padStart(2,'0')}/${year}`;
     if (!window.confirm(`Salvar os arquivos aprovados deste lote no Arquivo de Exames da competência ${label}?`)) return;
     archiveSaveBtn.disabled = true;
     archiveSaveBtn.textContent = 'Salvando no arquivo...';
     try {
       const data = await edgeJson(`/api/jobs/${currentJobId}/archive`, {
-        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({month, year})
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({unit_id, month, year})
       });
       const parts = [];
       if (data.added_count) parts.push(`${data.added_count} novo(s) documento(s) salvo(s)`);
@@ -354,5 +386,6 @@
   }
 
   initArchivePeriod();
+  loadArchiveUnits();
   restoreActiveJob();
 })();

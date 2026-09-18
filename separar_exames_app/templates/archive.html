@@ -18,6 +18,7 @@
     <input id="archiveQuery" type="search" placeholder="Pesquisar funcionário, empresa, CPF, CNPJ, recibo ou nome do arquivo..." autocomplete="off">
   </div>
   <div class="archive-filters">
+    <label><span>Unidade</span><select id="unitFilter"><option value="">Todas as unidades</option></select></label>
     <label><span>Competência</span><select id="periodFilter"><option value="">Todos os períodos</option></select></label>
     <label><span>Empresa</span><select id="companyFilter"><option value="">Todas as empresas</option></select></label>
     <label><span>Tipo de exame</span><select id="examFilter"><option value="">Todos os exames</option></select></label>
@@ -55,7 +56,7 @@
   </div>
   <div class="table-wrap archive-table-wrap">
     <table class="archive-table">
-      <thead><tr><th class="check-col"></th><th>Funcionário</th><th>Recibo</th><th>Empresa</th><th>Exame</th><th>Competência</th><th>Ações</th></tr></thead>
+      <thead><tr><th class="check-col"></th><th>Funcionário</th><th>Recibo</th><th>Empresa</th><th>Exame</th><th>Unidade</th><th>Competência</th><th>Ações</th></tr></thead>
       <tbody id="archiveRows"></tbody>
     </table>
   </div>
@@ -66,4 +67,4 @@
   </div>
 </section>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='archive.js') }}?v=fix404"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='archive.js') }}?v=unidades-tipos"></script>{% endblock %}

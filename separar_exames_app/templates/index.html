@@ -95,6 +95,8 @@
       <small id="archiveSaveInfo">Nenhum arquivo arquivado deste lote ainda.</small>
     </div>
     <div class="archive-save-controls">
+      <label><span>Unidade</span><select id="archiveUnit"></select></label>
+      <button id="addUnitBtn" class="btn small ghost" type="button">Cadastrar unidade</button>
       <label><span>Mês</span><select id="archiveMonth"></select></label>
       <label><span>Ano</span><select id="archiveYear"></select></label>
       <button id="archiveSaveBtn" class="btn primary" type="button">Salvar no Arquivo de Exames</button>
@@ -107,4 +109,4 @@
   </article>
 </section>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='index.js') }}?v=fix404"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='index.js') }}?v=unidades-tipos"></script>{% endblock %}

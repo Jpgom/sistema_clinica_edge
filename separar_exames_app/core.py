@@ -43,7 +43,8 @@ MODELS_JSON = DATA_DIR / "modelos.json"
 TESSDATA_DIR = DATA_DIR / "tessdata"
 CONFIG_JSON = DATA_DIR / "config.json"
 
-EXAM_TYPES = ("ASO", "AUDIOMETRIA", "ESPIROMETRIA", "ACUIDADE VISUAL", "LAUDO PCD")
+DEFAULT_EXAM_TYPES = ("ASO", "AUDIOMETRIA", "ESPIROMETRIA", "ACUIDADE VISUAL", "LAUDO PCD")
+EXAM_TYPES = DEFAULT_EXAM_TYPES
 OUTPUT_DIRNAME = "ARQUIVOS SEPARADOS"
 REPORT_FILENAME = "RELATORIO_CONFERENCIA.xlsx"
 EXAM_ALIASES = {
@@ -247,6 +248,147 @@ def normalize_for_match(value: str) -> str:
     return SPACE_RE.sub(" ", value).strip()
 
 
+
+def _exam_types_json() -> Path:
+    return DATA_DIR / "tipos_exames.json"
+
+
+def _exam_aliases_json() -> Path:
+    return DATA_DIR / "apelidos_exames.json"
+
+
+def _clean_exam_type_name(value: str) -> str:
+    value = clean_value(value).upper() if 'clean_value' in globals() else str(value or "").upper().strip()
+    value = INVALID_WINDOWS_CHARS.sub(" ", value)
+    value = SPACE_RE.sub(" ", value).strip(" .")
+    if len(value) > 80:
+        value = value[:80].rstrip()
+    return value
+
+
+def refresh_exam_types() -> tuple[str, ...]:
+    """Atualiza a lista de tipos de exames com os tipos cadastrados pelo usuário."""
+    global EXAM_TYPES
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    custom: list[str] = []
+    try:
+        raw = json.loads(_exam_types_json().read_text(encoding="utf-8")) if _exam_types_json().exists() else []
+        if isinstance(raw, dict):
+            raw = raw.get("types") or []
+        for item in raw:
+            name = _clean_exam_type_name(item.get("name") if isinstance(item, dict) else item)
+            if name and name not in DEFAULT_EXAM_TYPES and name not in custom:
+                custom.append(name)
+    except Exception:
+        custom = []
+    EXAM_TYPES = tuple(dict.fromkeys([*DEFAULT_EXAM_TYPES, *custom]))
+
+    # Adiciona aliases automáticos para todos os tipos, inclusive os cadastrados.
+    for name in EXAM_TYPES:
+        EXAM_ALIASES.setdefault(normalize_for_match(name), name)
+        SIGNATURES.setdefault(name, [(name.lower(), 18.0), (normalize_for_match(name).lower(), 18.0)])
+    try:
+        aliases = json.loads(_exam_aliases_json().read_text(encoding="utf-8")) if _exam_aliases_json().exists() else {}
+        if isinstance(aliases, dict):
+            for canonical, values in aliases.items():
+                canonical_name = _clean_exam_type_name(canonical)
+                if canonical_name not in EXAM_TYPES:
+                    continue
+                for alias in values or []:
+                    alias_n = normalize_for_match(alias)
+                    if alias_n:
+                        EXAM_ALIASES[alias_n] = canonical_name
+    except Exception:
+        pass
+    return EXAM_TYPES
+
+
+def get_exam_types() -> tuple[str, ...]:
+    return refresh_exam_types()
+
+
+def get_custom_exam_types() -> list[dict[str, object]]:
+    refresh_exam_types()
+    try:
+        model_counts = Counter(m.exam_type for m in load_models())
+    except Exception:
+        model_counts = Counter()
+    return [
+        {"name": name, "default": name in DEFAULT_EXAM_TYPES, "model_count": int(model_counts.get(name, 0))}
+        for name in EXAM_TYPES
+    ]
+
+
+def add_custom_exam_type(name: str, aliases: list[str] | None = None) -> str:
+    name = _clean_exam_type_name(name)
+    if not name:
+        raise ValueError("Informe o nome do tipo de exame.")
+    if len(name) < 2:
+        raise ValueError("O nome do tipo de exame está muito curto.")
+    refresh_exam_types()
+    if name not in EXAM_TYPES:
+        items: list[str] = []
+        try:
+            raw = json.loads(_exam_types_json().read_text(encoding="utf-8")) if _exam_types_json().exists() else []
+            if isinstance(raw, dict):
+                raw = raw.get("types") or []
+            for item in raw:
+                item_name = _clean_exam_type_name(item.get("name") if isinstance(item, dict) else item)
+                if item_name and item_name not in items and item_name not in DEFAULT_EXAM_TYPES:
+                    items.append(item_name)
+        except Exception:
+            items = []
+        items.append(name)
+        _exam_types_json().write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+    if aliases:
+        try:
+            alias_data = json.loads(_exam_aliases_json().read_text(encoding="utf-8")) if _exam_aliases_json().exists() else {}
+            if not isinstance(alias_data, dict):
+                alias_data = {}
+        except Exception:
+            alias_data = {}
+        current = [str(x).strip() for x in alias_data.get(name, []) if str(x).strip()]
+        for alias in aliases:
+            alias = str(alias or "").strip()
+            if alias and alias not in current:
+                current.append(alias)
+        alias_data[name] = current
+        _exam_aliases_json().write_text(json.dumps(alias_data, ensure_ascii=False, indent=2), encoding="utf-8")
+    refresh_exam_types()
+    return name
+
+
+def delete_custom_exam_type(name: str) -> bool:
+    name = _clean_exam_type_name(name)
+    if not name or name in DEFAULT_EXAM_TYPES:
+        return False
+    refresh_exam_types()
+    # Não apaga tipo que tem modelo cadastrado para evitar quebrar reconhecimento/arquivo.
+    if any(m.exam_type == name for m in load_models()):
+        raise ValueError("Este tipo possui modelos cadastrados. Exclua os modelos antes de remover o tipo.")
+    try:
+        raw = json.loads(_exam_types_json().read_text(encoding="utf-8")) if _exam_types_json().exists() else []
+        if isinstance(raw, dict):
+            raw = raw.get("types") or []
+    except Exception:
+        raw = []
+    kept = []
+    for item in raw:
+        item_name = _clean_exam_type_name(item.get("name") if isinstance(item, dict) else item)
+        if item_name and item_name != name and item_name not in DEFAULT_EXAM_TYPES and item_name not in kept:
+            kept.append(item_name)
+    _exam_types_json().write_text(json.dumps(kept, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        alias_data = json.loads(_exam_aliases_json().read_text(encoding="utf-8")) if _exam_aliases_json().exists() else {}
+        if isinstance(alias_data, dict) and name in alias_data:
+            alias_data.pop(name, None)
+            _exam_aliases_json().write_text(json.dumps(alias_data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+    refresh_exam_types()
+    return True
+
+
 def clean_line(value: str) -> str:
     value = str(value or "").replace("\x00", " ").replace("\r", " ")
     return SPACE_RE.sub(" ", value).strip()
@@ -329,6 +471,7 @@ def safe_component(value: str, fallback: str, max_length: int = 95) -> str:
 
 
 def normalize_exam(value: str) -> str:
+    refresh_exam_types()
     raw = normalize_for_match(value)
     if raw in EXAM_ALIASES:
         return EXAM_ALIASES[raw]
@@ -796,8 +939,9 @@ def token_similarity(a: Iterable[str], b: Iterable[str]) -> float:
 
 
 def load_models() -> list[ModelSample]:
-    DATA_DIR.mkdir(exist_ok=True)
-    MODELS_DIR.mkdir(exist_ok=True)
+    refresh_exam_types()
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
     if not MODELS_JSON.exists():
         return []
     try:
@@ -808,8 +952,9 @@ def load_models() -> list[ModelSample]:
 
 
 def save_models(models: list[ModelSample]) -> None:
-    DATA_DIR.mkdir(exist_ok=True)
-    MODELS_DIR.mkdir(exist_ok=True)
+    refresh_exam_types()
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
     MODELS_JSON.write_text(json.dumps([asdict(m) for m in models], ensure_ascii=False, indent=2), encoding="utf-8")
 
 

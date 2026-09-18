@@ -14,3 +14,5 @@ docxcompose==1.4.0
 PyMuPDF==1.26.7
 setuptools==75.8.0
 cryptography==46.0.4
+pytesseract>=0.3.10,<1
+Pillow>=10,<13

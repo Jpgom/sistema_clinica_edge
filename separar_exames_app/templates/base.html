@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}EDGE Extrator{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="/">
+      <span class="brand-mark">E</span>
+      <span><strong>EDGE</strong><small>Extrator de Exames</small></span>
+    </a>
+    <nav>
+      <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/">
+        <span class="nav-icon">⌂</span><span>Processamento</span>
+      </a>
+      <a class="nav-link {% if request.path.startswith('/arquivo') %}active{% endif %}" href="/arquivo">
+        <span class="nav-icon">▤</span><span>Arquivo de Exames</span>
+      </a>
+      <a class="nav-link {% if request.path.startswith('/modelos') %}active{% endif %}" href="/modelos">
+        <span class="nav-icon">▦</span><span>Modelos</span>
+      </a>
+      <a class="nav-link {% if request.path.startswith('/configuracoes') %}active{% endif %}" href="/configuracoes">
+        <span class="nav-icon">⚙</span><span>Configurações</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="version-pill">v{{ version }}</div>
+      <small>TURBO SAFE+</small>
+    </div>
+  </aside>
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+<div id="toast" class="toast" aria-live="polite"></div>
+<script src="{{ url_for('static', filename='common.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}EDGE | Separar exames{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <p class="eyebrow">EXTRATOR AUTOMÁTICO</p>
+    <h1>Separar exames</h1>
+    <p class="lead">Carregue a lista, adicione os PDFs e deixe o sistema organizar os exames automaticamente.</p>
+  </div>
+  <div class="head-actions">
+    <span class="status-chip {{ 'ok' if ocr_available else 'warn' }}">
+      <span class="dot"></span>{{ 'OCR disponível' if ocr_available else 'OCR não localizado' }}
+    </span>
+    <a class="btn ghost" href="/configuracoes">Configurações</a>
+  </div>
+</header>
+
+<section id="activeExtractionBar" class="active-extraction hidden">
+  <div class="active-extraction-icon">✓</div>
+  <div>
+    <strong>Extração atual disponível</strong>
+    <span id="activeFolderName">—</span>
+  </div>
+  <small>Você pode navegar pelo sistema e voltar. Os arquivos continuam aqui até clicar em <b>Limpar extração</b>.</small>
+</section>
+
+<section class="steps-grid">
+  <article class="card step-card">
+    <div class="step-title"><span class="step-number">1</span><div><h2>Lista de funcionários</h2><p>Excel ou CSV com os exames esperados.</p></div></div>
+    <label class="dropzone compact" id="sheetDrop">
+      <input id="sheetFile" type="file" accept=".xlsx,.xlsm,.csv" hidden>
+      <div class="drop-icon">⇧</div>
+      <div><strong id="sheetLabel">Selecionar planilha</strong><span>Arraste o arquivo ou clique aqui</span></div>
+    </label>
+    <div id="sheetMeta" class="file-meta hidden">
+      <div><span>Guia</span><select id="sheetSelect"></select></div>
+      <div class="meta-stats"><strong id="employeeCount">0</strong> funcionários <span>•</span> <strong id="examCount">0</strong> exames</div>
+    </div>
+    <a class="inline-link" href="/modelo-planilha">Baixar modelo de planilha</a>
+  </article>
+
+  <article class="card step-card">
+    <div class="step-title"><span class="step-number">2</span><div><h2>PDFs para processar</h2><p>Você pode selecionar vários arquivos de uma vez.</p></div></div>
+    <label class="dropzone compact" id="pdfDrop">
+      <input id="pdfFiles" type="file" accept="application/pdf,.pdf" multiple hidden>
+      <div class="drop-icon">＋</div>
+      <div><strong>Adicionar PDFs</strong><span id="pdfCount">Nenhum arquivo selecionado</span></div>
+    </label>
+    <div id="pdfList" class="mini-file-list"></div>
+  </article>
+
+  <article class="card step-card">
+    <div class="step-title"><span class="step-number">3</span><div><h2>Nome da pasta final</h2><p>Esse nome será usado na pasta dentro do ZIP.</p></div></div>
+    <label class="field-label" for="folderName">Nome da pasta</label>
+    <div class="input-with-icon"><span>▣</span><input id="folderName" value="ARQUIVOS SEPARADOS" maxlength="90"></div>
+    <p class="field-help">Exemplo: <strong>EXAMES 02-09-2026 MANHÃ</strong></p>
+    <div class="naming-note"><span>✓</span><p>O motivo do ASO só entra no nome quando a mesma pessoa tiver <strong>dois ou mais ASOs</strong>. O campo <strong>RECIBO</strong> da planilha entra entre o nome do colaborador e a empresa, inclusive quando estiver escrito <strong>A PRAZO</strong>.</p></div>
+  </article>
+</section>
+
+<section class="action-strip">
+  <div>
+    <strong>Pronto para separar?</strong>
+    <span>As configurações técnicas ficam fora desta tela para manter o uso mais simples.</span>
+  </div>
+  <button class="btn primary large" id="processBtn">Iniciar processamento</button>
+</section>
+
+<section id="progressCard" class="card progress-card hidden">
+  <div class="progress-head"><div><p class="eyebrow">PROCESSANDO</p><h2 id="progressTitle">Preparando os arquivos...</h2></div><strong id="progressPct">0%</strong></div>
+  <div class="progress-track"><div id="progressBar"></div></div>
+  <div class="progress-foot"><span id="progressDetail">Aguarde.</span><span>Você pode manter esta página aberta.</span></div>
+</section>
+
+<section id="resultCard" class="hidden">
+  <div class="result-head">
+    <div><p class="eyebrow">RESULTADO</p><h2>Processamento concluído</h2><p id="resultSubtitle">Confira o resumo antes de baixar.</p></div>
+    <div class="result-actions">
+      <button id="clearBtn" class="btn danger ghost" type="button">Limpar extração</button>
+      <a id="reportBtn" class="btn ghost" href="#">Baixar relatório</a>
+      <a id="zipBtn" class="btn primary" href="#">Baixar pasta em ZIP</a>
+    </div>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi"><span>Gerados</span><strong id="kpiSaved">0</strong></div>
+    <div class="kpi"><span>Pendentes</span><strong id="kpiPending">0</strong></div>
+    <div class="kpi"><span>Duplicados reais</span><strong id="kpiDuplicates">0</strong></div>
+    <div class="kpi"><span>Não concluídos</span><strong id="kpiMissing">0</strong></div>
+  </div>
+  <article class="card archive-save-card">
+    <div class="archive-save-copy">
+      <p class="eyebrow">ARQUIVO PERMANENTE</p>
+      <h3>Salvar estes exames no site</h3>
+      <p>Escolha a competência. Os arquivos aprovados ficam guardados por empresa e podem ser pesquisados depois. O documento da empresa pode ser <strong>CNPJ ou CPF</strong>.</p>
+      <small id="archiveSaveInfo">Nenhum arquivo arquivado deste lote ainda.</small>
+    </div>
+    <div class="archive-save-controls">
+      <label><span>Mês</span><select id="archiveMonth"></select></label>
+      <label><span>Ano</span><select id="archiveYear"></select></label>
+      <button id="archiveSaveBtn" class="btn primary" type="button">Salvar no Arquivo de Exames</button>
+      <a class="btn ghost" href="/arquivo">Abrir Arquivo de Exames</a>
+    </div>
+  </article>
+  <article class="card table-card">
+    <div class="table-toolbar"><div><h3>Arquivos encontrados</h3><p>Exibe apenas resultados e exceções relevantes.</p></div><a id="reviewBtn" class="btn small ghost hidden" href="#">Revisar pendências</a></div>
+    <div class="table-wrap"><table><thead><tr><th>Funcionário</th><th>Exame</th><th>Motivo ASO</th><th>Status</th><th>Arquivo</th></tr></thead><tbody id="resultRows"></tbody></table></div>
+  </article>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='index.js') }}"></script>{% endblock %}

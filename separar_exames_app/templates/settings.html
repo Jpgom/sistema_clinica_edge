@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}EDGE | Configurações{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><p class="eyebrow">CONFIGURAÇÕES</p><h1>Leitura e desempenho</h1><p class="lead">Ajustes técnicos ficam separados da tela principal para não atrapalhar o uso diário.</p></div>
+  <a class="btn ghost" href="/">Voltar ao processamento</a>
+</header>
+<div class="settings-layout">
+  <section class="card settings-card">
+    <h2>Leitura dos documentos</h2>
+    <p class="section-help">Os valores atuais são indicados para uso normal.</p>
+    <label class="toggle-row"><span><strong>OCR para documentos escaneados</strong><small>Lê PDFs sem texto digital.</small></span><input id="useOcr" type="checkbox" {% if config.use_ocr %}checked{% endif %}><i></i></label>
+    <label class="toggle-row"><span><strong>Modo TURBO</strong><small>Faz triagem rápida e usa OCR detalhado só quando necessário.</small></span><input id="fastMode" type="checkbox" {% if config.fast_mode %}checked{% endif %}><i></i></label>
+    <label class="toggle-row"><span><strong>Auditoria completa do lote</strong><small>Ativada permanentemente: todas as páginas são conferidas e, se faltar exame, o sistema executa uma segunda varredura de segurança.</small></span><input id="stopComplete" type="checkbox" disabled><i></i></label>
+  </section>
+  <section class="card settings-card">
+    <h2>Níveis de confiança</h2>
+    <p class="section-help">Aumente apenas se quiser deixar a separação automática mais rígida.</p>
+    <label class="slider-row"><span><strong>Tipo de exame</strong><small>Confiança mínima para salvar automaticamente.</small></span><div><input id="autoThreshold" type="range" min="50" max="100" value="{{ config.auto_threshold }}"><b id="autoValue">{{ config.auto_threshold }}%</b></div></label>
+    <label class="slider-row"><span><strong>Funcionário</strong><small>Confiança mínima para vincular a página ao colaborador.</small></span><div><input id="employeeThreshold" type="range" min="50" max="100" value="{{ config.employee_threshold }}"><b id="employeeValue">{{ config.employee_threshold }}%</b></div></label>
+  </section>
+  <aside class="card info-card">
+    <p class="eyebrow">OCR</p><h3>Status do Tesseract</h3><p class="mono">{{ tesseract }}</p><p>Se estiver como “Não localizado”, instale o Tesseract OCR antes de processar documentos escaneados.</p>
+  </aside>
+</div>
+<div class="sticky-save"><span id="saveStatus">Nenhuma alteração pendente.</span><button class="btn primary" id="saveSettings">Salvar configurações</button></div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='settings.js') }}"></script>{% endblock %}

@@ -3,6 +3,7 @@
 - O sistema principal continua respondendo em `/`.
 - O módulo PGR/SST fica montado em `/pgr`.
 - O módulo Envio Periódicos fica montado em `/envio-periodicos`.
+- A função Separar exames fica montada em `/separar-exames`.
 """
 from __future__ import annotations
 
@@ -18,13 +19,16 @@ from edge_app.application import app as edge_app
 _persist_root = os.environ.get("RENDER_DISK_PATH") or os.environ.get("DATA_DIR")
 if _persist_root and "ENVIO_PERIODICOS_DATA_DIR" not in os.environ:
     os.environ["ENVIO_PERIODICOS_DATA_DIR"] = os.path.join(_persist_root, "envio_periodicos")
+if _persist_root and "SEPARAR_EXAMES_DATA_DIR" not in os.environ:
+    os.environ["SEPARAR_EXAMES_DATA_DIR"] = os.path.join(_persist_root, "separar_exames")
 os.environ.setdefault("EDGE_LOCAL_AUTH", "0")
 
 from pgr_app.app import app as pgr_app
 from envio_periodicos_app.app import app as envio_periodicos_app
+from separar_exames_app.app import app as separar_exames_app
 
 # Garante que os módulos leiam o mesmo cookie de sessão/login.
-for _mounted_app in (pgr_app, envio_periodicos_app):
+for _mounted_app in (pgr_app, envio_periodicos_app, separar_exames_app):
     _mounted_app.secret_key = edge_app.secret_key
     for key in ("SESSION_COOKIE_HTTPONLY", "SESSION_COOKIE_SAMESITE", "SESSION_COOKIE_SECURE"):
         _mounted_app.config[key] = edge_app.config.get(key)
@@ -33,6 +37,7 @@ for _mounted_app in (pgr_app, envio_periodicos_app):
 app = DispatcherMiddleware(edge_app, {
     "/pgr": pgr_app,
     "/envio-periodicos": envio_periodicos_app,
+    "/separar-exames": separar_exames_app,
 })
 
 # Alias opcional para ferramentas que procuram `application`.

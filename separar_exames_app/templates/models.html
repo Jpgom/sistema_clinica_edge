@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}EDGE | Modelos{% endblock %}
+{% block content %}
+<header class="page-head"><div><p class="eyebrow">APRENDIZADO</p><h1>Modelos de exame</h1><p class="lead">Cadastre exemplos para ajudar o reconhecimento de layouts específicos.</p></div><a class="btn ghost" href="/">Voltar ao processamento</a></header>
+<div class="models-layout">
+  <section class="card model-form-card">
+    <h2>Novo modelo</h2>
+    <label class="field-label">Tipo de exame</label><select id="modelExam" class="full-select">{% for e in exam_types %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select>
+    <label class="field-label">Identificação</label><input id="modelLabel" class="text-input" placeholder="Ex.: ASO modelo clínica X">
+    <label class="dropzone compact"><input id="modelFile" type="file" accept="application/pdf,.pdf" multiple hidden><div class="drop-icon">＋</div><div><strong id="modelFileLabel">Selecionar PDFs modelo</strong><span>Escolha vários PDFs do mesmo tipo de exame de uma vez</span></div></label>
+    <button id="addModel" class="btn primary full">Cadastrar modelo</button>
+  </section>
+  <section class="card table-card grow">
+    <div class="table-toolbar"><div><h3>Modelos cadastrados</h3><p id="modelCount">Carregando...</p></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Nome</th><th>Arquivo</th><th>Página</th><th></th></tr></thead><tbody id="modelRows"></tbody></table></div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='models.js') }}"></script>{% endblock %}

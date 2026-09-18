@@ -17,6 +17,7 @@
     <div class="nav-card">
       <a class="nav-link active" href="{{ url_for('home') }}">🏠 Início</a>
       <a class="nav-link" href="/envio-periodicos/">📧 Envio periódicos</a>
+      <a class="nav-link" href="/separar-exames/">📂 Separar exames</a>
       <a class="nav-link" href="{{ url_for('exames_a_prazo') }}">🧾 Exames a Prazo</a>
       <a class="nav-link" href="{{ url_for('encaminhamentos') }}">📄 Encaminhamentos</a>
       <a class="nav-link" href="{{ url_for('encaminhamento_especialista') }}">📝 Enc. individual</a>
@@ -39,6 +40,7 @@
 
     <section class="dashboard-grid compact-cards" aria-label="Módulos do sistema">
       <div class="feature-card" data-icon="📧"><h3>Envio periódicos</h3><p>Competências, convocados por admissão, empresas, encaminhamentos, comparecimento e envio de e-mails.</p><a class="btn btn--primary" href="/envio-periodicos/">Abrir</a></div>
+      <div class="feature-card" data-icon="📂"><h3>Separar exames</h3><p>Separação automática de PDFs de exames por funcionário, empresa e tipo de exame, usando planilha de controle.</p><a class="btn btn--primary" href="/separar-exames/">Abrir</a></div>
       <div class="feature-card" data-icon="🧾"><h3>Exames a Prazo</h3><p>Gera planilhas de exames por CNPJ usando bases mensais.</p><a class="btn btn--primary" href="{{ url_for('exames_a_prazo') }}">Abrir</a></div>
       <div class="feature-card" data-icon="📄"><h3>Encaminhamentos</h3><p>Geração padronizada por empresa e funcionário.</p><a class="btn btn--primary" href="{{ url_for('encaminhamentos') }}">Abrir</a></div>
       <div class="feature-card" data-icon="📝"><h3>Encaminhamento individual</h3><p>Word pronto para avaliação com especialista.</p><a class="btn btn--primary" href="{{ url_for('encaminhamento_especialista') }}">Abrir</a></div>

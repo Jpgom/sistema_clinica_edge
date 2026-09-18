@@ -935,7 +935,7 @@ def api_archive_job(job_id: str):
         return jsonify({"error": "Não há arquivos extraídos e aprovados para arquivar."}), 400
     try:
         result = ARCHIVE.save_documents(docs, year, month, source_job_id=job_id, unit_id=unit["id"], unit_name=unit["name"])
-        result["competency"] = f"{unit["name"]} - {month:02d}/{year}"
+        result["competency"] = f"{unit['name']} - {month:02d}/{year}"
         result["archive_saved"] = ARCHIVE.count_for_job(job_id)
         result["archive_eligible"] = len(docs)
         return jsonify({"ok": True, **result})

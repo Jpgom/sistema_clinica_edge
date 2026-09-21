@@ -5,7 +5,7 @@
   <div>
     <p class="eyebrow">EXTRATOR AUTOMÁTICO</p>
     <h1>Separar exames</h1>
-    <p class="lead">Carregue a lista, adicione os PDFs e deixe o sistema organizar os exames automaticamente.</p>
+    <p class="lead">Fluxo simplificado: baixe o modelo vazio, preencha os funcionários, informe o RECIBO ou A PRAZO quando necessário e envie os PDFs para separar.</p>
   </div>
   <div class="head-actions">
     <span class="status-chip {{ 'ok' if ocr_available else 'warn' }}">
@@ -26,6 +26,21 @@
 </section>
 {% endif %}
 
+<section class="simple-flow card">
+  <div class="simple-flow-item">
+    <span>1</span>
+    <div><strong>Preencha a lista</strong><small>Modelo vazio com FUNCIONÁRIO, EMPRESA, EXAMES ESPERADOS e RECIBO.</small></div>
+  </div>
+  <div class="simple-flow-item">
+    <span>2</span>
+    <div><strong>Envie os PDFs</strong><small>Adicione todos os arquivos do lote de uma vez.</small></div>
+  </div>
+  <div class="simple-flow-item">
+    <span>3</span>
+    <div><strong>Revise e arquive</strong><small>Baixe o ZIP ou salve no Arquivo de Exames com filtro por recibo/A PRAZO.</small></div>
+  </div>
+</section>
+
 <section id="activeExtractionBar" class="active-extraction hidden">
   <div class="active-extraction-icon">✓</div>
   <div>
@@ -37,7 +52,7 @@
 
 <section class="steps-grid">
   <article class="card step-card">
-    <div class="step-title"><span class="step-number">1</span><div><h2>Lista de funcionários</h2><p>Excel ou CSV com os exames esperados.</p></div></div>
+    <div class="step-title"><span class="step-number">1</span><div><h2>Lista de funcionários</h2><p>Baixe o modelo vazio e preencha somente as colunas necessárias.</p></div></div>
     <label class="dropzone compact" id="sheetDrop">
       <input id="sheetFile" type="file" accept=".xlsx,.xlsm,.csv" hidden>
       <div class="drop-icon">⇧</div>
@@ -47,11 +62,12 @@
       <div><span>Guia</span><select id="sheetSelect"></select></div>
       <div class="meta-stats"><strong id="employeeCount">0</strong> funcionários <span>•</span> <strong id="examCount">0</strong> exames</div>
     </div>
-    <a class="inline-link" href="{{ url_for('download_sheet_model') }}">Baixar modelo de planilha</a>
+    <a class="inline-link" href="{{ url_for('download_sheet_model') }}">Baixar modelo vazio de planilha</a>
+    <div class="model-hint"><b>Cabeçalho:</b> FUNCIONÁRIO · EMPRESA · EXAMES ESPERADOS · RECIBO <small>No campo RECIBO, informe o número do recibo ou escreva <strong>A PRAZO</strong>.</small></div>
   </article>
 
   <article class="card step-card">
-    <div class="step-title"><span class="step-number">2</span><div><h2>PDFs para processar</h2><p>Você pode selecionar vários arquivos de uma vez.</p></div></div>
+    <div class="step-title"><span class="step-number">2</span><div><h2>PDFs para processar</h2><p>Envie todos os PDFs do lote. O OCR deve estar ativo para arquivos escaneados.</p></div></div>
     <label class="dropzone compact" id="pdfDrop">
       <input id="pdfFiles" type="file" accept="application/pdf,.pdf" multiple hidden>
       <div class="drop-icon">＋</div>
@@ -61,18 +77,18 @@
   </article>
 
   <article class="card step-card">
-    <div class="step-title"><span class="step-number">3</span><div><h2>Nome da pasta final</h2><p>Esse nome será usado na pasta dentro do ZIP.</p></div></div>
+    <div class="step-title"><span class="step-number">3</span><div><h2>Pasta do ZIP</h2><p>Defina como o pacote final será identificado no download.</p></div></div>
     <label class="field-label" for="folderName">Nome da pasta</label>
     <div class="input-with-icon"><span>▣</span><input id="folderName" value="ARQUIVOS SEPARADOS" maxlength="90"></div>
     <p class="field-help">Exemplo: <strong>EXAMES 02-09-2026 MANHÃ</strong></p>
-    <div class="naming-note"><span>✓</span><p>O motivo do ASO só entra no nome quando a mesma pessoa tiver <strong>dois ou mais ASOs</strong>. O campo <strong>RECIBO</strong> da planilha entra entre o nome do colaborador e a empresa, inclusive quando estiver escrito <strong>A PRAZO</strong>.</p></div>
+    <div class="naming-note"><span>✓</span><p>O campo <strong>RECIBO</strong> da planilha entra no nome e também nos filtros do Arquivo de Exames. Use número do recibo ou <strong>A PRAZO</strong>.</p></div>
   </article>
 </section>
 
 <section class="action-strip">
   <div>
-    <strong>Pronto para separar?</strong>
-    <span>As configurações técnicas ficam fora desta tela para manter o uso mais simples.</span>
+    <strong>Pronto para processar?</strong>
+    <span>Confira a lista, os PDFs e a pasta final. Depois clique para separar os exames.</span>
   </div>
   <button class="btn primary large" id="processBtn">Iniciar processamento</button>
 </section>

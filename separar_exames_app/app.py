@@ -309,8 +309,9 @@ def _load_config() -> dict[str, Any]:
     except Exception:
         pass
     cfg["use_ocr"] = bool(cfg.get("use_ocr", True))
-    cfg["fast_mode"] = False
-    # Modo confiável: sempre lê o lote inteiro; mantém a chave apenas por compatibilidade.
+    cfg["fast_mode"] = bool(cfg.get("fast_mode", False))
+    # O sistema sempre lê o lote inteiro. O modo Turbo apenas usa triagem rápida
+    # para acelerar quando o usuário optar por isso nas configurações.
     cfg["stop_when_complete"] = False
     cfg["auto_threshold"] = max(50, min(85, int(float(cfg.get("auto_threshold", 68)))))
     cfg["employee_threshold"] = max(50, min(90, int(float(cfg.get("employee_threshold", 78)))))
@@ -662,7 +663,7 @@ def api_save_config():
     data = request.get_json(silent=True) or request.form
     cfg = {
         "use_ocr": str(data.get("use_ocr", "true")).lower() in {"1", "true", "on", "yes"},
-        "fast_mode": False,
+        "fast_mode": str(data.get("fast_mode", "false")).lower() in {"1", "true", "on", "yes"},
         "stop_when_complete": False,
         "auto_threshold": max(50, min(85, int(float(data.get("auto_threshold", 68))))),
         "employee_threshold": max(50, min(90, int(float(data.get("employee_threshold", 78))))),
@@ -1266,8 +1267,36 @@ def api_delete_model(model_id: str):
 
 @app.get("/modelo-planilha")
 def download_sheet_model():
-    path = APP_DIR / "MODELO_FUNCIONARIOS.xlsx"
-    return send_file(path, as_attachment=True, download_name="MODELO_FUNCIONARIOS.xlsx")
+    # Gera sempre um modelo limpo. Assim o usuário baixa apenas o cabeçalho,
+    # sem exemplos antigos que possam confundir o lançamento.
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+        from openpyxl.utils import get_column_letter
+        output = io.BytesIO()
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Planilha1"
+        headers = ["FUNCIONÁRIO", "EMPRESA", "EXAMES ESPERADOS", "RECIBO"]
+        ws.append(headers)
+        fill = PatternFill("solid", fgColor="1F4E78")
+        border = Border(bottom=Side(style="thin", color="B7C9DD"))
+        widths = [36, 58, 38, 24]
+        for idx, header in enumerate(headers, start=1):
+            cell = ws.cell(row=1, column=idx)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = fill
+            cell.border = border
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            ws.column_dimensions[get_column_letter(idx)].width = widths[idx-1]
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = "A1:D1"
+        wb.save(output)
+        output.seek(0)
+        return send_file(output, as_attachment=True, download_name="MODELO_FUNCIONARIOS.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    except Exception:
+        path = APP_DIR / "MODELO_FUNCIONARIOS.xlsx"
+        return send_file(path, as_attachment=True, download_name="MODELO_FUNCIONARIOS.xlsx")
 
 
 @app.get("/saude")

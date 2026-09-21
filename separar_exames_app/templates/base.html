@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}EDGE | Separar exames{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=edge-integrado-1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=edge-repaginado-recibo-1">
 </head>
 <body class="edge-integrated-body">
 <div class="edge-integrated-layout">
@@ -39,7 +39,7 @@
       <div>
         <span class="edge-breadcrumb">EDGE / Separar exames</span>
         <h1>Separar exames</h1>
-        <p>Função integrada ao sistema EDGE para separar, revisar e arquivar exames por unidade, mês, empresa e tipo.</p>
+        <p>Separe exames em poucos passos, revise pendências e arquive por unidade, mês, empresa, tipo e recibo.</p>
       </div>
       <div class="edge-topbar-actions">
         <a class="btn ghost" href="/">← Início EDGE</a>
@@ -53,7 +53,7 @@
 </div>
 <div id="toast" class="toast" aria-live="polite"></div>
 <script>window.EDGE_BASE_PATH = {{ (request.script_root or "")|tojson }};</script>
-<script src="{{ url_for('static', filename='common.js') }}?v=edge-integrado-1"></script>
+<script src="{{ url_for('static', filename='common.js') }}?v=edge-repaginado-recibo-1"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

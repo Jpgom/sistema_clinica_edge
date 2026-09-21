@@ -10,7 +10,7 @@
     <h2>Leitura dos documentos</h2>
     <p class="section-help">Os valores atuais são indicados para uso normal.</p>
     <label class="toggle-row"><span><strong>OCR para documentos escaneados</strong><small>Lê PDFs sem texto digital.</small></span><input id="useOcr" type="checkbox" {% if config.use_ocr %}checked{% endif %}><i></i></label>
-    <label class="toggle-row"><span><strong>Modo TURBO</strong><small>Faz triagem rápida e usa OCR detalhado só quando necessário.</small></span><input id="fastMode" type="checkbox" {% if config.fast_mode %}checked{% endif %}><i></i></label>
+    <label class="toggle-row"><span><strong>Modo TURBO</strong><small>Salva a preferência e acelera a triagem. Use quando os PDFs forem bem padronizados; para máxima conferência, deixe desligado.</small></span><input id="fastMode" type="checkbox" {% if config.fast_mode %}checked{% endif %}><i></i></label>
     <label class="toggle-row"><span><strong>Auditoria completa do lote</strong><small>Ativada permanentemente: todas as páginas são conferidas e, se faltar exame, o sistema executa uma segunda varredura de segurança.</small></span><input id="stopComplete" type="checkbox" disabled><i></i></label>
   </section>
   <section class="card settings-card">
@@ -25,4 +25,4 @@
 </div>
 <div class="sticky-save"><span id="saveStatus">Nenhuma alteração pendente.</span><button class="btn primary" id="saveSettings">Salvar configurações</button></div>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='settings.js') }}?v=fix404"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='settings.js') }}?v=repaginado-recibo-1"></script>{% endblock %}

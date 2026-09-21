@@ -2094,11 +2094,11 @@ def process_pdfs(
 ) -> ProcessingSummary:
     if not pdf_paths:
         raise ValueError("Nenhum PDF selecionado")
-    # Confiabilidade máxima: nunca encerra a leitura antes do fim do lote.
-    # Também desativa a triagem rápida: ela era boa para velocidade, mas podia
-    # descartar páginas de exames digitalizados antes da leitura completa.
+    # Nunca encerra a leitura antes do fim do lote.
+    # O Modo TURBO, quando ativado pelo usuário, usa triagem rápida, mas a
+    # auditoria final continua procurando exames faltantes.
     stop_when_complete = False
-    fast_mode = False
+    fast_mode = bool(fast_mode)
     models = load_models()
     root = output_root(output_base)
 
@@ -2868,22 +2868,28 @@ def resolve_pending(summary: ProcessingSummary, analysis_id: str, exam_type: str
 
 
 def create_expected_list_example(path: Path) -> None:
-    bundled = APP_DIR / "MODELO_FUNCIONARIOS.xlsx"
-    try:
-        if bundled.exists() and bundled.resolve() != path.resolve():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(bundled, path)
-            return
-    except Exception:
-        pass
+    """Cria modelo vazio de lista de funcionários.
+
+    Cabeçalho oficial:
+    FUNCIONÁRIO | EMPRESA | EXAMES ESPERADOS | RECIBO
+
+    A coluna RECIBO aceita tanto número de recibo quanto a observação A PRAZO,
+    usada nos filtros do Arquivo de Exames.
+    """
     if Workbook is None:
         raise RuntimeError("openpyxl não instalado")
-    wb = Workbook(); ws = wb.active; ws.title = "Funcionarios"
-    ws.append(["FUNCIONÁRIO", "EMPRESA", "EXAMES ESPERADOS", "RECIBO"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb = Workbook(); ws = wb.active; ws.title = "Planilha1"
+    headers = ["FUNCIONÁRIO", "EMPRESA", "EXAMES ESPERADOS", "RECIBO"]
+    ws.append(headers)
     ws.freeze_panes = "A2"
-    widths = [32, 62, 42, 24]
+    ws.auto_filter.ref = "A1:D1"
+    widths = [36, 58, 38, 24]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[chr(64+i)].width = w
     for c in ws[1]:
-        c.font = c.font.copy(bold=True)
+        try:
+            c.font = c.font.copy(bold=True)
+        except Exception:
+            pass
     wb.save(path)

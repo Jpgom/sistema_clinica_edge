@@ -23,6 +23,7 @@
   const archiveYear = document.getElementById('archiveYear');
   const archiveSaveBtn = document.getElementById('archiveSaveBtn');
   const archiveSaveInfo = document.getElementById('archiveSaveInfo');
+  const OCR_AVAILABLE = window.EDGE_OCR_AVAILABLE === true;
 
   let listToken = '';
   let pdfFiles = [];
@@ -283,7 +284,9 @@
       review.classList.add('hidden');
     }
 
-    if (s.pending + s.duplicates > 0) {
+    if (!OCR_AVAILABLE && Number(s.saved || 0) === 0 && Number(s.missing || 0) > 0) {
+      document.getElementById('resultSubtitle').textContent = 'OCR não localizado no Render. Os PDFs parecem estar escaneados/imagem; instale o OCR pelo Build Command bash bin/render-build.sh e processe novamente.';
+    } else if (s.pending + s.duplicates > 0) {
       document.getElementById('resultSubtitle').textContent = 'Há páginas para revisar. O que você confirmar será incluído no mesmo download.';
     } else if (s.missing) {
       document.getElementById('resultSubtitle').textContent = 'A revisão foi atualizada, mas ainda existem exames não encontrados.';

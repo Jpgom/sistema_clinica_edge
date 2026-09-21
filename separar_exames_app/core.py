@@ -708,23 +708,42 @@ def extract_fields(text: str, exam_type: str) -> tuple[str, str, str, str]:
 _TESSERACT_EXE_CACHE: str | None = None
 
 def locate_tesseract() -> str:
+    """Localiza o binário do Tesseract sem guardar resultado negativo.
+
+    No Render, quando o build é ajustado e o serviço reinicia, o binário costuma
+    ficar em /usr/bin/tesseract. Em versões anteriores o app guardava "" em cache
+    quando não encontrava o OCR; se o ambiente fosse corrigido depois, a tela
+    continuava exibindo OCR não localizado até reiniciar o processo. Agora só
+    guardamos em cache quando o executável é realmente encontrado.
+    """
     global _TESSERACT_EXE_CACHE
-    if _TESSERACT_EXE_CACHE is not None:
+    if _TESSERACT_EXE_CACHE and Path(_TESSERACT_EXE_CACHE).exists():
         return _TESSERACT_EXE_CACHE
+
+    env_cmd = (os.environ.get("TESSERACT_CMD") or "").strip()
+    candidates: list[Path] = []
+    if env_cmd:
+        candidates.append(Path(env_cmd))
+
     found = shutil.which("tesseract")
     if found:
-        _TESSERACT_EXE_CACHE = found
-        return found
-    candidates = [
+        candidates.append(Path(found))
+
+    candidates.extend([
+        Path("/usr/bin/tesseract"),
+        Path("/usr/local/bin/tesseract"),
+        Path("/opt/render/project/src/.local/bin/tesseract"),
         Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")) / "Tesseract-OCR" / "tesseract.exe",
         Path(os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")) / "Tesseract-OCR" / "tesseract.exe",
         Path.home() / "AppData" / "Local" / "Programs" / "Tesseract-OCR" / "tesseract.exe",
-    ]
+    ])
     for c in candidates:
-        if c.exists():
-            _TESSERACT_EXE_CACHE = str(c)
-            return _TESSERACT_EXE_CACHE
-    _TESSERACT_EXE_CACHE = ""
+        try:
+            if c and c.exists():
+                _TESSERACT_EXE_CACHE = str(c)
+                return _TESSERACT_EXE_CACHE
+        except Exception:
+            continue
     return ""
 
 

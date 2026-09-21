@@ -15,6 +15,17 @@
   </div>
 </header>
 
+{% if not ocr_available %}
+<section class="card ocr-alert-card">
+  <div>
+    <p class="eyebrow">OCR PENDENTE NO RENDER</p>
+    <h2>O sistema não conseguirá ler PDFs escaneados/imagem</h2>
+    <p>Quando o OCR aparece como não localizado, os PDFs digitalizados podem terminar com todos os exames como não encontrados. No Render, ajuste o <strong>Build Command</strong> para <code>bash bin/render-build.sh</code>, faça <strong>Clear build cache & deploy</strong> e depois volte a testar.</p>
+  </div>
+  <a class="btn ghost" href="{{ url_for('api_ocr_status') }}" target="_blank">Testar OCR</a>
+</section>
+{% endif %}
+
 <section id="activeExtractionBar" class="active-extraction hidden">
   <div class="active-extraction-icon">✓</div>
   <div>
@@ -109,4 +120,4 @@
   </article>
 </section>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='index.js') }}?v=unidades-tipos"></script>{% endblock %}
+{% block scripts %}<script>window.EDGE_OCR_AVAILABLE = {{ 'true' if ocr_available else 'false' }};</script><script src="{{ url_for('static', filename='index.js') }}?v=ocr-final-20260921"></script>{% endblock %}

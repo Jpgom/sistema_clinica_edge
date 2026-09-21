@@ -8,6 +8,7 @@ import re
 import shutil
 import threading
 import secrets
+import subprocess
 import time
 import uuid
 import webbrowser
@@ -369,6 +370,11 @@ def _summary_payload(summary: core.ProcessingSummary) -> dict[str, Any]:
         if a.status not in {"IGNORADO", "IGNORADO_MANUAL"}
     ]
     saved = sum(a.status in {"SALVO_AUTOMATICO", "SALVO_MANUAL", "ANEXADO_CONTINUACAO"} for a in summary.analyses)
+    ocr_missing_pages = sum(
+        1 for a in summary.analyses
+        if "tesseract" in (a.ocr_warning or "").lower() and "localizado" in (a.ocr_warning or "").lower()
+    )
+    blank_text_pages = sum(1 for a in summary.analyses if not (a.raw_text or "").strip())
     return {
         "root_dir": summary.root_dir,
         "total_pages": summary.total_pages,
@@ -384,6 +390,9 @@ def _summary_payload(summary: core.ProcessingSummary) -> dict[str, Any]:
         "fast_rejected": getattr(summary, "fast_rejected", 0),
         "rescued_pages": getattr(summary, "rescued_pages", 0),
         "audit_gaps": getattr(summary, "audit_gaps", 0),
+        "ocr_available": bool(core.locate_tesseract()),
+        "ocr_missing_pages": ocr_missing_pages,
+        "blank_text_pages": blank_text_pages,
         "analyses": relevant,
         "missing_rows": summary.missing_rows,
     }
@@ -626,6 +635,28 @@ def api_get_config():
     return jsonify({**cfg, "ocr_available": bool(core.locate_tesseract()), "tesseract": core.locate_tesseract() or ""})
 
 
+@app.get("/api/ocr-status")
+def api_ocr_status():
+    exe = core.locate_tesseract()
+    version = ""
+    error = ""
+    if exe:
+        try:
+            proc = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=5)
+            version = (proc.stdout or proc.stderr or "").splitlines()[0] if (proc.stdout or proc.stderr) else ""
+        except Exception as exc:
+            error = str(exc)
+    return jsonify({
+        "ok": bool(exe),
+        "tesseract": exe,
+        "version": version,
+        "error": error,
+        "path": os.environ.get("PATH", ""),
+        "data_dir": str(DATA_DIR),
+        "build_command_required": "bash bin/render-build.sh",
+    })
+
+
 @app.post("/api/config")
 def api_save_config():
     data = request.get_json(silent=True) or request.form
@@ -685,6 +716,37 @@ def api_sheet_summary(token: str):
         return jsonify({"error": str(exc)}), 400
 
 
+
+
+def _pdfs_look_scanned_without_ocr(pdf_paths: list[Path], max_pages: int = 6) -> bool:
+    """Retorna True quando as amostras dos PDFs não têm texto pesquisável.
+
+    Isso evita que o usuário processe dezenas de páginas escaneadas sem OCR
+    instalado e receba tudo como não encontrado. Não bloqueia PDF digital.
+    """
+    if core.locate_tesseract():
+        return False
+    checked = 0
+    textful = 0
+    for pdf in pdf_paths:
+        try:
+            doc = core.fitz.open(str(pdf))
+            try:
+                for i in range(min(len(doc), max(1, max_pages - checked))):
+                    txt = core.clean_value(doc.load_page(i).get_text("text") or "")
+                    checked += 1
+                    if len(txt) >= 40:
+                        textful += 1
+                    if checked >= max_pages:
+                        break
+            finally:
+                doc.close()
+        except Exception:
+            continue
+        if checked >= max_pages:
+            break
+    return checked > 0 and textful == 0
+
 @app.post("/api/jobs")
 def api_create_job():
     active_id = str(session.get("active_job_id") or "").strip()
@@ -737,6 +799,12 @@ def api_create_job():
         p = _unique_upload_path(upload_dir, f.filename)
         f.save(p)
         pdf_paths.append(p)
+
+    if _pdfs_look_scanned_without_ocr(pdf_paths):
+        shutil.rmtree(workspace, ignore_errors=True)
+        return jsonify({
+            "error": "OCR não localizado. Os PDFs enviados parecem ser escaneados/imagem e não possuem texto pesquisável. Altere o Build Command do Render para 'bash bin/render-build.sh', faça Clear build cache & deploy e tente novamente."
+        }), 400
 
     job = {
         "id": job_id,

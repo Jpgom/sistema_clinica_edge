@@ -41,6 +41,3 @@
 .info-note span{display:block}
 .help-divider{height:1px;background:var(--line);margin:13px 0}
 @media(max-width:620px){.back-button{padding:8px 10px}.topbar{flex-wrap:wrap}.topbar>div{min-width:0}}
-
-/* Repaginação geral EDGE */
-.card,.panel,.content-card{box-shadow:0 10px 30px rgba(16,24,40,.06)!important}.btn,.edge-menu-link,.nav-link{transition:transform .15s ease,background .15s ease,box-shadow .15s ease}.btn:hover,.edge-menu-link:hover,.nav-link:hover{transform:translateY(-1px)}.page-head,.edge-module-topbar,.topbar{border-radius:20px}

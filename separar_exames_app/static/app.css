@@ -222,6 +222,3 @@
 .edge-integrated-main .action-strip{background:linear-gradient(135deg,#0f2d52,#0b63ce)}
 .edge-integrated-main .result-head{padding-top:6px;border-top:1px solid #e6ebf2}
 @media(max-width:980px){.simple-flow{grid-template-columns:1fr}.simple-flow-item{padding:11px}}
-
-/* Repaginação geral EDGE */
-.card,.panel,.content-card{box-shadow:0 10px 30px rgba(16,24,40,.06)!important}.btn,.edge-menu-link,.nav-link{transition:transform .15s ease,background .15s ease,box-shadow .15s ease}.btn:hover,.edge-menu-link:hover,.nav-link:hover{transform:translateY(-1px)}.page-head,.edge-module-topbar,.topbar{border-radius:20px}

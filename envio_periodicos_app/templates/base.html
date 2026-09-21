@@ -25,7 +25,6 @@
     </a>
     <nav class="nav">
       <a class="nav-link" href="/"><span>←</span> Sistema principal</a>
-      <a class="nav-link" href="/status-sistema"><span>●</span> Status do sistema</a>
       <div class="nav-label">Operação</div>
       <a class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}"><span>⌂</span> Início</a>
       <a class="nav-link {% if request.endpoint in ['units','unit_dashboard','unit_edit'] %}active{% endif %}" href="{{ url_for('units') }}"><span>▦</span> Unidades</a>

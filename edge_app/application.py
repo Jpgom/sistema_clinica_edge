@@ -3689,6 +3689,69 @@ def exames_a_prazo_gerar():
 def healthz():
     return jsonify({"ok": True, "app": APP_TITLE, "time": datetime.utcnow().isoformat() + "Z"})
 
+
+@app.route("/status-sistema")
+def status_sistema():
+    class Card:
+        def __init__(self, label, value, detail, ok=True):
+            self.label = label
+            self.value = value
+            self.detail = detail
+            self.ok = ok
+
+    data_dir = DATA_DIR
+    envio_dir = os.environ.get("ENVIO_PERIODICOS_DATA_DIR") or os.path.join(os.environ.get("RENDER_DISK_PATH", DATA_DIR), "envio_periodicos")
+    separar_dir = os.environ.get("SEPARAR_EXAMES_DATA_DIR") or os.path.join(os.environ.get("RENDER_DISK_PATH", DATA_DIR), "separar_exames")
+
+    db_ok = False
+    db_detail = ""
+    try:
+        if USE_POSTGRES and psycopg2:
+            conn = psycopg2.connect(DATABASE_URL, connect_timeout=5)
+            cur = conn.cursor(); cur.execute("SELECT 1"); cur.close(); conn.close()
+            db_ok = True; db_detail = "PostgreSQL conectado"
+        else:
+            os.makedirs(data_dir, exist_ok=True)
+            db_ok = True; db_detail = "SQLite/local disponível"
+    except Exception as exc:
+        db_detail = f"Falha: {exc}"
+
+    tesseract = shutil.which("tesseract") or ""
+    ocr_ok = bool(tesseract)
+    disk_ok = False
+    disk_text = "Não foi possível medir o disco"
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+        usage = shutil.disk_usage(data_dir)
+        total_gb = usage.total / (1024**3)
+        free_gb = usage.free / (1024**3)
+        disk_text = f"{free_gb:.1f} GB livres de {total_gb:.1f} GB"
+        disk_ok = free_gb > 0.2
+    except Exception:
+        pass
+
+    persist_root = os.environ.get("RENDER_DISK_PATH") or ""
+    persist_ok = bool(persist_root and os.path.isdir(persist_root))
+    cards = [
+        Card("Banco de dados", "Conectado" if db_ok else "Verificar", db_detail, db_ok),
+        Card("Disco persistente", "Ativo" if persist_ok else "Não confirmado", persist_root or "RENDER_DISK_PATH não configurado", persist_ok),
+        Card("OCR / Tesseract", "Ativo" if ocr_ok else "Não localizado", tesseract or "PDFs escaneados podem não ser lidos", ocr_ok),
+        Card("Espaço em disco", "Disponível" if disk_ok else "Verificar", disk_text, disk_ok),
+        Card("Envio periódicos", "Pasta configurada" if envio_dir else "Verificar", envio_dir, bool(envio_dir)),
+        Card("Separar exames", "Pasta configurada" if separar_dir else "Verificar", separar_dir, bool(separar_dir)),
+    ]
+    return render_template(
+        "status_sistema.html",
+        title="Status do sistema",
+        cards=cards,
+        data_dir=data_dir,
+        envio_dir=envio_dir,
+        separar_dir=separar_dir,
+        tesseract=tesseract,
+        disk_text=disk_text,
+        env_name=os.environ.get("FLASK_ENV") or os.environ.get("RENDER_SERVICE_NAME") or "produção",
+    )
+
 @app.route("/")
 def home():
     return render_template("home.html", title=APP_TITLE)
@@ -4021,21 +4084,8 @@ def encaminhamento_complementares_gerar():
 
 @app.route("/encaminhamentos", methods=["GET", "POST"])
 def encaminhamentos():
-    if request.method == "POST":
-        file = request.files.get("file")
-        ok, msg = validate_uploaded_file(file, EXCEL_EXTENSIONS, "a planilha Base do Mês")
-        if not ok:
-            flash(msg)
-            return redirect(url_for("encaminhamentos"))
-        formato_saida = request.form.get("formato_saida", "docx")
-        try:
-            zip_path = gerar_encaminhamentos(file, formato_saida=formato_saida)
-            return send_file(zip_path, as_attachment=True, download_name="encaminhamentos.zip")
-        except Exception:
-            logger.exception("Erro ao gerar encaminhamentos")
-            flash("Não foi possível gerar os encaminhamentos. Confira se a planilha está no modelo esperado.")
-            return redirect(url_for("encaminhamentos"))
-    return render_template("encaminhamentos.html")
+    flash("A geração de encaminhamentos agora fica dentro do módulo Envio periódicos.", "warning")
+    return redirect("/envio-periodicos/")
 
 @app.route("/renumerador", methods=["GET", "POST"])
 def renumerador():

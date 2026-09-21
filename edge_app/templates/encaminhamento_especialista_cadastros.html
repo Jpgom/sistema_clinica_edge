@@ -15,23 +15,27 @@
       <img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho">
       <div>EDGE<small>Cadastros</small></div>
     </div>
-    <div class="nav-card">
-      <a class="nav-link" href="{{ url_for('home') }}">🏠 Início</a>
-      <a class="nav-link" href="/envio-periodicos/">📧 Envio periódicos</a>
-      <a class="nav-link" href="/separar-exames/">📂 Separar exames</a>
-      <a class="nav-link" href="{{ url_for('exames_a_prazo') }}">🧾 Exames a Prazo</a>
-      <a class="nav-link" href="{{ url_for('encaminhamentos') }}">📄 Encaminhamentos em lote</a>
-      <a class="nav-link" href="{{ url_for('encaminhamento_especialista') }}">📝 Encaminhamento individual</a>
-      <a class="nav-link" href="{{ url_for('encaminhamento_complementares') }}">🧪 Enc. complementares</a>
-      <a class="nav-link active" href="{{ url_for('encaminhamento_especialista_cadastros') }}">⚙️ Cadastros de encaminhamento</a>
-      <a class="nav-link" href="{{ url_for('renumerador') }}">🔢 Renumerador</a>
-      <a class="nav-link" href="{{ url_for('esocial') }}">🗂️ E-SOCIAL</a>
-      <a class="nav-link" href="{{ url_for('fisico_mental') }}">🩺 Físico e Mental</a>
-      <a class="nav-link" href="{{ url_for('atestado_medico') }}">🧾 Atestado Médico</a>
-      <a class="nav-link" href="/pgr/">🧾 PGR / SST</a>
-      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}">👥 Usuários</a>{% endif %}
-      <a class="nav-link" href="{{ url_for('minha_conta') }}">🔐 Minha conta</a>
-      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}">🚪 Sair</a>
+    <div class="nav-card edge-sidebar-nav">
+      <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{{ url_for('home') }}"><span class="nav-icon">⌂</span><span class="nav-label">Início</span></a>
+      <div class="nav-group-title">Clínica</div>
+      <a class="nav-link {% if request.path.startswith('/encaminhamento-especialista') %}active{% endif %}" href="{{ url_for('encaminhamento_especialista') }}"><span class="nav-icon">☰</span><span class="nav-label">Enc. individual</span></a>
+      <a class="nav-link {% if request.path.startswith('/encaminhamento-complementares') %}active{% endif %}" href="{{ url_for('encaminhamento_complementares') }}"><span class="nav-icon">＋</span><span class="nav-label">Enc. complementares</span></a>
+      <a class="nav-link {% if request.path.startswith('/laudo-pcd') %}active{% endif %}" href="{{ url_for('laudo_pcd') }}"><span class="nav-icon">◉</span><span class="nav-label">Laudo PCD</span></a>
+      <a class="nav-link {% if request.path.startswith('/fisico-mental') %}active{% endif %}" href="{{ url_for('fisico_mental') }}"><span class="nav-icon">◆</span><span class="nav-label">Físico e Mental</span></a>
+      <a class="nav-link {% if request.path.startswith('/atestado-medico') %}active{% endif %}" href="{{ url_for('atestado_medico') }}"><span class="nav-icon">▧</span><span class="nav-label">Atestado Médico</span></a>
+      <div class="nav-group-title">Interno</div>
+      <a class="nav-link {% if request.path.startswith('/envio-periodicos') %}active{% endif %}" href="/envio-periodicos/"><span class="nav-icon">✉</span><span class="nav-label">Envio periódicos</span></a>
+      <a class="nav-link {% if request.path.startswith('/separar-exames') %}active{% endif %}" href="/separar-exames/"><span class="nav-icon">▣</span><span class="nav-label">Separar exames</span></a>
+      <a class="nav-link {% if request.path.startswith('/exames-a-prazo') %}active{% endif %}" href="{{ url_for('exames_a_prazo') }}"><span class="nav-icon">▤</span><span class="nav-label">Exames a Prazo</span></a>
+      <a class="nav-link {% if request.path.startswith('/renumerador') %}active{% endif %}" href="{{ url_for('renumerador') }}"><span class="nav-icon">#</span><span class="nav-label">Renumerador</span></a>
+      <a class="nav-link {% if request.path.startswith('/esocial') %}active{% endif %}" href="{{ url_for('esocial') }}"><span class="nav-icon">⇄</span><span class="nav-label">E-SOCIAL</span></a>
+      <a class="nav-link {% if request.path.startswith('/pgr/') or request.path == '/pgr' %}active{% endif %}" href="/pgr/"><span class="nav-icon">▨</span><span class="nav-label">PGR / SST</span></a>
+      <div class="nav-group-title">Sistema</div>
+      <a class="nav-link {% if request.path.startswith('/status-sistema') %}active{% endif %}" href="{{ url_for('status_sistema') }}"><span class="nav-icon">●</span><span class="nav-label">Status do sistema</span></a>
+      {% if is_admin %}<a class="nav-link {% if request.path.startswith('/usuarios') %}active{% endif %}" href="{{ url_for('usuarios') }}"><span class="nav-icon">◌</span><span class="nav-label">Usuários</span></a>{% endif %}
+      {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link {% if request.path.startswith('/auditoria') %}active{% endif %}" href="{{ url_for('auditoria') }}"><span class="nav-icon">≡</span><span class="nav-label">Auditoria</span></a>{% endif %}
+      <a class="nav-link {% if request.path.startswith('/minha-conta') %}active{% endif %}" href="{{ url_for('minha_conta') }}"><span class="nav-icon">⌁</span><span class="nav-label">Minha conta</span></a>
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}"><span class="nav-icon">↪</span><span class="nav-label">Sair</span></a>
     </div>
   </aside>
 

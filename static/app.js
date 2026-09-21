@@ -336,3 +336,26 @@ hideLoading();
     </div>`;
   main.insertBefore(header, main.firstElementChild);
 })();
+
+
+// Repaginação EDGE: evita duplo clique e melhora feedback em formulários grandes.
+document.addEventListener('submit', function(e){
+  const form=e.target;
+  if(!(form instanceof HTMLFormElement)) return;
+  if(form.dataset.edgeSubmitting==='1'){ e.preventDefault(); return; }
+  if(!form.checkValidity()) return;
+  form.dataset.edgeSubmitting='1';
+  setTimeout(()=>{
+    form.querySelectorAll('button[type="submit"],input[type="submit"]').forEach(btn=>{
+      btn.dataset.originalLabel = btn.tagName === 'INPUT' ? btn.value : btn.textContent;
+      btn.disabled=true;
+      if(btn.tagName === 'INPUT') btn.value='Processando...'; else btn.textContent='Processando...';
+    });
+  },20);
+});
+window.addEventListener('pageshow',()=>{
+  document.querySelectorAll('form[data-edge-submitting="1"]').forEach(form=>{
+    form.dataset.edgeSubmitting='0';
+    form.querySelectorAll('button:disabled,input:disabled').forEach(btn=>{btn.disabled=false; if(btn.dataset.originalLabel){ if(btn.tagName==='INPUT') btn.value=btn.dataset.originalLabel; else btn.textContent=btn.dataset.originalLabel; }});
+  });
+});

@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#f5f7fb"><title>{{ title }}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><meta name="csrf-token" content="{{ csrf_token() }}"></head>
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Status do sistema</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=repaginacao-edge-1">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
 <body>
 <div class="app-layout">
   <aside class="sidebar">
-    <div class="brand"><img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho"><div>EDGE<small>E-SOCIAL</small></div></div>
+    <div class="brand"><img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE"><div>EDGE<small>Status do sistema</small></div></div>
     <div class="nav-card edge-sidebar-nav">
       <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{{ url_for('home') }}"><span class="nav-icon">⌂</span><span class="nav-label">Início</span></a>
       <div class="nav-group-title">Rotina principal</div>
@@ -33,33 +37,28 @@
     </div>
   </aside>
   <main class="main-area">
-    <div class="topbar compact-topbar">
-      <div class="page-title"><h1>E-SOCIAL EVELLYN</h1></div>
-      
-    </div>
-
-    <section class="content-card">
-      {% with messages = get_flashed_messages() %}{% if messages %}<div class="alert error">{% for message in messages %}<div>{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
-      <form id="uploadForm" action="{{ url_for('esocial_processar_async') }}" method="post" enctype="multipart/form-data">
-        <div class="form-grid">
-          <div class="field col-4"><label for="pdfMonth">Mês no nome dos PDFs</label><select name="pdf_month" id="pdfMonth" required><option value="" selected disabled>Selecione o mês</option><option>JANEIRO</option><option>FEVEREIRO</option><option>MARÇO</option><option>ABRIL</option><option>MAIO</option><option>JUNHO</option><option>JULHO</option><option>AGOSTO</option><option>SETEMBRO</option><option>OUTUBRO</option><option>NOVEMBRO</option><option>DEZEMBRO</option></select><small>Os arquivos serão nomeados como EMPRESA - CNPJ - MÊS.pdf.</small></div>
-          <div class="field col-2"><label>Planilha base</label><input type="file" name="base_file" id="baseFile" accept=".xls,.xlsx,.html,.htm" required><small>Colunas esperadas: FUNCIONÁRIO, TIPO DE EXAME, DEPOSITANTE e coluna da empresa.</small></div>
-          <div class="field col-2"><label>Aba da planilha base</label><select name="base_sheet" id="baseSheetSelect"><option value="">Carregue a planilha base primeiro</option></select></div>
-          <div class="field col-2"><label>Adicionar RELFUNCGERAL por arquivo</label><input type="file" id="relFilesPicker" accept=".xls,.xlsx,.html,.htm" multiple></div>
-          <div class="field col-2"><label>Adicionar RELFUNCGERAL por pasta</label><input type="file" id="relFolderPicker" accept=".xls,.xlsx,.html,.htm" webkitdirectory directory multiple></div>
-        </div>
-        <div class="toolbar" style="margin:16px 0">
-          <button type="button" class="btn btn--light" id="clearAllBtn">Limpar lista</button>
-          <span class="helper-box" id="selectionSummary">Nenhum arquivo selecionado.</span>
-          <span class="selected-chip" id="fileCount">0 arquivo(s)</span>
-        </div>
-        <div class="table-wrap"><table class="file-table"><thead><tr><th>Arquivo</th><th>Tamanho</th><th>Origem</th><th>Ação</th></tr></thead><tbody id="fileListBody"><tr class="empty-row"><td colspan="4">Nenhum RELFUNCGERAL selecionado.</td></tr></tbody></table></div>
-        <input type="file" name="rel_files" id="hiddenRelFiles" multiple hidden>
-        <div class="actions"><button type="submit" class="btn btn--primary">Processar e baixar ZIP final</button></div>
-      </form>
+    <div class="topbar compact-topbar page-hero-mini"><div class="page-title"><span class="badge-inline">Sistema</span><h1>Status do sistema</h1><p>Conferência rápida de banco, disco persistente, OCR, pastas de dados e ambiente de execução.</p></div><div class="inline-actions"><a class="btn btn--light" href="{{ url_for('home') }}">← Início</a><button class="btn btn--primary" onclick="location.reload()">Atualizar</button></div></div>
+    <section class="status-grid">
+      {% for item in cards %}
+      <article class="status-card-v2 status-{{ 'ok' if item.ok else 'warn' }}"><div><span>{{ item.label }}</span><strong>{{ item.value }}</strong><small>{{ item.detail }}</small></div><b>{{ 'OK' if item.ok else 'ATENÇÃO' }}</b></article>
+      {% endfor %}
+    </section>
+    <section class="content-card status-details">
+      <div class="section-head slim"><div><h2>Detalhes técnicos</h2><p>Use esta tela para confirmar se o sistema está pronto antes de processar rotinas grandes.</p></div></div>
+      <div class="details-grid">
+        <div><label>Pasta de dados principal</label><code>{{ data_dir }}</code></div>
+        <div><label>Envio periódicos</label><code>{{ envio_dir }}</code></div>
+        <div><label>Separar exames</label><code>{{ separar_dir }}</code></div>
+        <div><label>Tesseract/OCR</label><code>{{ tesseract or 'Não localizado' }}</code></div>
+        <div><label>Disco</label><code>{{ disk_text }}</code></div>
+        <div><label>Ambiente</label><code>{{ env_name }}</code></div>
+      </div>
+    </section>
+    <section class="content-card status-help">
+      <h2>Mensagens úteis</h2>
+      <p>Se algum item aparecer como atenção, corrija antes de usar rotinas com arquivos grandes. Para PDFs escaneados, o OCR precisa estar ativo. Para competências e arquivos salvos, o disco persistente precisa estar montado em <code>/var/data</code>.</p>
     </section>
   </main>
 </div>
-<div class="loading-overlay is-hidden" id="loadingOverlay" aria-hidden="true"><div class="loading-card"><div class="spinner"></div><h3>Processando arquivos</h3></div></div>
-<script src="{{ url_for('static', filename='app.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}?v=repaginacao-edge-1"></script>
 </body></html>

@@ -2,6 +2,6 @@ services:
   - type: web
     name: sistema-edge-producao
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: bash bin/render-build.sh
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 300 --graceful-timeout 300 --threads 4
     healthCheckPath: /healthz

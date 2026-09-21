@@ -284,9 +284,15 @@ def refresh_exam_types() -> tuple[str, ...]:
     EXAM_TYPES = tuple(dict.fromkeys([*DEFAULT_EXAM_TYPES, *custom]))
 
     # Adiciona aliases automáticos para todos os tipos, inclusive os cadastrados.
+    # Importante: tipos criados pelo usuário precisam pontuar alto mesmo quando
+    # ainda não têm modelo visual cadastrado. Antes eles recebiam peso 18 e,
+    # como o piso padrão é 28, páginas com o nome exato do exame podiam cair em
+    # "NÃO ENCONTRADO".
+    aliases_by_exam: dict[str, list[str]] = defaultdict(list)
     for name in EXAM_TYPES:
-        EXAM_ALIASES.setdefault(normalize_for_match(name), name)
-        SIGNATURES.setdefault(name, [(name.lower(), 18.0), (normalize_for_match(name).lower(), 18.0)])
+        name_norm = normalize_for_match(name)
+        EXAM_ALIASES.setdefault(name_norm, name)
+        aliases_by_exam[name].append(name)
     try:
         aliases = json.loads(_exam_aliases_json().read_text(encoding="utf-8")) if _exam_aliases_json().exists() else {}
         if isinstance(aliases, dict):
@@ -298,8 +304,35 @@ def refresh_exam_types() -> tuple[str, ...]:
                     alias_n = normalize_for_match(alias)
                     if alias_n:
                         EXAM_ALIASES[alias_n] = canonical_name
+                        aliases_by_exam[canonical_name].append(str(alias))
     except Exception:
         pass
+
+    for name in EXAM_TYPES:
+        if name in DEFAULT_EXAM_TYPES:
+            # Mantém as regras manuais dos tipos originais, apenas acrescentando
+            # o próprio nome como assinatura forte quando não existir.
+            SIGNATURES.setdefault(name, [])
+            if not any(normalize_for_match(k) == normalize_for_match(name) for k, _ in SIGNATURES[name]):
+                SIGNATURES[name].append((name.lower(), 45.0))
+            continue
+        sigs: list[tuple[str, float]] = []
+        seen_sig: set[str] = set()
+        for alias in aliases_by_exam.get(name, [name]):
+            alias_clean = clean_value(alias) if 'clean_value' in globals() else str(alias or '').strip()
+            alias_norm = normalize_for_match(alias_clean)
+            if not alias_norm or alias_norm in seen_sig:
+                continue
+            seen_sig.add(alias_norm)
+            # Peso 48 faz o tipo ser reconhecido pelo nome/alias exato.
+            sigs.append((alias_clean.lower(), 48.0))
+            # Tokens relevantes do tipo ajudam quando o OCR quebra o título.
+            tokens = [t for t in alias_norm.split() if len(t) >= 4 and t not in MODEL_STOPWORDS]
+            if len(tokens) >= 2:
+                sigs.append((" ".join(tokens[:3]).lower(), 24.0))
+            elif tokens:
+                sigs.append((tokens[0].lower(), 16.0))
+        SIGNATURES[name] = sigs or [(name.lower(), 48.0)]
     return EXAM_TYPES
 
 
@@ -475,10 +508,42 @@ def normalize_exam(value: str) -> str:
     raw = normalize_for_match(value)
     if raw in EXAM_ALIASES:
         return EXAM_ALIASES[raw]
-    for alias, canonical in EXAM_ALIASES.items():
-        if alias in raw:
+    # Procura primeiro aliases maiores. Isso evita que um alias curto, como
+    # "PCD", vença nomes mais específicos em células com vários exames.
+    for alias, canonical in sorted(EXAM_ALIASES.items(), key=lambda kv: len(kv[0]), reverse=True):
+        if alias and alias in raw:
             return canonical
     return ""
+
+
+def parse_exam_cell(value: str) -> list[str]:
+    """Extrai todos os tipos de exames de uma célula da planilha.
+
+    A versão anterior dividia por barra (/), o que quebrava exames como
+    "RAIO-X / TÓRAX". Agora primeiro procura todos os tipos/aliases cadastrados
+    dentro da célula inteira e só depois tenta separar por delimitadores.
+    """
+    refresh_exam_types()
+    raw_text = clean_value(value)
+    raw = normalize_for_match(raw_text)
+    if not raw:
+        return []
+    found: list[str] = []
+    for alias, canonical in sorted(EXAM_ALIASES.items(), key=lambda kv: len(kv[0]), reverse=True):
+        if alias and alias in raw and canonical not in found:
+            found.append(canonical)
+    if found:
+        return found
+    pieces = re.split(r"[;,|\n]+", raw_text)
+    # Só divide por barra quando a célula parece conter exames distintos, não
+    # quando a barra faz parte do nome do exame.
+    if "/" in raw_text and not re.search(r"RAIO\s*-?\s*X\s*/", raw_text, re.I):
+        pieces.extend(raw_text.split("/"))
+    for piece in pieces:
+        ex = normalize_exam(piece)
+        if ex and ex not in found:
+            found.append(ex)
+    return found
 
 
 ASO_SUBTYPE_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -1149,6 +1214,13 @@ def classify_page(text: str, image: Image.Image | None, models: list[ModelSample
         if exam not in allowed:
             continue
         keyword = sum(weight for phrase, weight in SIGNATURES[exam] if normalize_for_match(phrase) in n)
+        # Para tipos cadastrados, o nome/alias do exame é a principal assinatura.
+        # Pontua também quando todos os tokens relevantes aparecem, mesmo com
+        # separadores diferentes no OCR.
+        if exam not in DEFAULT_EXAM_TYPES and keyword < 30:
+            exam_tokens = [t for t in normalize_for_match(exam).split() if len(t) >= 4 and t not in MODEL_STOPWORDS]
+            if exam_tokens and all(t in n.split() for t in exam_tokens):
+                keyword = max(keyword, 42.0)
 
         # Alguns sistemas imprimem o titulo como "ASO - Atestado de Saude
         # Ocupacional". O OCR pode errar ATESTADO, mas conservar o token ASO.
@@ -1279,6 +1351,23 @@ def structural_exam_candidates(text: str, candidate_types: set[str] | None = Non
         disability = t("pessoa", 0.76) and t("deficiencia", 0.72)
         if pcd_title or disability:
             found.add("LAUDO PCD")
+
+    # Tipos novos cadastrados pelo usuário. Serve apenas como triagem para não
+    # descartar uma página antes da varredura/modelo visual.
+    for exam in allowed:
+        if exam in DEFAULT_EXAM_TYPES:
+            continue
+        exam_tokens = [tok for tok in normalize_for_match(exam).split() if len(tok) >= 4 and tok not in MODEL_STOPWORDS]
+        if exam_tokens and all(_token_close(tokens, tok, 0.68) for tok in exam_tokens[:4]):
+            found.add(exam)
+            continue
+        for alias, canonical in EXAM_ALIASES.items():
+            if canonical != exam:
+                continue
+            alias_tokens = [tok for tok in alias.split() if len(tok) >= 4 and tok not in MODEL_STOPWORDS]
+            if alias_tokens and all(_token_close(tokens, tok, 0.68) for tok in alias_tokens[:4]):
+                found.add(exam)
+                break
 
     return found
 
@@ -1464,11 +1553,8 @@ def load_expected_list(path: Path, sheet_name: str | None = None) -> list[Expect
             receipt = "A PRAZO"
 
         if exam_col is not None and exam_col < len(row):
-            raw_exams = re.split(r"[;,|/\n]+", row[exam_col])
-            for raw in raw_exams:
-                ex = normalize_exam(raw)
-                if ex:
-                    emp.add_expected_exam(ex, receipt=receipt)
+            for ex in parse_exam_cell(row[exam_col]):
+                emp.add_expected_exam(ex, receipt=receipt)
         for col, ex in wide_exam_cols.items():
             if col >= len(row):
                 continue
@@ -1833,13 +1919,24 @@ def _rescue_missing_pages(
                 exam, exam_conf, breakdown, hard_ignore = classify_page(
                     text, None, models, None, candidate_types=current_types, recognition_floor=18.0
                 )
-                if not exam and structural:
-                    # Classificação estrutural não salva por si só, mas direciona uma tentativa
-                    # visual/modelo mais forte quando houver modelo cadastrado.
-                    img = render_page_image(page, scale=0.85) if models else None
-                    exam, exam_conf, breakdown, hard_ignore = classify_page(
-                        text, img, models, None, candidate_types=current_types, recognition_floor=18.0
+                current_has_models = any(m.exam_type in current_types for m in models)
+                # Na varredura de segurança sempre usa o modelo visual quando houver
+                # modelo cadastrado para o tipo faltante. Isso corrige PDFs cujo OCR lê
+                # pouco texto, mas o formulário é igual ao modelo enviado.
+                if current_has_models and (not exam or exam_conf < max(50.0, auto_threshold - 25.0) or structural):
+                    img = render_page_image(page, scale=0.85)
+                    exam2, conf2, breakdown2, ignore2 = classify_page(
+                        text, img, models, None, candidate_types=current_types, recognition_floor=14.0
                     )
+                    if conf2 > exam_conf or not exam:
+                        exam, exam_conf, breakdown, hard_ignore = exam2, conf2, breakdown2, ignore2
+                if not exam and structural:
+                    # Estrutura genérica sem pontuação suficiente: mantém como possível tipo
+                    # para cruzar com funcionário e mandar para conferência, em vez de sumir.
+                    exam = sorted(structural)[0]
+                    exam_conf = max(exam_conf, 35.0)
+                    breakdown = (breakdown + "; " if breakdown else "") + "estrutura=35"
+                    hard_ignore = False
                 if not exam:
                     continue
 
@@ -1861,6 +1958,11 @@ def _rescue_missing_pages(
                 strong_identity = (exact_name and exact_company_doc) or valid_cpf_hit or emp_conf >= max(88.0, employee_threshold)
                 strong_exam = exam_conf >= max(58.0, auto_threshold - 18.0)
                 if global_exam == exam and global_conf >= max(58.0, auto_threshold - 18.0):
+                    strong_exam = True
+                # Para tipos personalizados com modelo cadastrado, aceita confiança menor
+                # quando a identidade do funcionário é forte. Assim exames novos não ficam
+                # como "não encontrado" só porque não têm regra manual no código.
+                if strong_identity and exam not in DEFAULT_EXAM_TYPES and any(m.exam_type == exam for m in models) and exam_conf >= 42.0:
                     strong_exam = True
                 if hard_ignore and exam_conf < 80:
                     continue

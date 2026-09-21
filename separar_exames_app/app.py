@@ -107,10 +107,11 @@ app.permanent_session_lifetime = timedelta(days=3650)
 
 DEFAULT_CONFIG = {
     "use_ocr": True,
-    "fast_mode": True,
+    # Modo confiabilidade: faz leitura completa para não deixar exames para trás.
+    "fast_mode": False,
     "stop_when_complete": False,
-    "auto_threshold": 80,
-    "employee_threshold": 82,
+    "auto_threshold": 68,
+    "employee_threshold": 78,
 }
 
 
@@ -307,11 +308,11 @@ def _load_config() -> dict[str, Any]:
     except Exception:
         pass
     cfg["use_ocr"] = bool(cfg.get("use_ocr", True))
-    cfg["fast_mode"] = bool(cfg.get("fast_mode", True))
+    cfg["fast_mode"] = False
     # Modo confiável: sempre lê o lote inteiro; mantém a chave apenas por compatibilidade.
     cfg["stop_when_complete"] = False
-    cfg["auto_threshold"] = max(50, min(100, int(float(cfg.get("auto_threshold", 80)))))
-    cfg["employee_threshold"] = max(50, min(100, int(float(cfg.get("employee_threshold", 82)))))
+    cfg["auto_threshold"] = max(50, min(85, int(float(cfg.get("auto_threshold", 68)))))
+    cfg["employee_threshold"] = max(50, min(90, int(float(cfg.get("employee_threshold", 78)))))
     return cfg
 
 
@@ -630,10 +631,10 @@ def api_save_config():
     data = request.get_json(silent=True) or request.form
     cfg = {
         "use_ocr": str(data.get("use_ocr", "true")).lower() in {"1", "true", "on", "yes"},
-        "fast_mode": str(data.get("fast_mode", "true")).lower() in {"1", "true", "on", "yes"},
+        "fast_mode": False,
         "stop_when_complete": False,
-        "auto_threshold": max(50, min(100, int(float(data.get("auto_threshold", 80))))),
-        "employee_threshold": max(50, min(100, int(float(data.get("employee_threshold", 82))))),
+        "auto_threshold": max(50, min(85, int(float(data.get("auto_threshold", 68))))),
+        "employee_threshold": max(50, min(90, int(float(data.get("employee_threshold", 78))))),
     }
     _save_config(cfg)
     return jsonify({"ok": True, "config": cfg})

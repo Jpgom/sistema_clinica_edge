@@ -1023,6 +1023,39 @@ def save_models(models: list[ModelSample]) -> None:
     MODELS_JSON.write_text(json.dumps([asdict(m) for m in models], ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def model_file_reference(path: Path) -> str:
+    """Guarda o PDF modelo de forma compatível com Render Persistent Disk.
+
+    Em versões anteriores o sistema tentava salvar o caminho relativo ao diretório
+    do código (APP_DIR). Quando o Render usa /var/data, o arquivo fica fora de
+    /opt/render/project/src e isso causava: "is not in the subpath".
+    Por isso, agora gravamos caminho absoluto para arquivos persistentes e
+    aceitamos também referências antigas relativas.
+    """
+    try:
+        return str(Path(path).resolve())
+    except Exception:
+        return str(path)
+
+
+def resolve_model_file(stored_file: str) -> Path:
+    raw = str(stored_file or "").strip()
+    if not raw:
+        return Path()
+    p = Path(raw)
+    if p.is_absolute():
+        return p
+    # Compatibilidade com modelos antigos salvos relativos ao app.
+    candidate = APP_DIR / p
+    if candidate.exists():
+        return candidate
+    # Compatibilidade com modelos novos salvos apenas pelo nome.
+    candidate = MODELS_DIR / p.name
+    if candidate.exists():
+        return candidate
+    return candidate
+
+
 def add_model_from_pdf(path: Path, exam_type: str, label: str, use_ocr: bool = True, progress: Optional[Callable[[int,int],None]] = None) -> list[ModelSample]:
     exam_type = normalize_exam(exam_type) or exam_type
     if exam_type not in EXAM_TYPES:
@@ -1054,7 +1087,7 @@ def add_model_from_pdf(path: Path, exam_type: str, label: str, use_ocr: bool = T
                 token_signature=token_signature(text),
                 visual_hash=visual_hash(img),
                 aspect_ratio=round(img.width / max(1, img.height), 4),
-                stored_file=str(stored.relative_to(APP_DIR)),
+                stored_file=model_file_reference(stored),
             )
             models.append(model)
             new_models.append(model)
@@ -1116,7 +1149,7 @@ def add_models_from_pdfs(paths: list[Path], exam_type: str, label_prefix: str, u
                     token_signature=token_signature(text),
                     visual_hash=visual_hash(img),
                     aspect_ratio=round(img.width / max(1, img.height), 4),
-                    stored_file=str(stored.relative_to(APP_DIR)),
+                    stored_file=model_file_reference(stored),
                 )
                 models.append(model)
                 created.append(model)
@@ -1152,7 +1185,7 @@ def add_model_from_page(path: Path, page_index: int, exam_type: str, label: str,
             id=uuid.uuid4().hex, exam_type=exam_type, label=label, source_filename=path.name, page_number=page_index+1,
             created_at=datetime.now().isoformat(timespec="seconds"), token_signature=token_signature(text),
             visual_hash=visual_hash(img), aspect_ratio=round(img.width / max(1, img.height), 4),
-            stored_file=str(stored.relative_to(APP_DIR)),
+            stored_file=model_file_reference(stored),
         )
     finally:
         doc.close()
@@ -1173,7 +1206,7 @@ def add_model_from_image(path: Path, exam_type: str, label: str, use_ocr: bool =
         id=uuid.uuid4().hex, exam_type=exam_type, label=label, source_filename=path.name, page_number=1,
         created_at=datetime.now().isoformat(timespec="seconds"), token_signature=token_signature(text),
         visual_hash=visual_hash(image), aspect_ratio=round(image.width / max(1, image.height), 4),
-        stored_file=str(stored.relative_to(APP_DIR)),
+        stored_file=model_file_reference(stored),
     )
     models = load_models(); models.append(model); save_models(models)
     return model
@@ -1188,7 +1221,7 @@ def delete_model(model_id: str) -> bool:
             deleted = True
             if m.stored_file:
                 try:
-                    (APP_DIR / m.stored_file).unlink(missing_ok=True)
+                    resolve_model_file(m.stored_file).unlink(missing_ok=True)
                 except Exception:
                     pass
         else:
@@ -1956,8 +1989,8 @@ def _rescue_missing_pages(
                 exact_company_doc = bool(digits_only(employee.cnpj) and digits_only(employee.cnpj) in text_digits)
                 valid_cpf_hit = bool(is_valid_cpf(employee.cpf) and digits_only(employee.cpf) in text_digits)
                 strong_identity = (exact_name and exact_company_doc) or valid_cpf_hit or emp_conf >= max(88.0, employee_threshold)
-                strong_exam = exam_conf >= max(58.0, auto_threshold - 18.0)
-                if global_exam == exam and global_conf >= max(58.0, auto_threshold - 18.0):
+                strong_exam = exam_conf >= max(45.0, auto_threshold - 35.0)
+                if global_exam == exam and global_conf >= max(45.0, auto_threshold - 35.0):
                     strong_exam = True
                 # Para tipos personalizados com modelo cadastrado, aceita confiança menor
                 # quando a identidade do funcionário é forte. Assim exames novos não ficam
@@ -1970,7 +2003,7 @@ def _rescue_missing_pages(
                 existing = by_page.get(key_page)
                 if not (strong_identity and strong_exam):
                     # Não deixa a página sumir: transforma uma possível correspondência em PENDENTE.
-                    if existing is not None and emp_conf >= 68 and exam_conf >= 40:
+                    if existing is not None and emp_conf >= 60 and exam_conf >= 25:
                         existing.exam_type = exam
                         existing.exam_confidence = exam_conf
                         existing.exam_score_breakdown = breakdown
@@ -2043,8 +2076,10 @@ def process_pdfs(
     if not pdf_paths:
         raise ValueError("Nenhum PDF selecionado")
     # Confiabilidade máxima: nunca encerra a leitura antes do fim do lote.
-    # O parâmetro é mantido por compatibilidade com versões/configurações antigas.
+    # Também desativa a triagem rápida: ela era boa para velocidade, mas podia
+    # descartar páginas de exames digitalizados antes da leitura completa.
     stop_when_complete = False
+    fast_mode = False
     models = load_models()
     root = output_root(output_base)
 
@@ -2399,7 +2434,7 @@ def process_pdfs(
                     receipt = ""
                     if employee and exam and expected:
                         receipt = employee.expected_receipt(exam, seen_assignment_counts[(employee.key, exam)])
-                    review_exam_floor = max(55.0, min(float(auto_threshold) - 15.0, 70.0))
+                    review_exam_floor = 35.0
                     if hard_ignore:
                         status = "IGNORADO"; reason = "Documento auxiliar/comprovante/encaminhamento identificado na triagem"
                     elif not exam:
@@ -2411,7 +2446,7 @@ def process_pdfs(
                     elif emp_conf < 68.0:
                         status = "IGNORADO"; reason = f"Vínculo com funcionário muito fraco ({emp_conf:.0f}%); descartado para evitar pendência inútil"
                     elif exam_conf < review_exam_floor:
-                        status = "IGNORADO"; reason = f"Evidência fraca de {exam} ({exam_conf:.0f}%); descartado para evitar falso positivo"
+                        status = "PENDENTE"; reason = f"Possível {exam} solicitado para {employee.name}, mas a evidência do tipo ficou fraca ({exam_conf:.0f}%). Conferir manualmente."
                     elif emp_conf < employee_threshold:
                         status = "PENDENTE"; reason = f"Possível {exam} solicitado para {employee.name}, mas funcionário precisa de confirmação ({emp_conf:.0f}%)"
                     elif exam_conf < auto_threshold:

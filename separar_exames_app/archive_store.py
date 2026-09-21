@@ -344,21 +344,24 @@ class ArchiveStore:
         company_keys = {str(r.get("company_key") or "") for r in rows}
         multi_company = len(company_keys) > 1
 
-        # Evita colisão de nomes de pasta entre empresas homônimas.
+        # Pastas de empresa no ZIP: CNPJ - NOME DA EMPRESA.
+        # O CNPJ fica somente com números para não criar subpastas por causa da barra (/).
         company_folder_by_key: dict[str, str] = {}
         used_company_names: dict[str, str] = {}
         for r in rows:
             key = str(r.get("company_key") or "")
             if key in company_folder_by_key:
                 continue
-            name = safe_part(r.get("company_name") or "EMPRESA NAO IDENTIFICADA", "EMPRESA NAO IDENTIFICADA", 105)
+            company_name = safe_part(r.get("company_name") or "EMPRESA NAO IDENTIFICADA", "EMPRESA NAO IDENTIFICADA", 95)
+            company_doc = digits_only(r.get("company_document") or "")
+            if company_doc:
+                name = safe_part(f"{company_doc} - {company_name}", "EMPRESA NAO IDENTIFICADA", 135)
+            else:
+                name = safe_part(f"SEM CNPJ - {company_name}", "EMPRESA NAO IDENTIFICADA", 135)
+
             normalized = norm(name)
             if normalized in used_company_names and used_company_names[normalized] != key:
-                doc = digits_only(r.get("company_document") or "")
-                if doc:
-                    name = safe_part(f"{name} - {doc}", name, 125)
-                else:
-                    name = safe_part(f"{name} - {len(company_folder_by_key)+1}", name, 125)
+                name = safe_part(f"{name} - {len(company_folder_by_key)+1}", name, 145)
             used_company_names[norm(name)] = key
             company_folder_by_key[key] = name
 
@@ -374,8 +377,9 @@ class ArchiveStore:
 
                 exam_folder = safe_part(r.get("exam_type") or "OUTROS", "OUTROS", 70)
                 parts = [folder]
-                if multi_company:
-                    parts.append(company_folder_by_key.get(str(r.get("company_key") or ""), "EMPRESA NAO IDENTIFICADA"))
+                # Mesmo quando o download tem uma única empresa, mantém a pasta da empresa
+                # para o usuário identificar o conteúdo pelo padrão CNPJ - NOME DA EMPRESA.
+                parts.append(company_folder_by_key.get(str(r.get("company_key") or ""), "SEM CNPJ - EMPRESA NAO IDENTIFICADA"))
                 parts.append(exam_folder)
                 arc = "/".join(parts + [filename])
                 base = arc; n = 2

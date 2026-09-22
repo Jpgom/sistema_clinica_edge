@@ -3,24 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#f5f7fb">
+<meta name="theme-color" content="#f6f8fb">
 <title>{{ title }}</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=edge-clinica-interno-2">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=edge-minimal-1">
 <meta name="csrf-token" content="{{ csrf_token() }}"></head>
-<body class="home-page edge-dashboard-page edge-clean-home">
+<body class="home-page edge-minimal-home">
 <div class="app-layout">
-  <aside class="sidebar">
+  <aside class="sidebar edge-minimal-sidebar">
     <div class="brand">
       <img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho">
-      <div>EDGE<small>Atestado Médico</small></div>
+      <div>EDGE<small>Medicina do Trabalho</small></div>
     </div>
     <div class="nav-card edge-sidebar-nav">
       <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{{ url_for('home') }}"><span class="nav-icon">⌂</span><span class="nav-label">Início</span></a>
       <div class="nav-group-title">Clínica</div>
-      <a class="nav-link {% if request.path.startswith('/encaminhamento-especialista') %}active{% endif %}" href="{{ url_for('encaminhamento_especialista') }}"><span class="nav-icon">☰</span><span class="nav-label">Enc. individual</span></a>
+      <a class="nav-link {% if request.path.startswith('/encaminhamento-especialista') %}active{% endif %}" href="{{ url_for('encaminhamento_especialista') }}"><span class="nav-icon">▤</span><span class="nav-label">Enc. individual</span></a>
       <a class="nav-link {% if request.path.startswith('/encaminhamento-complementares') %}active{% endif %}" href="{{ url_for('encaminhamento_complementares') }}"><span class="nav-icon">＋</span><span class="nav-label">Enc. complementares</span></a>
       <a class="nav-link {% if request.path.startswith('/laudo-pcd') %}active{% endif %}" href="{{ url_for('laudo_pcd') }}"><span class="nav-icon">◉</span><span class="nav-label">Laudo PCD</span></a>
-      <a class="nav-link {% if request.path.startswith('/fisico-mental') %}active{% endif %}" href="{{ url_for('fisico_mental') }}"><span class="nav-icon">◆</span><span class="nav-label">Físico e Mental</span></a>
+      <a class="nav-link {% if request.path.startswith('/fisico-mental') %}active{% endif %}" href="{{ url_for('fisico_mental') }}"><span class="nav-icon">✚</span><span class="nav-label">Físico e Mental</span></a>
       <a class="nav-link {% if request.path.startswith('/atestado-medico') %}active{% endif %}" href="{{ url_for('atestado_medico') }}"><span class="nav-icon">▧</span><span class="nav-label">Atestado Médico</span></a>
       <div class="nav-group-title">Interno</div>
       <a class="nav-link {% if request.path.startswith('/envio-periodicos') %}active{% endif %}" href="/envio-periodicos/"><span class="nav-icon">✉</span><span class="nav-label">Envio periódicos</span></a>
@@ -30,7 +30,7 @@
       <a class="nav-link {% if request.path.startswith('/esocial') %}active{% endif %}" href="{{ url_for('esocial') }}"><span class="nav-icon">⇄</span><span class="nav-label">E-SOCIAL</span></a>
       <a class="nav-link {% if request.path.startswith('/pgr/') or request.path == '/pgr' %}active{% endif %}" href="/pgr/"><span class="nav-icon">▨</span><span class="nav-label">PGR / SST</span></a>
       <div class="nav-group-title">Sistema</div>
-      <a class="nav-link {% if request.path.startswith('/status-sistema') %}active{% endif %}" href="{{ url_for('status_sistema') }}"><span class="nav-icon">●</span><span class="nav-label">Status do sistema</span></a>
+      <a class="nav-link {% if request.path.startswith('/status-sistema') %}active{% endif %}" href="{{ url_for('status_sistema') }}"><span class="nav-icon">●</span><span class="nav-label">Status</span></a>
       {% if is_admin %}<a class="nav-link {% if request.path.startswith('/usuarios') %}active{% endif %}" href="{{ url_for('usuarios') }}"><span class="nav-icon">◌</span><span class="nav-label">Usuários</span></a>{% endif %}
       {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link {% if request.path.startswith('/auditoria') %}active{% endif %}" href="{{ url_for('auditoria') }}"><span class="nav-icon">≡</span><span class="nav-label">Auditoria</span></a>{% endif %}
       <a class="nav-link {% if request.path.startswith('/minha-conta') %}active{% endif %}" href="{{ url_for('minha_conta') }}"><span class="nav-icon">⌁</span><span class="nav-label">Minha conta</span></a>
@@ -38,108 +38,57 @@
     </div>
   </aside>
 
-  <main class="main-area">
-    <section class="home-clean-hero">
+  <main class="main-area edge-minimal-main">
+    <section class="minimal-hero">
       <div>
-        <span class="home-kicker">Sistema EDGE</span>
-        <h1>Escolha a rotina que deseja executar.</h1>
-        <p>As funções foram separadas em duas áreas simples: <strong>Clínica</strong> para documentos de atendimento e <strong>Interno</strong> para rotinas operacionais, exames, periódicos e SST.</p>
+        <span class="minimal-kicker">Sistema EDGE</span>
+        <h1>Painel principal</h1>
+        <p>Rotinas organizadas de forma simples para a equipe acessar sem se perder.</p>
       </div>
-      <div class="home-hero-actions">
-        <a class="btn btn--primary" href="#clinica">Abrir Clínica</a>
-        <a class="btn btn--light" href="#interno">Abrir Interno</a>
-        <a class="btn btn--light" href="{{ url_for('status_sistema') }}">Status</a>
+      <a class="minimal-status-link" href="{{ url_for('status_sistema') }}">Ver status do sistema</a>
+    </section>
+
+    <section class="minimal-section" id="clinica">
+      <div class="minimal-section-head">
+        <span class="minimal-section-mark clinic"></span>
+        <div>
+          <h2>Clínica</h2>
+          <p>Documentos e encaminhamentos individuais.</p>
+        </div>
+      </div>
+      <div class="minimal-card-grid clinic-grid">
+        <a class="minimal-card" href="{{ url_for('encaminhamento_especialista') }}"><strong>Encaminhamento individual</strong><small>Documento individual para atendimento.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('encaminhamento_complementares') }}"><strong>Enc. complementares</strong><small>Encaminhamento com exames complementares.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('laudo_pcd') }}"><strong>Laudo PCD</strong><small>Preenchimento do laudo PCD.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('fisico_mental') }}"><strong>Físico e Mental</strong><small>Atestado físico e mental.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('atestado_medico') }}"><strong>Atestado Médico</strong><small>Atestado com data, dias, CID e cidade.</small><span>Abrir</span></a>
       </div>
     </section>
 
-    <section class="home-workspace" aria-label="Rotinas principais">
-      <div id="clinica" class="home-area-card home-area-clinica">
-        <div class="home-area-head">
-          <span class="area-tag">Clínica</span>
-          <div>
-            <h2>Atendimento e documentos clínicos</h2>
-            <p>Use esta área para gerar documentos individuais de pacientes e funcionários.</p>
-          </div>
-        </div>
-        <div class="home-action-grid home-action-grid--clinica">
-          <a class="home-action-card" href="{{ url_for('encaminhamento_especialista') }}">
-            <span class="home-action-icon">☰</span>
-            <strong>Encaminhamento individual</strong>
-            <small>Gere encaminhamento para especialista ou preenchimento individual.</small>
-          </a>
-          <a class="home-action-card" href="{{ url_for('encaminhamento_complementares') }}">
-            <span class="home-action-icon">＋</span>
-            <strong>Enc. complementares</strong>
-            <small>Monte encaminhamento com exames complementares e local de atendimento.</small>
-          </a>
-          <a class="home-action-card" href="{{ url_for('laudo_pcd') }}">
-            <span class="home-action-icon">◉</span>
-            <strong>Laudo PCD</strong>
-            <small>Preencha e gere laudo PCD conforme o modelo da clínica.</small>
-          </a>
-          <a class="home-action-card" href="{{ url_for('fisico_mental') }}">
-            <span class="home-action-icon">◆</span>
-            <strong>Físico e Mental</strong>
-            <small>Gere o atestado físico e mental com dados do funcionário.</small>
-          </a>
-          <a class="home-action-card" href="{{ url_for('atestado_medico') }}">
-            <span class="home-action-icon">▧</span>
-            <strong>Atestado Médico</strong>
-            <small>Crie atestado médico em poucos passos, com cidade e CID.</small>
-          </a>
+    <section class="minimal-section" id="interno">
+      <div class="minimal-section-head">
+        <span class="minimal-section-mark internal"></span>
+        <div>
+          <h2>Interno</h2>
+          <p>Rotinas operacionais, exames, eSocial e SST.</p>
         </div>
       </div>
-
-      <div id="interno" class="home-area-card home-area-interno">
-        <div class="home-area-head">
-          <span class="area-tag">Interno</span>
-          <div>
-            <h2>Operação, exames e SST</h2>
-            <p>Use esta área para controlar periódicos, separar PDFs, filtrar exames e acessar o módulo SST.</p>
-          </div>
-        </div>
-        <div class="home-action-grid home-action-grid--interno">
-          <a class="home-action-card home-action-card--featured" href="/envio-periodicos/">
-            <span class="home-action-icon">✉</span>
-            <strong>Envio periódicos</strong>
-            <small>Competências, convocados, encaminhamentos, e-mails e comparecimento.</small>
-          </a>
-          <a class="home-action-card home-action-card--featured" href="/separar-exames/">
-            <span class="home-action-icon">▣</span>
-            <strong>Separar exames</strong>
-            <small>Separe PDFs, revise pendências e salve no Arquivo de Exames.</small>
-          </a>
-          <a class="home-action-card" href="{{ url_for('exames_a_prazo') }}">
-            <span class="home-action-icon">▤</span>
-            <strong>Exames a Prazo</strong>
-            <small>Filtre atendimentos com observação A PRAZO e gere arquivos.</small>
-          </a>
-          <a class="home-action-card" href="{{ url_for('renumerador') }}">
-            <span class="home-action-icon">#</span>
-            <strong>Renumerador</strong>
-            <small>Ajuste recibos e numerações em planilhas de atendimento.</small>
-          </a>
-          <a class="home-action-card" href="{{ url_for('esocial') }}">
-            <span class="home-action-icon">⇄</span>
-            <strong>E-SOCIAL</strong>
-            <small>Ferramentas internas de conferência e processamento.</small>
-          </a>
-          <a class="home-action-card" href="/pgr/">
-            <span class="home-action-icon">▨</span>
-            <strong>PGR / SST</strong>
-            <small>Empresas, GES, riscos, exames, PGR, PCMSO, LTCAT e AET.</small>
-          </a>
-        </div>
+      <div class="minimal-card-grid internal-grid">
+        <a class="minimal-card minimal-card-main" href="/envio-periodicos/"><strong>Envio periódicos</strong><small>Competências, e-mails, encaminhamentos e comparecimento.</small><span>Abrir</span></a>
+        <a class="minimal-card minimal-card-main" href="/separar-exames/"><strong>Separar exames</strong><small>Separação de PDFs, OCR, revisão e arquivo de exames.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('exames_a_prazo') }}"><strong>Exames a Prazo</strong><small>Filtro por recibo ou observação A PRAZO.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('renumerador') }}"><strong>Renumerador</strong><small>Ajuste de recibos e numerações.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('esocial') }}"><strong>E-SOCIAL</strong><small>Ferramentas de conferência interna.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="/pgr/"><strong>PGR / SST</strong><small>PGR, PCMSO, LTCAT, AET, riscos e exames.</small><span>Abrir</span></a>
       </div>
     </section>
 
-    <section class="home-status-strip">
-      <a href="{{ url_for('status_sistema') }}"><strong>Status do sistema</strong><small>Verificar banco, disco, OCR/Tesseract e pastas persistentes.</small></a>
-      {% if is_admin %}<a href="{{ url_for('usuarios') }}"><strong>Usuários</strong><small>Gerenciar acessos da equipe.</small></a>{% endif %}
-      {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a href="{{ url_for('auditoria') }}"><strong>Auditoria</strong><small>Consultar registro de ações no sistema.</small></a>{% endif %}
+    <section class="minimal-footer-panel">
+      <strong>EDGE Saúde Ocupacional</strong>
+      <small>Belém • Macapá • Ananindeua</small>
     </section>
   </main>
 </div>
-<script src="{{ url_for('static', filename='app.js') }}?v=edge-clinica-interno-2"></script>
+<script src="{{ url_for('static', filename='app.js') }}?v=edge-minimal-1"></script>
 </body>
 </html>

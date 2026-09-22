@@ -950,3 +950,275 @@ input[type="text"],input[type="number"],input[type="date"],input[type="file"],in
   .home-action-grid,.home-action-grid--interno,.home-status-strip{grid-template-columns:1fr}
   .home-action-card{min-height:auto}
 }
+
+
+/* =========================================================
+   EDGE minimalista - ajuste solicitado 22/09
+   Visual simples, limpo e menos chamativo
+   ========================================================= */
+:root{
+  --edge-min-bg:#f6f8fb;
+  --edge-min-panel:#ffffff;
+  --edge-min-navy:#0b1f3a;
+  --edge-min-blue:#175cd3;
+  --edge-min-blue-soft:#eaf2ff;
+  --edge-min-red:#c1121f;
+  --edge-min-text:#172033;
+  --edge-min-muted:#667085;
+  --edge-min-border:#e4eaf2;
+}
+body.edge-minimal-home{
+  background:var(--edge-min-bg)!important;
+  color:var(--edge-min-text)!important;
+}
+.edge-minimal-home .app-layout{
+  grid-template-columns:248px minmax(0,1fr)!important;
+  background:var(--edge-min-bg)!important;
+}
+.edge-minimal-sidebar.sidebar,
+.edge-minimal-home .sidebar{
+  background:var(--edge-min-navy)!important;
+  border-right:0!important;
+  box-shadow:none!important;
+  padding:20px 14px!important;
+}
+.edge-minimal-home .brand{
+  border-bottom:1px solid rgba(255,255,255,.10)!important;
+  padding:4px 4px 18px!important;
+  margin-bottom:4px!important;
+  color:#fff!important;
+}
+.edge-minimal-home .brand-logo{
+  width:44px!important;
+  height:44px!important;
+  border-radius:12px!important;
+  background:#fff!important;
+  border:0!important;
+  box-shadow:none!important;
+  object-fit:contain!important;
+}
+.edge-minimal-home .brand > div:not(.brand-badge){
+  color:#fff!important;
+  font-size:16px!important;
+  line-height:1.05!important;
+}
+.edge-minimal-home .brand small{color:rgba(255,255,255,.68)!important;font-size:11px!important}
+.edge-minimal-home .nav-card{gap:4px!important;padding-top:8px!important}
+.edge-minimal-home .nav-group-title{
+  color:rgba(255,255,255,.42)!important;
+  margin:18px 6px 6px!important;
+  padding:0!important;
+  font-size:10px!important;
+  letter-spacing:.10em!important;
+}
+.edge-minimal-home .nav-link{
+  min-height:38px!important;
+  border-radius:10px!important;
+  padding:0 10px!important;
+  color:rgba(255,255,255,.72)!important;
+  border:1px solid transparent!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  font-size:13px!important;
+  font-weight:760!important;
+  transform:none!important;
+}
+.edge-minimal-home .nav-link:hover{
+  background:rgba(255,255,255,.08)!important;
+  color:#fff!important;
+  border-color:rgba(255,255,255,.08)!important;
+  transform:none!important;
+}
+.edge-minimal-home .nav-link.active{
+  background:#fff!important;
+  color:var(--edge-min-navy)!important;
+  border-color:#fff!important;
+  box-shadow:none!important;
+}
+.edge-minimal-home .nav-link-muted{
+  color:#ffb4b4!important;
+  margin-top:8px!important;
+}
+.edge-minimal-home .nav-icon{font-size:14px!important;opacity:.86!important}
+.edge-minimal-main.main-area{
+  padding:30px clamp(18px,3vw,44px) 42px!important;
+}
+.minimal-hero,
+.minimal-section,
+.minimal-footer-panel{
+  max-width:1180px;
+  margin-left:auto;
+  margin-right:auto;
+}
+.minimal-hero{
+  display:flex;
+  justify-content:space-between;
+  gap:20px;
+  align-items:flex-end;
+  padding:26px 0 18px;
+  border-bottom:1px solid var(--edge-min-border);
+  margin-bottom:22px;
+}
+.minimal-kicker{
+  display:inline-flex;
+  color:var(--edge-min-blue);
+  font-weight:850;
+  font-size:12px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  margin-bottom:8px;
+}
+.minimal-hero h1{
+  margin:0;
+  font-size:clamp(32px,4vw,48px);
+  line-height:1.05;
+  letter-spacing:-.045em;
+  color:var(--edge-min-navy);
+}
+.minimal-hero p{
+  max-width:650px;
+  margin:9px 0 0;
+  color:var(--edge-min-muted);
+  font-size:15px;
+  line-height:1.55;
+}
+.minimal-status-link{
+  flex:0 0 auto;
+  text-decoration:none;
+  color:var(--edge-min-blue);
+  background:#fff;
+  border:1px solid var(--edge-min-border);
+  border-radius:12px;
+  padding:11px 14px;
+  font-size:13px;
+  font-weight:800;
+  box-shadow:0 8px 18px rgba(16,24,40,.035);
+}
+.minimal-status-link:hover{border-color:#cfe0ff;background:#fbfdff}
+.minimal-section{
+  background:var(--edge-min-panel);
+  border:1px solid var(--edge-min-border);
+  border-radius:18px;
+  padding:22px;
+  margin-bottom:18px;
+  box-shadow:0 10px 28px rgba(16,24,40,.035);
+}
+.minimal-section-head{
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+  margin-bottom:18px;
+}
+.minimal-section-mark{
+  width:10px;
+  height:38px;
+  border-radius:999px;
+  background:var(--edge-min-blue);
+  flex:0 0 auto;
+  margin-top:2px;
+}
+.minimal-section-mark.internal{background:var(--edge-min-red)}
+.minimal-section h2{
+  margin:0;
+  color:var(--edge-min-navy);
+  font-size:24px;
+  letter-spacing:-.035em;
+}
+.minimal-section p{
+  margin:3px 0 0;
+  color:var(--edge-min-muted);
+  font-size:14px;
+}
+.minimal-card-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+}
+.minimal-card{
+  display:flex;
+  min-height:128px;
+  flex-direction:column;
+  gap:8px;
+  text-decoration:none;
+  color:var(--edge-min-text);
+  padding:16px;
+  border:1px solid var(--edge-min-border);
+  border-radius:14px;
+  background:#fff;
+  box-shadow:none;
+  transition:border-color .15s ease, background .15s ease, transform .15s ease;
+  border-left:4px solid var(--edge-min-blue);
+}
+.internal-grid .minimal-card{border-left-color:var(--edge-min-red)}
+.minimal-card-main{background:#fbfdff;border-color:#d9e7ff;border-left-color:var(--edge-min-blue)!important}
+.minimal-card:hover{
+  transform:translateY(-1px);
+  border-color:#cdd8e8;
+  background:#fbfdff;
+}
+.minimal-card strong{
+  display:block;
+  color:var(--edge-min-navy);
+  font-size:16px;
+  line-height:1.2;
+  letter-spacing:-.02em;
+}
+.minimal-card small{
+  display:block;
+  color:var(--edge-min-muted);
+  font-size:13px;
+  line-height:1.4;
+  flex:1;
+}
+.minimal-card span{
+  display:inline-flex;
+  width:max-content;
+  color:var(--edge-min-blue);
+  font-size:13px;
+  font-weight:850;
+  margin-top:4px;
+}
+.internal-grid .minimal-card span{color:var(--edge-min-red)}
+.internal-grid .minimal-card-main span{color:var(--edge-min-blue)}
+.minimal-footer-panel{
+  display:flex;
+  justify-content:space-between;
+  gap:14px;
+  padding:16px 0 4px;
+  color:var(--edge-min-muted);
+}
+.minimal-footer-panel strong{color:var(--edge-min-navy)}
+.minimal-footer-panel small{font-weight:700}
+
+/* Neutraliza partes muito chamativas do layout anterior quando ainda estiverem carregadas */
+.edge-minimal-home .edge-web-hero,
+.edge-minimal-home .edge-area-tabs,
+.edge-minimal-home .edge-section-block,
+.edge-minimal-home .edge-bottom-panel,
+.edge-minimal-home .edge-hero-visual,
+.edge-minimal-home .edge-bento-grid,
+.edge-minimal-home .home-clean-hero,
+.edge-minimal-home .home-workspace,
+.edge-minimal-home .home-status-strip{display:initial}
+
+@media (max-width:1100px){
+  .edge-minimal-home .app-layout{grid-template-columns:220px minmax(0,1fr)!important}
+  .minimal-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:820px){
+  .edge-minimal-home .app-layout{display:block!important;background:var(--edge-min-bg)!important}
+  .edge-minimal-home .sidebar{position:relative!important;height:auto!important;padding:14px!important}
+  .edge-minimal-home .brand{border-bottom:0!important;padding-bottom:10px!important}
+  .edge-minimal-home .nav-card{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px!important;max-height:none!important;overflow:visible!important}
+  .edge-minimal-home .nav-group-title{grid-column:1/-1;margin-top:10px!important}
+  .edge-minimal-main.main-area{padding:18px 12px 34px!important}
+  .minimal-hero{display:block;padding-top:10px}
+  .minimal-status-link{display:inline-flex;margin-top:14px}
+  .minimal-card-grid{grid-template-columns:1fr}
+  .minimal-section{padding:18px;border-radius:16px}
+}
+@media (max-width:520px){
+  .edge-minimal-home .nav-card{grid-template-columns:1fr!important}
+  .minimal-footer-panel{display:block}
+  .minimal-footer-panel small{display:block;margin-top:4px}
+}

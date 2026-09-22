@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#07111f">
+<meta name="theme-color" content="#f6f8fb">
 <title>{{ title }}</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=edge-positivus-layout-1">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=edge-minimal-1">
 <meta name="csrf-token" content="{{ csrf_token() }}"></head>
-<body class="home-page edge-dashboard-page edge-bold-site">
+<body class="home-page edge-minimal-home">
 <div class="app-layout">
-  <aside class="sidebar edge-bold-sidebar">
+  <aside class="sidebar edge-minimal-sidebar">
     <div class="brand">
       <img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho">
       <div>EDGE<small>Medicina do Trabalho</small></div>
@@ -38,139 +38,57 @@
     </div>
   </aside>
 
-  <main class="main-area edge-website-shell">
-    <section class="edge-web-hero">
-      <div class="edge-hero-copy">
-        <span class="edge-pill">Sistema EDGE</span>
-        <h1>Rotinas ocupacionais em um painel simples, bonito e direto.</h1>
-        <p>Use a área Clínica para documentos de atendimento e a área Interno para periódicos, exames, eSocial e SST. Tudo organizado para a equipe não se perder.</p>
-        <div class="edge-hero-actions">
-          <a class="btn btn--primary" href="#clinica">Abrir Clínica</a>
-          <a class="btn btn--light edge-btn-outline" href="#interno">Abrir Interno</a>
-          <a class="btn btn--light edge-btn-outline" href="{{ url_for('status_sistema') }}">Status</a>
-        </div>
-        <div class="edge-trust-strip">
-          <span>Belém</span><span>Macapá</span><span>Ananindeua</span><span>SST</span>
-        </div>
-      </div>
-      <div class="edge-hero-visual" aria-hidden="true">
-        <div class="edge-window edge-window-main">
-          <div class="edge-window-dots"><i></i><i></i><i></i></div>
-          <strong>EDGE</strong>
-          <span>Medicina do Trabalho</span>
-          <div class="edge-orbit">
-            <b></b><b></b><b></b>
-          </div>
-        </div>
-        <div class="edge-floating-card edge-floating-card-a"><strong>OCR</strong><small>Exames escaneados</small></div>
-        <div class="edge-floating-card edge-floating-card-b"><strong>SST</strong><small>PGR / PCMSO / LTCAT</small></div>
-        <div class="edge-spark edge-spark-one"></div>
-        <div class="edge-spark edge-spark-two"></div>
-      </div>
-    </section>
-
-    <section class="edge-area-tabs" aria-label="Áreas do sistema">
-      <a href="#clinica"><span>01</span><strong>Clínica</strong><small>Documentos individuais</small></a>
-      <a href="#interno"><span>02</span><strong>Interno</strong><small>Operação e SST</small></a>
-      <a href="{{ url_for('status_sistema') }}"><span>03</span><strong>Status</strong><small>Banco, OCR e disco</small></a>
-    </section>
-
-    <section id="clinica" class="edge-section-block">
-      <div class="edge-section-title">
-        <span>Clínica</span>
-        <h2>Afazeres de atendimento</h2>
-        <p>Rotinas para gerar documentos individuais com poucos cliques.</p>
-      </div>
-      <div class="edge-bento-grid edge-bento-clinica">
-        <a class="edge-bento-card edge-card-blue" href="{{ url_for('encaminhamento_especialista') }}">
-          <span class="edge-card-icon">▤</span>
-          <h3>Encaminhamento individual</h3>
-          <p>Gere encaminhamento individual para atendimento, especialista ou preenchimento.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-white" href="{{ url_for('encaminhamento_complementares') }}">
-          <span class="edge-card-icon">＋</span>
-          <h3>Enc. complementares</h3>
-          <p>Monte encaminhamentos com exames e local de atendimento.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-black" href="{{ url_for('laudo_pcd') }}">
-          <span class="edge-card-icon">◉</span>
-          <h3>Laudo PCD</h3>
-          <p>Preencha e gere o laudo PCD conforme modelo da clínica.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-white" href="{{ url_for('fisico_mental') }}">
-          <span class="edge-card-icon">✚</span>
-          <h3>Físico e Mental</h3>
-          <p>Documento de aptidão física e mental com padrão EDGE.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-red" href="{{ url_for('atestado_medico') }}">
-          <span class="edge-card-icon">▧</span>
-          <h3>Atestado Médico</h3>
-          <p>Crie atestados com data, dias, CID e cidade em poucos passos.</p>
-          <b>Abrir →</b>
-        </a>
-      </div>
-    </section>
-
-    <section id="interno" class="edge-section-block">
-      <div class="edge-section-title">
-        <span>Interno</span>
-        <h2>Operação, exames e SST</h2>
-        <p>Área de uso interno para rotinas maiores, bases, eSocial e documentos técnicos.</p>
-      </div>
-      <div class="edge-bento-grid edge-bento-interno">
-        <a class="edge-bento-card edge-card-black edge-card-wide" href="/envio-periodicos/">
-          <span class="edge-card-icon">✉</span>
-          <h3>Envio periódicos</h3>
-          <p>Competências, convocados, encaminhamentos, e-mails e controle de comparecimento.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-blue edge-card-wide" href="/separar-exames/">
-          <span class="edge-card-icon">▣</span>
-          <h3>Separar exames</h3>
-          <p>Separe PDFs, revise pendências, use OCR e salve no Arquivo de Exames.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-white" href="{{ url_for('exames_a_prazo') }}">
-          <span class="edge-card-icon">▤</span>
-          <h3>Exames a Prazo</h3>
-          <p>Filtre bases com recibo ou observação A PRAZO.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-white" href="{{ url_for('renumerador') }}">
-          <span class="edge-card-icon">#</span>
-          <h3>Renumerador</h3>
-          <p>Ajuste recibos e numerações em planilhas.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-red" href="{{ url_for('esocial') }}">
-          <span class="edge-card-icon">⇄</span>
-          <h3>E-SOCIAL</h3>
-          <p>Ferramentas internas de conferência e processamento.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-white" href="/pgr/">
-          <span class="edge-card-icon">▨</span>
-          <h3>PGR / SST</h3>
-          <p>Empresas, GES, riscos, exames, PGR, PCMSO, LTCAT e AET.</p>
-          <b>Abrir →</b>
-        </a>
-      </div>
-    </section>
-
-    <section class="edge-bottom-panel">
+  <main class="main-area edge-minimal-main">
+    <section class="minimal-hero">
       <div>
-        <span>Conferência rápida</span>
-        <h2>Antes de iniciar uma rotina, confira o sistema.</h2>
-        <p>Veja se o banco, o disco persistente e o OCR/Tesseract estão ativos.</p>
+        <span class="minimal-kicker">Sistema EDGE</span>
+        <h1>Painel principal</h1>
+        <p>Rotinas organizadas de forma simples para a equipe acessar sem se perder.</p>
       </div>
-      <a class="btn btn--primary" href="{{ url_for('status_sistema') }}">Abrir status do sistema</a>
+      <a class="minimal-status-link" href="{{ url_for('status_sistema') }}">Ver status do sistema</a>
+    </section>
+
+    <section class="minimal-section" id="clinica">
+      <div class="minimal-section-head">
+        <span class="minimal-section-mark clinic"></span>
+        <div>
+          <h2>Clínica</h2>
+          <p>Documentos e encaminhamentos individuais.</p>
+        </div>
+      </div>
+      <div class="minimal-card-grid clinic-grid">
+        <a class="minimal-card" href="{{ url_for('encaminhamento_especialista') }}"><strong>Encaminhamento individual</strong><small>Documento individual para atendimento.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('encaminhamento_complementares') }}"><strong>Enc. complementares</strong><small>Encaminhamento com exames complementares.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('laudo_pcd') }}"><strong>Laudo PCD</strong><small>Preenchimento do laudo PCD.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('fisico_mental') }}"><strong>Físico e Mental</strong><small>Atestado físico e mental.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('atestado_medico') }}"><strong>Atestado Médico</strong><small>Atestado com data, dias, CID e cidade.</small><span>Abrir</span></a>
+      </div>
+    </section>
+
+    <section class="minimal-section" id="interno">
+      <div class="minimal-section-head">
+        <span class="minimal-section-mark internal"></span>
+        <div>
+          <h2>Interno</h2>
+          <p>Rotinas operacionais, exames, eSocial e SST.</p>
+        </div>
+      </div>
+      <div class="minimal-card-grid internal-grid">
+        <a class="minimal-card minimal-card-main" href="/envio-periodicos/"><strong>Envio periódicos</strong><small>Competências, e-mails, encaminhamentos e comparecimento.</small><span>Abrir</span></a>
+        <a class="minimal-card minimal-card-main" href="/separar-exames/"><strong>Separar exames</strong><small>Separação de PDFs, OCR, revisão e arquivo de exames.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('exames_a_prazo') }}"><strong>Exames a Prazo</strong><small>Filtro por recibo ou observação A PRAZO.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('renumerador') }}"><strong>Renumerador</strong><small>Ajuste de recibos e numerações.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="{{ url_for('esocial') }}"><strong>E-SOCIAL</strong><small>Ferramentas de conferência interna.</small><span>Abrir</span></a>
+        <a class="minimal-card" href="/pgr/"><strong>PGR / SST</strong><small>PGR, PCMSO, LTCAT, AET, riscos e exames.</small><span>Abrir</span></a>
+      </div>
+    </section>
+
+    <section class="minimal-footer-panel">
+      <strong>EDGE Saúde Ocupacional</strong>
+      <small>Belém • Macapá • Ananindeua</small>
     </section>
   </main>
 </div>
-<script src="{{ url_for('static', filename='app.js') }}?v=edge-positivus-layout-1"></script>
+<script src="{{ url_for('static', filename='app.js') }}?v=edge-minimal-1"></script>
 </body>
 </html>

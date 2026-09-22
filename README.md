@@ -10,7 +10,7 @@ Funcionalidades:
 - Relatórios
 - Encaminhamentos
 - Renumerador
-- E-SOCIAL EVELLYN
+- Recibo eSocial
 - Físico e Mental
 
 Observações:

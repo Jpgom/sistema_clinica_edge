@@ -21,7 +21,7 @@ from docxtpl import DocxTemplate, RichText
 from docx import Document
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-from docx.shared import Inches, Pt, Mm
+from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
 from lxml import etree
@@ -49,6 +49,7 @@ ALLOWED_EXTENSIONS = {".xls", ".xlsx", ".html", ".htm"}
 EXCEL_EXTENSIONS = {".xls", ".xlsx"}
 RELATORIOS_EXTENSIONS = {".xls", ".xlsx", ".zip"}
 RENUM_ALLOWED_EXTENSIONS = {".docx", ".zip"}
+ESOCIAL_ALLOWED_EXTENSIONS = {".xls", ".xlsx"}
 ESOCIAL_MONTHS = {
     "JANEIRO": "JANEIRO", "FEVEREIRO": "FEVEREIRO", "MARCO": "MARÇO",
     "ABRIL": "ABRIL", "MAIO": "MAIO", "JUNHO": "JUNHO",
@@ -1925,7 +1926,7 @@ def renumerar_documento(caminho_entrada: str, caminho_saida: str, nova_data: str
     return alterados, ultimo, datas_alteradas, avisos
 
 # =========================
-# E-SOCIAL
+# RECIBO eSOCIAL
 # =========================
 def normalize_company_name(value) -> str:
     text = normalize_text(value)
@@ -1933,12 +1934,22 @@ def normalize_company_name(value) -> str:
     text = re.sub(r"\b(LTDA|EIRELI|ME|EPP|S A|SA|S/S|SS|MATRIZ|FILIAL)\b", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
+
 def is_allowed_file(filename: str) -> bool:
-    return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
+    return Path(filename).suffix.lower() in ESOCIAL_ALLOWED_EXTENSIONS
+
 
 def extract_cnpj(text: str) -> str:
-    digits = re.sub(r"\D", "", ("" if text is None else str(text)))
+    if text is None or (isinstance(text, float) and pd.isna(text)):
+        return ""
+    if isinstance(text, (int, float)) and not isinstance(text, bool):
+        try:
+            text = str(int(text))
+        except Exception:
+            text = str(text)
+    digits = re.sub(r"\D", "", str(text))
     return digits[:14] if len(digits) >= 14 else ""
+
 
 def format_cnpj(cnpj: str) -> str:
     digits = re.sub(r"\D", "", cnpj or "")
@@ -1946,161 +1957,440 @@ def format_cnpj(cnpj: str) -> str:
         return "CNPJ NÃO INFORMADO"
     return f"{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}"
 
-def build_esocial_pdf_filename(company_text: str, company_cnpj: str, pdf_month: str) -> str:
-    company_name = str(company_text or "").strip()
-    if company_cnpj:
-        flexible_cnpj = r"\D*".join(re.escape(digit) for digit in company_cnpj)
-        company_name = re.sub(flexible_cnpj, "", company_name, count=1)
-    company_name = re.sub(r"\s*[-–—|/]\s*$", "", company_name).strip(" -–—|/")
-    company_name = company_name or "EMPRESA"
-    filename_cnpj = format_cnpj(company_cnpj).replace("/", "-")
-    return sanitize_filename(f"{company_name} - {filename_cnpj} - {pdf_month}") + ".pdf"
 
-def score_dataframe(df: pd.DataFrame) -> int:
-    score = 0
-    cols = [normalize_text(c) for c in df.columns]
-    for wanted in ["FUNCIONARIO","TIPO DE EXAME","DEPOSITANTE","SETOR","NOME","TIPO","EMPRESA"]:
-        if wanted in cols:
-            score += 10
-    score += min(len(df), 50)
-    return score
+def format_cnpj_filename(cnpj: str) -> str:
+    """Formato usado na nomenclatura histórica dos recibos: 00.000.000.0000-00."""
+    digits = re.sub(r"\D", "", cnpj or "")
+    if len(digits) != 14:
+        return "CNPJ NÃO INFORMADO"
+    return f"{digits[:2]}.{digits[2:5]}.{digits[5:8]}.{digits[8:12]}-{digits[12:]}"
+
 
 def list_sheets(path: str):
-    suffix = Path(path).suffix.lower()
-    if suffix in {".html", ".htm"}:
-        return ["Planilha principal"]
     try:
         xl = pd.ExcelFile(path)
-        if xl.sheet_names:
-            return xl.sheet_names
-    except Exception:
-        pass
-    try:
-        tables = pd.read_html(path)
-        if tables:
-            return ["Planilha principal"]
-    except Exception:
-        pass
-    return ["Planilha principal"]
-
-def read_spreadsheet(path: str, selected_sheet: str | None = None) -> pd.DataFrame:
-    suffix = Path(path).suffix.lower()
-    if selected_sheet and selected_sheet != "Planilha principal":
-        try:
-            return pd.read_excel(path, sheet_name=selected_sheet)
-        except Exception as exc:
-            raise RuntimeError(f"Não foi possível ler a aba '{selected_sheet}' do arquivo {os.path.basename(path)}. Erro: {exc}") from exc
-    if suffix == ".xls":
-        try:
-            tables = pd.read_html(path)
-            if tables:
-                return tables[0]
-        except Exception:
-            pass
-    try:
-        xl = pd.ExcelFile(path)
-        best_df = None
-        best_score = -1
-        for sheet in xl.sheet_names:
-            try:
-                df = pd.read_excel(path, sheet_name=sheet)
-            except Exception:
-                continue
-            sc = score_dataframe(df)
-            if sc > best_score:
-                best_df, best_score = df, sc
-        if best_df is not None:
-            return best_df
-    except Exception:
-        pass
-    try:
-        return pd.read_excel(path)
-    except Exception:
-        pass
-    try:
-        tables = pd.read_html(path)
-        if tables:
-            return tables[0]
+        return xl.sheet_names or ["Planilha principal"]
     except Exception as exc:
-        raise RuntimeError(f"Não foi possível ler o arquivo {os.path.basename(path)}. Erro: {exc}") from exc
-    raise RuntimeError(f"Não foi possível ler o arquivo {os.path.basename(path)}.")
+        raise RuntimeError(f"Não foi possível ler as guias de {os.path.basename(path)}. Erro: {exc}") from exc
 
-def find_column(df: pd.DataFrame, expected_names: list[str]) -> str:
+
+def _find_column_optional(df: pd.DataFrame, expected_names: list[str]) -> str | None:
     normalized = {normalize_text(col): col for col in df.columns}
     for name in expected_names:
         norm = normalize_text(name)
         if norm in normalized:
             return normalized[norm]
-    raise KeyError(f"Coluna não encontrada. Esperado um destes nomes: {expected_names}. Colunas encontradas: {list(df.columns)}")
+    return None
+
+
+def find_column(df: pd.DataFrame, expected_names: list[str]) -> str:
+    found = _find_column_optional(df, expected_names)
+    if found:
+        return found
+    raise KeyError(
+        f"Coluna não encontrada. Esperado um destes nomes: {expected_names}. "
+        f"Colunas encontradas: {list(df.columns)}"
+    )
+
 
 def prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy().dropna(axis=1, how="all").dropna(axis=0, how="all")
     df.columns = [str(c).strip() for c in df.columns]
-    for col in df.columns:
-        if normalize_text(col) == "DATA":
-            try:
-                original = df[col]
-                dt = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
-                formatted = dt.dt.strftime("%d/%m/%Y")
-                df[col] = formatted.where(~formatted.isna(), original.astype(str))
-            except Exception:
-                pass
     return df
 
-def build_key(name_value, type_value) -> str:
-    return normalize_text(name_value) + "||" + normalize_text(type_value)
 
-def build_key_series(name_series: pd.Series, type_series: pd.Series) -> pd.Series:
-    return name_series.map(normalize_text) + "||" + type_series.map(normalize_text)
+def _normalize_marker(value) -> str:
+    text = normalize_text(value)
+    return re.sub(r"[^A-Z0-9]+", " ", text).strip()
+
+
+def _row_has_ok_esocial(row: pd.Series) -> bool:
+    # Aceita OK E-SOCIAL, OK E SOCIAL e complementos como OK E-SOCIAL/P- ANTIGA.
+    # Também reconhece o legado E-SOCIAL OK sem prejudicar o fluxo atual.
+    for value in row.tolist():
+        marker = _normalize_marker(value)
+        if "OK E SOCIAL" in marker or "E SOCIAL OK" in marker:
+            return True
+    return False
+
+
+def _normalize_person_name(value) -> str:
+    text = normalize_text(value)
+    text = re.sub(r"[^A-Z0-9 ]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _safe_text(value) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip()
+
+
+def _cpf_text(value) -> str:
+    text = _safe_text(value)
+    digits = re.sub(r"\D", "", text)
+    if digits and len(digits) <= 11:
+        return digits.zfill(11)
+    return text
+
+
+def _parse_excel_date(value):
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    if isinstance(value, pd.Timestamp):
+        return value.date()
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            number = float(value)
+            if 20000 <= number <= 80000:
+                return (datetime(1899, 12, 30) + timedelta(days=number)).date()
+        except Exception:
+            pass
+    text = str(value).strip()
+    if not text:
+        return None
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
+        try:
+            return datetime.strptime(text[:10], fmt).date()
+        except Exception:
+            pass
+    try:
+        parsed = pd.to_datetime(text, errors="coerce", dayfirst=True)
+        if not pd.isna(parsed):
+            return parsed.date()
+    except Exception:
+        pass
+    return None
+
+
+def _format_date(value) -> str:
+    parsed = _parse_excel_date(value)
+    return parsed.strftime("%d/%m/%Y") if parsed else _safe_text(value)
+
+
+def _sheet_month_year(sheet_name: str) -> tuple[str, int | None]:
+    normalized = normalize_text(sheet_name)
+    month = ""
+    for key, label in ESOCIAL_MONTHS.items():
+        if re.search(rf"(^|[^A-Z]){re.escape(key)}([^A-Z]|$)", normalized):
+            month = label
+            break
+    year_match = re.search(r"(20\d{2})", str(sheet_name))
+    year = int(year_match.group(1)) if year_match else None
+    return month, year
+
+
+def _strip_cnpj_from_company(company_text: str, cnpj: str) -> str:
+    company = _safe_text(company_text)
+    digits = re.sub(r"\D", "", cnpj or "")
+    if digits:
+        flexible = r"\D*".join(re.escape(ch) for ch in digits)
+        company = re.sub(flexible, "", company, count=1)
+    company = re.sub(r"\s*[-–—|/]\s*$", "", company).strip(" -–—|/")
+    return company or "EMPRESA"
+
+
+def read_esocial_base_rows(base_file: str, base_sheet: str) -> pd.DataFrame:
+    if not base_sheet:
+        raise ValueError("Selecione a guia/mês da planilha base.")
+    try:
+        df = pd.read_excel(base_file, sheet_name=base_sheet, dtype=object)
+    except Exception as exc:
+        raise RuntimeError(f"Não foi possível ler a guia '{base_sheet}' da planilha base. Erro: {exc}") from exc
+    df = prepare_dataframe(df)
+    if df.empty:
+        raise ValueError("A guia selecionada da planilha base está vazia.")
+
+    employee_col = find_column(df, ["FUNCIONÁRIO", "FUNCIONARIO", "NOME", "COLABORADOR"])
+    company_col = _find_column_optional(df, ["SETOR", "EMPRESA", "UNIDADE", "RAZÃO SOCIAL", "RAZAO SOCIAL"])
+    cnpj_col = _find_column_optional(df, ["CNPJ", "CNPJ EMPRESA", "CNPJ DA EMPRESA"])
+    date_col = _find_column_optional(df, ["DATA", "DATA DO EXAME", "DATA EXAME"])
+    if not company_col and not cnpj_col:
+        raise KeyError("Não foi possível identificar a empresa/CNPJ na planilha base.")
+
+    eligible = df[df.apply(_row_has_ok_esocial, axis=1)].copy()
+    if eligible.empty:
+        raise ValueError("Não encontrei nenhuma linha com 'OK E-SOCIAL' na guia selecionada.")
+
+    rows = []
+    for idx, row in eligible.iterrows():
+        company_text = _safe_text(row.get(company_col, "")) if company_col else ""
+        cnpj = extract_cnpj(row.get(cnpj_col, "")) if cnpj_col else ""
+        if not cnpj:
+            cnpj = extract_cnpj(company_text)
+        employee = _safe_text(row.get(employee_col, ""))
+        if len(cnpj) != 14 or not employee:
+            continue
+        rows.append({
+            "BASE_ROW": int(idx) + 2 if isinstance(idx, int) else len(rows) + 2,
+            "CNPJ": cnpj,
+            "EMPRESA_BASE": company_text,
+            "EMPRESA_NOME": _strip_cnpj_from_company(company_text, cnpj),
+            "FUNCIONARIO_BASE": employee,
+            "NOME_KEY": _normalize_person_name(employee),
+            "BASE_DATE": _parse_excel_date(row.get(date_col, "")) if date_col else None,
+        })
+    result = pd.DataFrame(rows)
+    if result.empty:
+        raise ValueError("As linhas com OK E-SOCIAL não possuem CNPJ de empresa e funcionário válidos.")
+    return result
+
+
+def _score_esocial_export_sheet(df: pd.DataFrame) -> int:
+    if df is None or df.empty:
+        return -1
+    cols = {normalize_text(c) for c in df.columns}
+    required_groups = [
+        {"CNPJ", "CNPJ EMPRESA", "CNPJ DA EMPRESA"},
+        {"FUNCIONARIO", "FUNCIONÁRIO", "NOME", "COLABORADOR"},
+        {"RECIBO", "NUMERO DO RECIBO", "NÚMERO DO RECIBO", "RECIBO ESOCIAL", "RECIBO E-SOCIAL"},
+    ]
+    score = 0
+    for group in required_groups:
+        if cols.intersection(group):
+            score += 100
+    for wanted in ["EVENTO", "EMPRESA", "CPF", "MATRICULA", "MATRÍCULA", "DATA REF.", "DATA REF", "STATUS", "DATA ENVIO"]:
+        if wanted in cols:
+            score += 10
+    score += min(len(df), 500)
+    return score
+
+
+def read_esocial_export_file(path: str) -> tuple[pd.DataFrame, str]:
+    try:
+        xl = pd.ExcelFile(path)
+    except Exception as exc:
+        raise RuntimeError(f"Não foi possível abrir {os.path.basename(path)}. Erro: {exc}") from exc
+
+    best_df = None
+    best_sheet = ""
+    best_score = -1
+    for sheet in xl.sheet_names:
+        try:
+            candidate = pd.read_excel(path, sheet_name=sheet, dtype=object)
+            candidate = prepare_dataframe(candidate)
+        except Exception:
+            continue
+        score = _score_esocial_export_sheet(candidate)
+        if score > best_score:
+            best_score = score
+            best_df = candidate
+            best_sheet = sheet
+
+    if best_df is None or best_score < 300:
+        raise ValueError(
+            f"{os.path.basename(path)} não possui uma guia de envios com CNPJ, Funcionário e Recibo."
+        )
+
+    df = best_df
+    evento_col = _find_column_optional(df, ["EVENTO", "TIPO EVENTO"])
+    empresa_col = _find_column_optional(df, ["EMPRESA", "RAZÃO SOCIAL", "RAZAO SOCIAL"])
+    cnpj_col = find_column(df, ["CNPJ", "CNPJ EMPRESA", "CNPJ DA EMPRESA"])
+    funcionario_col = find_column(df, ["FUNCIONÁRIO", "FUNCIONARIO", "NOME", "COLABORADOR"])
+    cpf_col = _find_column_optional(df, ["CPF"])
+    matricula_col = _find_column_optional(df, ["MATRÍCULA", "MATRICULA"])
+    data_ref_col = _find_column_optional(df, ["DATA REF.", "DATA REF", "DATA REFERÊNCIA", "DATA REFERENCIA", "DATA"])
+    status_col = _find_column_optional(df, ["STATUS"])
+    data_envio_col = _find_column_optional(df, ["DATA ENVIO", "DATA DE ENVIO"])
+    recibo_col = find_column(df, ["RECIBO", "NÚMERO DO RECIBO", "NUMERO DO RECIBO", "RECIBO ESOCIAL", "RECIBO E-SOCIAL"])
+
+    rows = []
+    for _, row in df.iterrows():
+        cnpj = extract_cnpj(row.get(cnpj_col, ""))
+        employee = _safe_text(row.get(funcionario_col, ""))
+        if len(cnpj) != 14 or not employee:
+            continue
+        evento = _safe_text(row.get(evento_col, "")) if evento_col else ""
+        rows.append({
+            "EVENTO": evento,
+            "EMPRESA": _safe_text(row.get(empresa_col, "")) if empresa_col else "",
+            "CNPJ": cnpj,
+            "FUNCIONARIO": employee,
+            "NOME_KEY": _normalize_person_name(employee),
+            "CPF": _cpf_text(row.get(cpf_col, "")) if cpf_col else "",
+            "MATRICULA": _safe_text(row.get(matricula_col, "")) if matricula_col else "",
+            "DATA_REF_DATE": _parse_excel_date(row.get(data_ref_col, "")) if data_ref_col else None,
+            "DATA_REF": _format_date(row.get(data_ref_col, "")) if data_ref_col else "",
+            "STATUS": _safe_text(row.get(status_col, "")) if status_col else "",
+            "DATA_ENVIO_DATE": _parse_excel_date(row.get(data_envio_col, "")) if data_envio_col else None,
+            "DATA_ENVIO": _format_date(row.get(data_envio_col, "")) if data_envio_col else "",
+            "RECIBO": _safe_text(row.get(recibo_col, "")),
+            "ARQUIVO_ORIGEM": os.path.basename(path),
+            "GUIA_ORIGEM": best_sheet,
+        })
+
+    result = pd.DataFrame(rows)
+    if result.empty:
+        raise ValueError(f"{os.path.basename(path)} não possui registros de funcionários válidos.")
+
+    # A base clínica representa ASO/S-2220. Se a exportação contiver S-2220, ignora outros eventos.
+    if "EVENTO" in result.columns:
+        event_key = result["EVENTO"].map(lambda x: re.sub(r"[^A-Z0-9]", "", normalize_text(x)))
+        if (event_key == "S2220").any():
+            result = result[event_key == "S2220"].copy()
+    return result.reset_index(drop=True), best_sheet
+
+
+def _candidate_priority(row: pd.Series, base_date) -> tuple:
+    ref_date = row.get("DATA_REF_DATE")
+    exact = int(bool(base_date and ref_date and ref_date == base_date))
+    same_month = int(bool(base_date and ref_date and ref_date.year == base_date.year and ref_date.month == base_date.month))
+    authorized = int("AUTORIZ" in normalize_text(row.get("STATUS", "")))
+    has_receipt = int(bool(_safe_text(row.get("RECIBO", ""))))
+    distance = 999999
+    if base_date and ref_date:
+        try:
+            distance = abs((ref_date - base_date).days)
+        except Exception:
+            pass
+    ref_ord = ref_date.toordinal() if ref_date else 0
+    send_date = row.get("DATA_ENVIO_DATE")
+    send_ord = send_date.toordinal() if send_date else 0
+    return (exact, same_month, authorized, has_receipt, -distance, ref_ord, send_ord)
+
+
+def select_esocial_rows_for_company(base_company: pd.DataFrame, export_company: pd.DataFrame):
+    selected = []
+    missing = []
+    used_indexes = set()
+
+    for _, base_row in base_company.sort_values(["BASE_DATE", "BASE_ROW"], na_position="last").iterrows():
+        candidates = export_company[export_company["NOME_KEY"] == base_row["NOME_KEY"]]
+        if candidates.empty:
+            missing.append(base_row["FUNCIONARIO_BASE"])
+            continue
+
+        unused = candidates[~candidates.index.isin(used_indexes)]
+        pool = unused if not unused.empty else candidates
+        ranked = sorted(
+            [(idx, row) for idx, row in pool.iterrows()],
+            key=lambda item: _candidate_priority(item[1], base_row.get("BASE_DATE")),
+            reverse=True,
+        )
+        chosen_idx, chosen = ranked[0]
+        used_indexes.add(chosen_idx)
+        selected.append(chosen.to_dict())
+
+    if not selected:
+        return pd.DataFrame(columns=export_company.columns), missing
+
+    result = pd.DataFrame(selected)
+    dedupe_cols = [c for c in ["CNPJ", "NOME_KEY", "DATA_REF", "RECIBO", "EVENTO"] if c in result.columns]
+    if dedupe_cols:
+        result = result.drop_duplicates(subset=dedupe_cols, keep="first")
+    return result.reset_index(drop=True), missing
+
 
 def make_paragraph(text: str, style: ParagraphStyle) -> Paragraph:
-    text = "" if pd.isna(text) else str(text)
+    text = _safe_text(text)
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br/>")
     return Paragraph(text, style)
 
-def build_pdf(df: pd.DataFrame, pdf_path: str, title: str):
+
+def build_esocial_receipt_pdf(df: pd.DataFrame, pdf_path: str, company_name: str, company_cnpj: str):
     if df.empty:
-        raise ValueError("A tabela filtrada ficou vazia. Não há dados para gerar o PDF.")
+        raise ValueError("Não há funcionários em comum para gerar o recibo da empresa.")
+
     page_width, _ = landscape(A4)
-    doc = SimpleDocTemplate(pdf_path, pagesize=landscape(A4), leftMargin=10*mm, rightMargin=10*mm, topMargin=10*mm, bottomMargin=10*mm)
+    doc = SimpleDocTemplate(
+        pdf_path,
+        pagesize=landscape(A4),
+        leftMargin=14 * mm,
+        rightMargin=14 * mm,
+        topMargin=18 * mm,
+        bottomMargin=14 * mm,
+    )
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle("TitleCustom", parent=styles["Title"], alignment=TA_CENTER, fontName="Helvetica-Bold", fontSize=12, spaceAfter=6, textColor=colors.black)
-    cell_style = ParagraphStyle("Cell", parent=styles["BodyText"], fontName="Helvetica", fontSize=8.0, leading=9.5, alignment=TA_CENTER, spaceAfter=0, spaceBefore=0)
-    header_style = ParagraphStyle("Header", parent=cell_style, fontName="Helvetica-Bold", textColor=colors.white)
-    headers = [str(col) for col in df.columns]
-    data = [[make_paragraph(h, header_style) for h in headers]]
+    body_style = ParagraphStyle(
+        "EsocialCell",
+        parent=styles["BodyText"],
+        fontName="Helvetica",
+        fontSize=7.6,
+        leading=8.8,
+        alignment=0,
+        spaceBefore=0,
+        spaceAfter=0,
+        textColor=colors.black,
+    )
+    header_style = ParagraphStyle(
+        "EsocialHeader",
+        parent=body_style,
+        fontName="Helvetica-Bold",
+        textColor=colors.white,
+        fontSize=7.7,
+        leading=8.8,
+    )
+
+    headers = ["Evento", "Empresa", "Funcionário", "CPF", "Matrícula", "Data Ref.", "Status", "Data Envio", "Recibo"]
+    full_company = f"{company_name} ({format_cnpj(company_cnpj)})"
+    table_data = [[make_paragraph(h, header_style) for h in headers]]
     for _, row in df.iterrows():
-        data.append([make_paragraph(row[col], cell_style) for col in df.columns])
-    total_width = page_width - doc.leftMargin - doc.rightMargin
-    preferred = {"EVENTO":14,"EMPRESA":34,"UNIDADE":30,"NOME":28,"CPF":16,"TIPO":18,"STATUS":18,"DATA":15,"RECIBO ESOCIAL":28,"RECIBO E-SOCIAL":28,"RECIBO SEFAZ":30}
-    weights = [preferred.get(normalize_text(col), 18) for col in headers]
-    weight_sum = sum(weights)
-    col_widths = [total_width*w/weight_sum for w in weights]
-    table = Table(data, colWidths=col_widths, repeatRows=1)
+        # Mantém o mesmo padrão visual do recibo de referência: Razão Social (CNPJ).
+        company_value = full_company
+        table_data.append([
+            make_paragraph(row.get("EVENTO") or "S-2220", body_style),
+            make_paragraph(company_value, body_style),
+            make_paragraph(row.get("FUNCIONARIO"), body_style),
+            make_paragraph(row.get("CPF"), body_style),
+            make_paragraph(row.get("MATRICULA"), body_style),
+            make_paragraph(row.get("DATA_REF"), body_style),
+            make_paragraph(row.get("STATUS"), body_style),
+            make_paragraph(row.get("DATA_ENVIO"), body_style),
+            make_paragraph(row.get("RECIBO"), body_style),
+        ])
+
+    usable = page_width - doc.leftMargin - doc.rightMargin
+    weights = [5, 30, 19, 9, 9, 7, 7, 7, 14]
+    total = sum(weights)
+    widths = [usable * value / total for value in weights]
+    table = Table(table_data, colWidths=widths, repeatRows=1, hAlign="LEFT")
     table.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#3A3A3A")),
-        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-        ("GRID",(0,0),(-1,-1),0.75,colors.black),
-        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("ALIGN",(0,0),(-1,-1),"CENTER"),
-        ("LEFTPADDING",(0,0),(-1,-1),3),
-        ("RIGHTPADDING",(0,0),(-1,-1),3),
-        ("TOPPADDING",(0,0),(-1,-1),5),
-        ("BOTTOMPADDING",(0,0),(-1,-1),5),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#23496D")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.65, colors.black),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2.3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2.3),
+        ("TOPPADDING", (0, 0), (-1, -1), 2.3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.3),
     ]))
-    doc.build([Paragraph(title, title_style), Spacer(1, 2*mm), table])
+    doc.build([table])
+
+
+def build_pdf(df: pd.DataFrame, pdf_path: str, title: str):
+    """Compatibilidade com o serviço antigo; usa o novo layout quando chamado diretamente."""
+    cnpj = extract_cnpj(title)
+    company = _strip_cnpj_from_company(title, cnpj) if cnpj else (_safe_text(title) or "EMPRESA")
+    build_esocial_receipt_pdf(df, pdf_path, company, cnpj)
+
+
+def build_esocial_pdf_filename(company_name: str, company_cnpj: str, pdf_month: str) -> str:
+    # O '(1)' faz parte da nomenclatura solicitada pelo usuário e é sempre mantido.
+    return sanitize_filename(
+        f"{company_name} - {format_cnpj_filename(company_cnpj)} - {pdf_month} (1)"
+    ) + ".pdf"
+
 
 def create_output_folder(base_output_dir: str) -> str:
-    folder_path = os.path.join(base_output_dir, f"RESULTADO FINAL - {datetime.now().strftime('%Y-%m-%d %H-%M-%S')}")
+    folder_path = os.path.join(base_output_dir, "RECIBOS ESOCIAL")
     os.makedirs(folder_path, exist_ok=True)
     return folder_path
 
+
 def create_structure(base_folder: str):
+    # Mantido para compatibilidade com o módulo de serviços.
     pdf_folder = os.path.join(base_folder, "PDFs")
     log_folder = os.path.join(base_folder, "Logs")
     os.makedirs(pdf_folder, exist_ok=True)
     os.makedirs(log_folder, exist_ok=True)
     return pdf_folder, log_folder
+
 
 def create_zip_from_folder(folder: str) -> str:
     zip_path = unique_path(folder.rstrip("/\\") + ".zip")
@@ -2113,152 +2403,156 @@ def create_zip_from_folder(folder: str) -> str:
                 zf.write(full, os.path.relpath(full, folder))
     return zip_path
 
+
+def create_esocial_zip(folder: str, month: str, year: int | None = None) -> str:
+    label = f"RECIBOS ESOCIAL - {month}" + (f" {year}" if year else "")
+    zip_path = unique_path(os.path.join(os.path.dirname(folder), sanitize_filename(label) + ".zip"))
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for filename in sorted(os.listdir(folder)):
+            full = os.path.join(folder, filename)
+            if os.path.isfile(full) and not filename.lower().endswith(".zip"):
+                zf.write(full, filename)
+    return zip_path
+
+
 def export_summary_excel(rows: list[dict], excel_path: str):
+    """Compatibilidade com versões anteriores; não é usado no novo Recibo eSocial."""
     wb = Workbook()
     ws = wb.active
     ws.title = "Resumo"
-    headers = ["EMPRESA","CNPJ","STATUS","TOTAL BASE EMPRESA","TOTAL ENCONTRADO NO SISTEMA","MOTIVO","PDF GERADO"]
+    headers = ["EMPRESA", "CNPJ", "STATUS", "TOTAL BASE EMPRESA", "TOTAL ENCONTRADO", "MOTIVO", "PDF GERADO"]
     ws.append(headers)
     for cell in ws[1]:
         cell.font = Font(bold=True)
     for row in rows:
-        ws.append([row.get("empresa",""),row.get("cnpj",""),row.get("status",""),row.get("total_base",0),row.get("total_encontrado",0),row.get("motivo",""),row.get("pdf","")])
-    for col, width in {"A":45,"B":18,"C":18,"D":20,"E":24,"F":100,"G":55}.items():
-        ws.column_dimensions[col].width = width
+        ws.append([
+            row.get("empresa", ""), row.get("cnpj", ""), row.get("status", ""),
+            row.get("total_base", 0), row.get("total_encontrado", 0),
+            row.get("motivo", ""), row.get("pdf", ""),
+        ])
     wb.save(excel_path)
 
-def get_company_fields_system(system_df: pd.DataFrame):
-    normalized_map = {normalize_text(col): col for col in system_df.columns}
-    company_col = None
-    for wanted in ["EMPRESA", "SETOR", "UNIDADE"]:
-        if wanted in normalized_map:
-            company_col = normalized_map[wanted]
-            break
-    if not company_col:
-        raise KeyError("Não foi possível identificar a coluna da empresa na planilha do sistema.")
-    values = system_df[company_col].dropna().astype(str).str.strip()
-    company_text = values.iloc[0] if not values.empty else "EMPRESA"
-    return company_col, company_text, extract_cnpj(company_text)
 
-def get_company_fields_base(base_df: pd.DataFrame):
-    normalized_map = {normalize_text(col): col for col in base_df.columns}
-    for wanted in ["SETOR", "EMPRESA", "UNIDADE"]:
-        if wanted in normalized_map:
-            return normalized_map[wanted]
-    raise KeyError("Não foi possível identificar a coluna da empresa na planilha base.")
+def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list[str], output_folder: str, progress=None):
+    month, year = _sheet_month_year(base_sheet)
+    if not month:
+        raise ValueError("Não consegui identificar o mês pelo nome da guia selecionada.")
 
-def get_best_fuzzy_company_match(work: pd.DataFrame, company_norm: str):
-    candidates = work[["__EMPRESA_TXT__","__EMPRESA_NORM__"]].drop_duplicates().to_dict("records")
-    best_name = ""
-    best_score = 0.0
-    for item in candidates:
-        candidate = item["__EMPRESA_NORM__"]
-        if not candidate:
+    base_rows = read_esocial_base_rows(base_file, base_sheet)
+
+    export_frames = []
+    source_notes = []
+    total_files = max(1, len(export_files))
+    for idx, file_path in enumerate(export_files, start=1):
+        if progress:
+            progress(20 + int((idx - 1) * 30 / total_files), f"Lendo planilha eSocial {idx}/{total_files}: {Path(file_path).name}")
+        frame, sheet = read_esocial_export_file(file_path)
+        export_frames.append(frame)
+        source_notes.append(f"{Path(file_path).name} -> guia {sheet}")
+
+    if not export_frames:
+        raise ValueError("Envie pelo menos uma planilha de envios do eSocial.")
+
+    exports = pd.concat(export_frames, ignore_index=True)
+    # Remove linhas repetidas quando o mesmo arquivo/registro é enviado mais de uma vez.
+    exports = exports.drop_duplicates(
+        subset=["CNPJ", "NOME_KEY", "DATA_REF", "RECIBO", "EVENTO"],
+        keep="first",
+    ).reset_index(drop=True)
+
+    # Processa somente CNPJs realmente presentes nas planilhas enviadas pelo usuário.
+    company_order = list(dict.fromkeys(exports["CNPJ"].dropna().astype(str).tolist()))
+    generated = []
+    summary = []
+
+    os.makedirs(output_folder, exist_ok=True)
+    total_companies = max(1, len(company_order))
+    for pos, cnpj in enumerate(company_order, start=1):
+        if progress:
+            progress(52 + int((pos - 1) * 35 / total_companies), f"Cruzando empresa {pos}/{total_companies}...")
+        export_company = exports[exports["CNPJ"] == cnpj].copy()
+        base_company = base_rows[base_rows["CNPJ"] == cnpj].copy()
+        export_name = _safe_text(export_company.iloc[0].get("EMPRESA", "")) if not export_company.empty else ""
+
+        if base_company.empty:
+            summary.append({
+                "empresa": export_name or "EMPRESA NÃO IDENTIFICADA",
+                "cnpj": cnpj,
+                "status": "NÃO GERADO",
+                "total_base": 0,
+                "total_encontrado": 0,
+                "motivo": "CNPJ não possui linhas com OK E-SOCIAL na guia selecionada.",
+                "pdf": "",
+                "faltantes": [],
+            })
             continue
-        score = SequenceMatcher(None, company_norm, candidate).ratio()
-        if company_norm in candidate or candidate in company_norm:
-            score += 0.15
-        if score > best_score:
-            best_name, best_score = item["__EMPRESA_TXT__"], score
-    return best_name, best_score
 
-def filter_base_company(base_df: pd.DataFrame, company_text: str, company_cnpj: str, company_col: str):
-    work = base_df.copy()
-    work["__EMPRESA_TXT__"] = work[company_col].astype(str).str.strip()
-    work["__EMPRESA_CNPJ__"] = work["__EMPRESA_TXT__"].map(extract_cnpj)
-    work["__EMPRESA_NORM__"] = work["__EMPRESA_TXT__"].map(normalize_company_name)
-    company_norm = normalize_company_name(company_text)
-    if company_cnpj:
-        by_cnpj = work[work["__EMPRESA_CNPJ__"] == company_cnpj].copy()
-        if not by_cnpj.empty:
-            return by_cnpj, "CNPJ"
-    by_exact = work[work["__EMPRESA_NORM__"] == company_norm].copy()
-    if not by_exact.empty:
-        return by_exact, "NOME EXATO"
-    by_contains = work[work["__EMPRESA_NORM__"].str.contains(re.escape(company_norm), na=False, regex=True) | work["__EMPRESA_NORM__"].apply(lambda x: x in company_norm if x else False)].copy()
-    if not by_contains.empty:
-        return by_contains, "NOME PARCIAL"
-    best_name, best_score = get_best_fuzzy_company_match(work, company_norm)
-    if best_name and best_score >= 0.75:
-        fuzzy = work[work["__EMPRESA_TXT__"] == best_name].copy()
-        if not fuzzy.empty:
-            return fuzzy, f"NOME APROXIMADO ({best_score:.2f})"
-    return work.iloc[0:0].copy(), "NÃO ENCONTRADO"
+        company_name = _safe_text(base_company.iloc[0]["EMPRESA_NOME"])
+        selected, missing = select_esocial_rows_for_company(base_company, export_company)
+        if selected.empty:
+            summary.append({
+                "empresa": company_name,
+                "cnpj": cnpj,
+                "status": "NÃO GERADO",
+                "total_base": len(base_company),
+                "total_encontrado": 0,
+                "motivo": "Nenhum funcionário da planilha enviada coincide com a planilha base.",
+                "pdf": "",
+                "faltantes": missing,
+            })
+            continue
 
-def reorder_system_by_base(filtered_system: pd.DataFrame, base_company_df: pd.DataFrame, system_nome: str, system_tipo: str, base_nome: str, base_tipo: str):
-    filtered_system = filtered_system.copy()
-    filtered_system["__CHAVE__"] = build_key_series(filtered_system[system_nome], filtered_system[system_tipo])
-    grouped = {}
-    for _, row in filtered_system.iterrows():
-        grouped.setdefault(row["__CHAVE__"], []).append(row.to_dict())
-    ordered_rows = []
-    for _, base_row in base_company_df.iterrows():
-        key = build_key(base_row[base_nome], base_row[base_tipo])
-        for item in grouped.get(key, []):
-            ordered_rows.append(item)
-    if not ordered_rows:
-        return filtered_system[[c for c in filtered_system.columns if c != "__CHAVE__"]].iloc[0:0].copy()
-    ordered_df = pd.DataFrame(ordered_rows)
-    return ordered_df[[c for c in ordered_df.columns if c != "__CHAVE__"]].reset_index(drop=True)
+        pdf_name = build_esocial_pdf_filename(company_name, cnpj, month)
+        pdf_path = os.path.join(output_folder, pdf_name)
+        build_esocial_receipt_pdf(selected, pdf_path, company_name, cnpj)
+        generated.append(pdf_path)
+        summary.append({
+            "empresa": company_name,
+            "cnpj": cnpj,
+            "status": "GERADO",
+            "total_base": len(base_company),
+            "total_encontrado": len(selected),
+            "motivo": "OK",
+            "pdf": pdf_name,
+            "faltantes": missing,
+        })
+
+    if not generated:
+        raise ValueError("Nenhum recibo pôde ser gerado. Não houve funcionários em comum entre a guia base e as planilhas enviadas.")
+
+    summary_path = os.path.join(output_folder, "RESUMO PROCESSAMENTO.txt")
+    with open(summary_path, "w", encoding="utf-8") as f:
+        f.write("RECIBO eSOCIAL - RESUMO DO PROCESSAMENTO\n")
+        f.write("=" * 78 + "\n")
+        f.write(f"Guia base: {base_sheet}\n")
+        f.write(f"Mês dos PDFs: {month}\n")
+        if year:
+            f.write(f"Ano identificado: {year}\n")
+        f.write(f"Linhas com OK E-SOCIAL válidas na base: {len(base_rows)}\n")
+        f.write(f"Planilhas de eSocial recebidas: {len(export_files)}\n")
+        for note in source_notes:
+            f.write(f"  - {note}\n")
+        f.write("\nEMPRESAS\n" + "-" * 78 + "\n")
+        for item in summary:
+            f.write(f"{item['empresa']} | {format_cnpj(item['cnpj'])} | {item['status']} | ")
+            f.write(f"base={item['total_base']} | encontrados={item['total_encontrado']} | {item['motivo']}\n")
+            if item.get("faltantes"):
+                f.write("  Sem correspondência na exportação: " + "; ".join(item["faltantes"]) + "\n")
+
+    return {
+        "month": month,
+        "year": year,
+        "generated": generated,
+        "summary": summary,
+        "summary_path": summary_path,
+    }
+
 
 def run_company_process(system_file: str, base_file: str, pdf_folder: str, log_folder: str, pdf_month: str, base_sheet: str | None = None):
-    system_df = prepare_dataframe(read_spreadsheet(system_file))
-    base_df = prepare_dataframe(read_spreadsheet(base_file, selected_sheet=base_sheet))
-    system_nome = find_column(system_df, ["NOME"])
-    system_tipo = find_column(system_df, ["TIPO"])
-    base_nome = find_column(base_df, ["FUNCIONARIO", "FUNCIONÁRIO"])
-    base_tipo = find_column(base_df, ["TIPO DE EXAME"])
-    base_status = find_column(base_df, ["DEPOSITANTE"])
-    _, company_text, company_cnpj = get_company_fields_system(system_df)
-    base_company_col = get_company_fields_base(base_df)
-    base_company_df, match_method = filter_base_company(base_df, company_text, company_cnpj, base_company_col)
-    if base_company_df.empty:
-        return {"empresa": company_text, "cnpj": company_cnpj, "status": "NÃO GERADO", "total_base": 0, "total_encontrado": 0, "motivo": "Empresa não encontrada na planilha base.", "pdf": ""}
-
-    base_company_df = base_company_df.copy()
-    base_company_df["__STATUS_OK__"] = base_company_df[base_status].map(normalize_text)
-    invalid_status = base_company_df[base_company_df["__STATUS_OK__"] != "OK E-SOCIAL"].copy()
-
-    system_df["__CHAVE__"] = build_key_series(system_df[system_nome], system_df[system_tipo])
-    base_company_df["__CHAVE__"] = build_key_series(base_company_df[base_nome], base_company_df[base_tipo])
-
-    expected_keys = set(base_company_df["__CHAVE__"].dropna().tolist())
-    filtered_system = system_df[system_df["__CHAVE__"].isin(expected_keys)].copy()
-    filtered_system = filtered_system[[c for c in system_df.columns if c != "__CHAVE__"]].copy()
-
-    missing_keys = sorted(expected_keys - set(system_df["__CHAVE__"].dropna().tolist()))
-    reasons = []
-    if not invalid_status.empty:
-        for _, row in invalid_status.iterrows():
-            reasons.append(f"{row.get(base_nome,'')} | {row.get(base_tipo,'')} | {row.get(base_status,'')}")
-    if missing_keys:
-        for key in missing_keys:
-            name, exam = key.split("||", 1)
-            reasons.append(f"NÃO ENCONTRADO NO SISTEMA | {name} | {exam}")
-
-    log_path = unique_path(os.path.join(log_folder, sanitize_filename(company_text) + " - LOG.txt"))
-    with open(log_path, "w", encoding="utf-8") as f:
-        f.write("RESUMO DO PROCESSAMENTO\n" + "="*80 + "\n")
-        f.write(f"Planilha do sistema: {system_file}\nPlanilha base: {base_file}\n")
-        f.write(f"Aba base usada: {base_sheet or 'Detecção automática'}\n")
-        f.write(f"Empresa do sistema: {company_text}\nCNPJ detectado: {company_cnpj or 'NÃO INFORMADO'}\n")
-        f.write(f"Mês usado no nome do PDF: {pdf_month}\n")
-        f.write(f"Método de correspondência da empresa: {match_method}\n")
-        f.write(f"Total base empresa: {len(base_company_df)}\nTotal encontrado no sistema: {len(filtered_system)}\n\n")
-        if reasons:
-            f.write("MOTIVOS PARA NÃO GERAR PDF\n" + "-"*80 + "\n")
-            for item in reasons:
-                f.write(f"- {item}\n")
-        else:
-            f.write("Todos os funcionários da empresa estão com OK E-SOCIAL e foram encontrados no sistema.\n")
-
-    if reasons:
-        return {"empresa": company_text, "cnpj": company_cnpj, "status": "NÃO GERADO", "total_base": len(base_company_df), "total_encontrado": len(filtered_system), "motivo": " | ".join(reasons), "pdf": ""}
-
-    ordered_system = reorder_system_by_base(filtered_system, base_company_df, system_nome, system_tipo, base_nome, base_tipo)
-    pdf_path = unique_path(os.path.join(pdf_folder, build_esocial_pdf_filename(company_text, company_cnpj, pdf_month)))
-    build_pdf(ordered_system, pdf_path, title=company_text)
-    return {"empresa": company_text, "cnpj": company_cnpj, "status": "GERADO", "total_base": len(base_company_df), "total_encontrado": len(ordered_system), "motivo": "OK", "pdf": pdf_path}
+    """Wrapper legado. O novo fluxo processa todas as planilhas juntas em process_esocial_receipts."""
+    result = process_esocial_receipts(base_file, base_sheet or "", [system_file], pdf_folder)
+    item = result["summary"][0] if result["summary"] else {}
+    return item
 
 # =========================
 # FÍSICO E MENTAL
@@ -2798,6 +3092,11 @@ def aso_today_br() -> str:
     return (datetime.utcnow() - timedelta(hours=3)).strftime('%d/%m/%Y')
 
 
+def aso_today_iso() -> str:
+    """Data local padrão para campos HTML date (AAAA-MM-DD)."""
+    return (datetime.utcnow() - timedelta(hours=3)).strftime('%Y-%m-%d')
+
+
 def aso_manual_render_home(form_data=None):
     form_data = dict(form_data or {})
     return render_template(
@@ -2806,6 +3105,7 @@ def aso_manual_render_home(form_data=None):
         locais=CLINIC_LOCATIONS,
         form_data=form_data,
         today_br=aso_today_br(),
+        today_iso=aso_today_iso(),
     )
 
 
@@ -2866,79 +3166,8 @@ def aso_set_cell_text(cell, text: str) -> None:
         paragraph.add_run(text)
 
 
-def aso_apply_one_page_layout(doc, replacements: dict[str, str], complementares: list[tuple[str, str]]) -> None:
-    """Mantém o ASO em uma única página A4 sem alterar a organização visual do modelo."""
-    for section in doc.sections:
-        section.page_width = Mm(210)
-        section.page_height = Mm(297)
-
-    # O modelo possui alguns parágrafos vazios de posicionamento no rodapé.
-    # Eles são comprimidos (não removidos) para preservar linhas/âncoras e evitar 2ª página.
-    doctor_seen = False
-    employee_text = (replacements.get('{{FUNCIONÁRIO}}') or replacements.get('{{FUNCIONARIO}}') or '').strip()
-    for paragraph in doc.paragraphs:
-        text = (paragraph.text or '').strip()
-        if text.startswith('DR. MARLON TEIXEIRA'):
-            doctor_seen = True
-            # identificação final em tamanho discreto para caber no bloco original
-            for run in paragraph.runs:
-                if not run.font.size or run.font.size.pt > 8:
-                    run.font.size = Pt(8)
-        elif doctor_seen and not text:
-            paragraph.paragraph_format.space_before = Pt(0)
-            paragraph.paragraph_format.space_after = Pt(0)
-            paragraph.paragraph_format.line_spacing = Pt(1)
-            for run in paragraph.runs:
-                run.font.size = Pt(1)
-        elif doctor_seen and employee_text and text == employee_text:
-            paragraph.paragraph_format.space_before = Pt(0)
-            paragraph.paragraph_format.space_after = Pt(0)
-            employee_size = 6 if len(employee_text) > 45 else 8
-            paragraph.paragraph_format.line_spacing = Pt(employee_size)
-            for run in paragraph.runs:
-                run.font.size = Pt(employee_size)
-
-    # Campos principais muito longos recebem redução leve de fonte em vez de criar linhas extras.
-    for paragraph in doc.paragraphs:
-        txt = paragraph.text or ''
-        if 'Empresa:' in txt and 'Funcionario:' in txt:
-            target_size = None
-            if len(txt) > 300:
-                target_size = 6.5
-            elif len(txt) > 235:
-                target_size = 7.0
-            elif len(txt) > 185:
-                target_size = 7.5
-            if target_size:
-                for run in paragraph.runs:
-                    run.font.size = Pt(target_size)
-        elif txt.startswith('Tipo de Exame:') and len(txt) > 52:
-            for run in paragraph.runs:
-                run.font.size = Pt(7.5)
-
-    if doc.tables:
-        table = doc.tables[0]
-        for row in table.rows[1:4]:
-            for cell in row.cells:
-                value = (cell.text or '').strip()
-                if len(value) > 42:
-                    target_size = 6
-                elif len(value) > 32:
-                    target_size = 6.5
-                elif len(value) > 24:
-                    target_size = 7.5
-                else:
-                    target_size = None
-                if target_size:
-                    for paragraph in cell.paragraphs:
-                        paragraph.paragraph_format.space_before = Pt(0)
-                        paragraph.paragraph_format.space_after = Pt(0)
-                        for run in paragraph.runs:
-                            run.font.size = Pt(target_size)
-
-
 def aso_fill_docx(template_path: str, output_path: str, replacements: dict[str, str], complementares: list[tuple[str, str]]) -> None:
-    """Preenche o ASO preservando o modelo, com exame clínico fixo e até cinco complementares."""
+    """Preenche o ASO preservando exatamente o espaçamento e tamanho do modelo original."""
     temp_path = output_path + '.base.docx'
     replace_docx_placeholders_preserve_layout(template_path, temp_path, replacements)
     try:
@@ -2964,7 +3193,6 @@ def aso_fill_docx(template_path: str, output_path: str, replacements: dict[str, 
             aso_set_cell_text(table.rows[row_exam].cells[col_exam], exam_text)
             aso_set_cell_text(table.rows[row_date].cells[col_date], data)
 
-        aso_apply_one_page_layout(doc, replacements, complementares)
         doc.save(output_path)
     finally:
         try:
@@ -2997,12 +3225,25 @@ def aso_manual_gerar():
     setor = fisico_clean_text(request.form.get('setor', ''))
     tipo_exame = fisico_clean_text(request.form.get('tipo_exame', ''))
     data_aso_raw = (request.form.get('data_aso') or '').strip()
-    data_clinico_raw = (request.form.get('datacomp_1') or '').strip() or aso_today_br()
+    data_clinico_raw = (request.form.get('datacomp_1') or '').strip()
     formato = (request.form.get('formato', 'docx') or 'docx').lower()
 
-    required = [empresa, cnpj, funcionario, rg, cpf, data_nascimento_raw, cargo, setor, tipo_exame, data_aso_raw]
-    if any(not value for value in required):
-        flash('Preencha todos os dados principais do ASO.', 'error')
+    required_fields = [
+        ('Empresa', empresa),
+        ('CNPJ da empresa', cnpj),
+        ('Funcionário', funcionario),
+        ('RG', rg),
+        ('CPF', cpf),
+        ('Data de nascimento', data_nascimento_raw),
+        ('Cargo', cargo),
+        ('Setor', setor),
+        ('Tipo de exame', tipo_exame),
+        ('Data do ASO', data_aso_raw),
+        ('Data do Exame Clínico', data_clinico_raw),
+    ]
+    missing = [label for label, value in required_fields if not value]
+    if missing:
+        flash('Preencha antes de gerar: ' + ', '.join(missing) + '.', 'error')
         return aso_manual_render_home(form_data)
 
     if len(somente_numeros(cnpj)) != 14:
@@ -3019,11 +3260,18 @@ def aso_manual_gerar():
         data_aso = data_aso_dt.strftime('%d/%m/%Y')
         idade = str(calculate_age_from_birth(nascimento_dt, data_aso_dt))
 
-        # Exame clínico é fixo; somente a data é editável e vem com hoje por padrão.
+        # Exame clínico é fixo; sua data é obrigatória e vem com hoje por padrão na tela.
         complementares = [('EXAME CLÍNICO', format_date_br(data_clinico_raw))]
         for numero in range(2, 7):
             exame = fisico_clean_text(request.form.get(f'complementar_{numero}', ''))
-            data_comp = format_date_br(request.form.get(f'datacomp_{numero}', ''))
+            data_raw = (request.form.get(f'datacomp_{numero}') or '').strip()
+            if exame and not data_raw:
+                flash(f'Informe a data do Exame {numero} ({exame}) antes de gerar o ASO.', 'error')
+                return aso_manual_render_home(form_data)
+            if data_raw and not exame:
+                flash(f'Informe o nome do Exame {numero} ou apague a data preenchida.', 'error')
+                return aso_manual_render_home(form_data)
+            data_comp = format_date_br(data_raw) if data_raw else ''
             complementares.append((exame, data_comp))
     except ValueError as exc:
         flash(str(exc) if str(exc) else 'Confira as datas informadas.', 'error')
@@ -4606,7 +4854,8 @@ def renumerador():
 
 @app.route("/esocial", methods=["GET"])
 def esocial():
-    return render_template("esocial.html", title="E-SOCIAL EVELLYN")
+    return render_template("esocial.html", title="Recibo eSocial")
+
 
 @app.route("/esocial/abas-base", methods=["POST"])
 def esocial_abas_base():
@@ -4615,40 +4864,39 @@ def esocial_abas_base():
         return jsonify({"ok": False, "error": "Nenhuma planilha base enviada."}), 400
     temp_root = Path(tempfile.mkdtemp(prefix="esocial_abas_"))
     try:
-        if not validate_upload_extension(base_file.filename, ALLOWED_EXTENSIONS):
-            return jsonify({"ok": False, "error": "Formato inválido para a planilha base."}), 400
+        if not is_allowed_file(base_file.filename):
+            return jsonify({"ok": False, "error": "Formato inválido. Envie a planilha base em .xls ou .xlsx."}), 400
         base_path = temp_root / secure_filename(base_file.filename)
         base_file.save(base_path)
-        return jsonify({"ok": True, "sheets": list_sheets(str(base_path))})
+        sheets = list_sheets(str(base_path))
+        return jsonify({"ok": True, "sheets": sheets})
     except Exception:
-        logger.exception("Erro ao listar abas da planilha base")
-        return jsonify({"ok": False, "error": "Não foi possível ler as abas da planilha base."}), 500
+        logger.exception("Erro ao listar guias da planilha base do Recibo eSocial")
+        return jsonify({"ok": False, "error": "Não foi possível ler as guias da planilha base."}), 500
+    finally:
+        shutil.rmtree(temp_root, ignore_errors=True)
+
 
 @app.route("/esocial/processar", methods=["POST"])
 def esocial_processar():
     base_file = request.files.get("base_file")
-    rel_files = request.files.getlist("rel_files")
-    base_sheet = request.form.get("base_sheet", "").strip() or None
-    pdf_month = ESOCIAL_MONTHS.get(normalize_text(request.form.get("pdf_month", "")))
+    export_files = request.files.getlist("rel_files")
+    base_sheet = request.form.get("base_sheet", "").strip()
 
-    if not pdf_month:
-        flash("Selecione o mês que será usado no nome dos PDFs.")
+    ok, msg = validate_uploaded_file(base_file, ESOCIAL_ALLOWED_EXTENSIONS, "a planilha base")
+    if not ok:
+        flash(msg)
+        return redirect(url_for("esocial"))
+    if not base_sheet:
+        flash("Selecione a guia/mês da planilha base.")
         return redirect(url_for("esocial"))
 
-    if not base_file or not base_file.filename:
-        flash("Selecione a planilha base.")
+    valid_exports = [f for f in export_files if f and f.filename and is_allowed_file(f.filename)]
+    if not valid_exports:
+        flash("Selecione uma ou mais planilhas de envios do eSocial (.xls ou .xlsx).")
         return redirect(url_for("esocial"))
 
-    if not validate_upload_extension(base_file.filename, ALLOWED_EXTENSIONS):
-        flash("Formato inválido para a planilha base. Envie .xls, .xlsx, .html ou .htm.")
-        return redirect(url_for("esocial"))
-
-    valid_rel_files = [f for f in rel_files if f and f.filename and is_allowed_file(f.filename)]
-    if not valid_rel_files:
-        flash("Selecione um ou mais arquivos RELFUNCGERAL válidos.")
-        return redirect(url_for("esocial"))
-
-    temp_root = Path(tempfile.mkdtemp(prefix="esocial_web_"))
+    temp_root = Path(tempfile.mkdtemp(prefix="recibo_esocial_web_"))
     upload_dir = temp_root / "uploads"
     output_root = temp_root / "saida"
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -4657,42 +4905,22 @@ def esocial_processar():
     try:
         base_path = upload_dir / secure_filename(base_file.filename)
         base_file.save(base_path)
-
-        rel_paths = []
-        for index, rel in enumerate(valid_rel_files, start=1):
-            filename = secure_filename(Path(rel.filename).name)
+        export_paths = []
+        for index, uploaded in enumerate(valid_exports, start=1):
+            filename = secure_filename(Path(uploaded.filename).name)
             path = upload_dir / f"{index:03d}_{filename}"
-            rel.save(path)
-            rel_paths.append(path)
+            uploaded.save(path)
+            export_paths.append(str(path))
 
-        general_output_folder = Path(create_output_folder(str(output_root)))
-        pdf_folder, log_folder = create_structure(str(general_output_folder))
-        summary_rows = []
-
-        for rel_path in rel_paths:
-            try:
-                summary_rows.append(run_company_process(str(rel_path), str(base_path), pdf_folder, log_folder, pdf_month, base_sheet=base_sheet))
-            except Exception:
-                logger.exception("Erro ao processar RELFUNCGERAL: %s", rel_path.name)
-                summary_rows.append({"empresa": rel_path.name, "cnpj": "", "status": "NÃO GERADO", "total_base": 0, "total_encontrado": 0, "motivo": "Erro ao processar este arquivo. Verifique o modelo da planilha.", "pdf": ""})
-
-        resumo_excel = str(Path(general_output_folder) / "RESUMO_FINAL.xlsx")
-        export_summary_excel(summary_rows, resumo_excel)
-
-        with open(Path(log_folder) / "RESUMO_GERAL.txt", "w", encoding="utf-8") as f:
-            f.write("RESUMO GERAL DO PROCESSAMENTO\n" + "="*80 + "\n\n")
-            f.write(f"Planilha base: {base_path.name}\nAba base usada: {base_sheet or 'Detecção automática'}\n")
-            f.write(f"Mês usado no nome dos PDFs: {pdf_month}\n")
-            f.write(f"Total de empresas processadas: {len(summary_rows)}\n")
-            f.write(f"PDFs gerados: {sum(1 for r in summary_rows if r['status']=='GERADO')}\n")
-            f.write(f"PDFs não gerados: {sum(1 for r in summary_rows if r['status']!='GERADO')}\n")
-            f.write(f"Resumo Excel: {resumo_excel}\n")
-
-        zip_path = Path(create_zip_from_folder(str(general_output_folder)))
+        receipts_folder = Path(create_output_folder(str(output_root)))
+        result = process_esocial_receipts(
+            str(base_path), base_sheet, export_paths, str(receipts_folder)
+        )
+        zip_path = Path(create_esocial_zip(str(receipts_folder), result["month"], result["year"]))
         return send_file(zip_path, as_attachment=True, download_name=zip_path.name, mimetype="application/zip")
     except Exception as exc:
-        logger.exception("Erro no processamento do E-SOCIAL")
-        flash("Erro ao processar os arquivos. Verifique se a planilha base e os RELFUNCGERAL estão no modelo correto.")
+        logger.exception("Erro no processamento do Recibo eSocial")
+        flash(str(exc) if isinstance(exc, (ValueError, KeyError, RuntimeError)) else "Erro ao processar os arquivos do Recibo eSocial.")
         return redirect(url_for("esocial"))
 
 
@@ -4898,60 +5126,55 @@ def encaminhamentos_async():
 @app.route("/esocial/processar/async", methods=["POST"])
 def esocial_processar_async():
     base_file = request.files.get("base_file")
-    rel_files = [f for f in request.files.getlist("rel_files") if f and f.filename]
-    base_sheet = request.form.get("base_sheet", "").strip() or None
-    pdf_month = ESOCIAL_MONTHS.get(normalize_text(request.form.get("pdf_month", "")))
+    export_files = [f for f in request.files.getlist("rel_files") if f and f.filename]
+    base_sheet = request.form.get("base_sheet", "").strip()
 
-    if not pdf_month:
-        flash("Selecione o mês que será usado no nome dos PDFs.")
-        return redirect(url_for("esocial"))
-
-    ok, msg = validate_uploaded_file(base_file, ALLOWED_EXTENSIONS, "a planilha base")
+    ok, msg = validate_uploaded_file(base_file, ESOCIAL_ALLOWED_EXTENSIONS, "a planilha base")
     if not ok:
         flash(msg)
         return redirect(url_for("esocial"))
-    valid_rel_files = [f for f in rel_files if f and f.filename and is_allowed_file(f.filename)]
-    if not valid_rel_files:
-        flash("Selecione um ou mais arquivos RELFUNCGERAL válidos.")
+    if not base_sheet:
+        flash("Selecione a guia/mês da planilha base.")
         return redirect(url_for("esocial"))
 
-    job_root = Path(tempfile.mkdtemp(prefix="job_esocial_", dir=JOBS_DIR))
+    valid_exports = [f for f in export_files if is_allowed_file(f.filename)]
+    if not valid_exports:
+        flash("Selecione uma ou mais planilhas de envios do eSocial (.xls ou .xlsx).")
+        return redirect(url_for("esocial"))
+
+    job_root = Path(tempfile.mkdtemp(prefix="job_recibo_esocial_", dir=JOBS_DIR))
     upload_dir = job_root / "uploads"
     output_root = job_root / "saida"
     upload_dir.mkdir(parents=True, exist_ok=True)
     output_root.mkdir(parents=True, exist_ok=True)
+
     base_path = upload_dir / secure_filename(base_file.filename)
     base_file.save(base_path)
-    rel_paths = _save_uploads_for_job(valid_rel_files, upload_dir / "rels", ALLOWED_EXTENSIONS, "os RELFUNCGERAL")
+    export_paths = _save_uploads_for_job(
+        valid_exports,
+        upload_dir / "envios_esocial",
+        ESOCIAL_ALLOWED_EXTENSIONS,
+        "as planilhas de envios do eSocial",
+    )
 
     def task(progress):
-        general_output_folder = Path(create_output_folder(str(output_root)))
-        pdf_folder, log_folder = create_structure(str(general_output_folder))
-        summary_rows = []
-        total = max(1, len(rel_paths))
-        for index, rel_path in enumerate(rel_paths, start=1):
-            progress(10 + int((index - 1) * 70 / total), f"Processando {rel_path.name} ({index}/{total})...")
-            try:
-                summary_rows.append(run_company_process(str(rel_path), str(base_path), pdf_folder, log_folder, pdf_month, base_sheet=base_sheet))
-            except Exception:
-                logger.exception("Erro ao processar RELFUNCGERAL em job: %s", rel_path.name)
-                summary_rows.append({"empresa": rel_path.name, "cnpj": "", "status": "NÃO GERADO", "total_base": 0, "total_encontrado": 0, "motivo": "Erro ao processar este arquivo. Verifique o modelo da planilha.", "pdf": ""})
-        progress(85, "Gerando resumo final...")
-        resumo_excel = str(Path(general_output_folder) / "RESUMO_FINAL.xlsx")
-        export_summary_excel(summary_rows, resumo_excel)
-        with open(Path(log_folder) / "RESUMO_GERAL.txt", "w", encoding="utf-8") as f:
-            f.write("RESUMO GERAL DO PROCESSAMENTO\n" + "="*80 + "\n\n")
-            f.write(f"Planilha base: {base_path.name}\nAba base usada: {base_sheet or 'Detecção automática'}\n")
-            f.write(f"Mês usado no nome dos PDFs: {pdf_month}\n")
-            f.write(f"Total de empresas processadas: {len(summary_rows)}\n")
-            f.write(f"PDFs gerados: {sum(1 for r in summary_rows if r['status']=='GERADO')}\n")
-            f.write(f"PDFs não gerados: {sum(1 for r in summary_rows if r['status']!='GERADO')}\n")
-            f.write(f"Resumo Excel: {resumo_excel}\n")
-        progress(92, "Compactando ZIP final...")
-        zip_path = Path(create_zip_from_folder(str(general_output_folder)))
+        progress(8, "Lendo a guia selecionada e localizando OK E-SOCIAL...")
+        receipts_folder = Path(create_output_folder(str(output_root)))
+        result = process_esocial_receipts(
+            str(base_path),
+            base_sheet,
+            [str(path) for path in export_paths],
+            str(receipts_folder),
+            progress=progress,
+        )
+        progress(92, "Compactando os recibos em um único ZIP...")
+        zip_path = Path(create_esocial_zip(str(receipts_folder), result["month"], result["year"]))
+        progress(100, "Recibos eSocial prontos para download.")
         return str(zip_path), zip_path.name
 
-    job = job_manager.create(f"E-SOCIAL - {pdf_month}", task)
+    month, year = _sheet_month_year(base_sheet)
+    job_label = f"Recibo eSocial - {month or base_sheet}" + (f" {year}" if year else "")
+    job = job_manager.create(job_label, task)
     return redirect(url_for("job_page", job_id=job.id))
 
 @app.errorhandler(403)

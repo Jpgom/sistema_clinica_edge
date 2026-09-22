@@ -30,7 +30,7 @@
       <a class="nav-link" href="/separar-exames/"><span class="nav-icon">▣</span><span class="nav-label">Separar exames</span></a>
       <a class="nav-link" href="{{ url_for('exames_a_prazo') }}"><span class="nav-icon">▤</span><span class="nav-label">Exames a Prazo</span></a>
       <a class="nav-link" href="{{ url_for('renumerador') }}"><span class="nav-icon">#</span><span class="nav-label">Renumerador</span></a>
-      <a class="nav-link" href="{{ url_for('esocial') }}"><span class="nav-icon">⇄</span><span class="nav-label">E-SOCIAL</span></a>
+      <a class="nav-link" href="{{ url_for('esocial') }}"><span class="nav-icon">⇄</span><span class="nav-label">Recibo eSocial</span></a>
       <a class="nav-link" href="/pgr/"><span class="nav-icon">▨</span><span class="nav-label">PGR / SST</span></a>
       <div class="nav-group-title">Sistema</div>
       <a class="nav-link" href="{{ url_for('status_sistema') }}"><span class="nav-icon">●</span><span class="nav-label">Status do sistema</span></a>
@@ -73,7 +73,7 @@
           <div class="field col-2"><label for="cargo">Cargo</label><input id="cargo" name="cargo" type="text" required value="{{ form_data.get('cargo','') }}"></div>
           <div class="field col-2"><label for="setor">Setor</label><input id="setor" name="setor" type="text" required value="{{ form_data.get('setor','') }}"></div>
           <div class="field col-2"><label for="tipo_exame">Tipo de exame</label><input id="tipo_exame" name="tipo_exame" type="text" required value="{{ form_data.get('tipo_exame','') }}" placeholder="Ex.: ADMISSIONAL, PERIÓDICO, DEMISSIONAL"></div>
-          <div class="field col-1"><label for="data_aso">Data do ASO</label><input id="data_aso" name="data_aso" class="aso-date" type="text" inputmode="numeric" maxlength="10" required value="{{ form_data.get('data_aso','') }}" placeholder="DD/MM/AAAA"></div>
+          <div class="field col-1"><label for="data_aso">Data do ASO</label><input id="data_aso" name="data_aso" type="date" required value="{{ form_data.get('data_aso','') }}"></div>
         </div>
 
         <div class="info-box" id="unidadeInfo" style="margin-top:18px">Selecione Belém ou Macapá para visualizar os dados automáticos da EDGE.</div>
@@ -81,16 +81,16 @@
         <div class="section-head" style="margin-top:24px"><div><h2>Exames</h2><p>O Exame Clínico é fixo. A data dele vem com a data de hoje, mas pode ser alterada. Os demais exames e datas iniciam em branco.</p></div></div>
         <div class="form-grid aso-complementares-grid">
           <div class="field col-2"><label>Exame 1</label><input type="text" value="EXAME CLÍNICO" readonly aria-readonly="true"></div>
-          <div class="field col-1"><label for="datacomp_1">Data do Exame Clínico</label><input id="datacomp_1" name="datacomp_1" class="aso-date" type="text" inputmode="numeric" maxlength="10" required value="{{ form_data.get('datacomp_1', today_br) }}" placeholder="DD/MM/AAAA"></div>
+          <div class="field col-1"><label for="datacomp_1">Data do Exame Clínico</label><input id="datacomp_1" name="datacomp_1" type="date" required value="{{ form_data.get('datacomp_1', today_iso) }}"></div>
           {% for numero in range(2, 7) %}
           <div class="field col-2"><label for="complementar_{{ numero }}">Exame {{ numero }}</label><input id="complementar_{{ numero }}" name="complementar_{{ numero }}" type="text" value="{{ form_data.get('complementar_' ~ numero,'') }}" placeholder="Ex.: AUDIOMETRIA"></div>
-          <div class="field col-1"><label for="datacomp_{{ numero }}">Data {{ numero }}</label><input id="datacomp_{{ numero }}" name="datacomp_{{ numero }}" class="aso-date" type="text" inputmode="numeric" maxlength="10" value="{{ form_data.get('datacomp_' ~ numero,'') }}" placeholder="DD/MM/AAAA"></div>
+          <div class="field col-1"><label for="datacomp_{{ numero }}">Data {{ numero }}</label><input id="datacomp_{{ numero }}" name="datacomp_{{ numero }}" type="date" value="{{ form_data.get('datacomp_' ~ numero,'') }}"></div>
           {% endfor %}
           <div class="field col-1"><label for="formato">Formato de saída</label><select id="formato" name="formato"><option value="docx" {% if form_data.get('formato','docx') == 'docx' %}selected{% endif %}>Word (.docx)</option><option value="pdf" {% if form_data.get('formato') == 'pdf' %}selected{% endif %}>PDF</option></select></div>
         </div>
 
         <div class="actions inline-actions">
-          <button class="btn btn--primary" type="submit">Gerar ASO manual</button>
+          <button class="btn btn--primary" type="submit" id="generateAsoBtn">Gerar ASO manual</button>
           <button class="btn btn--light" type="button" id="clearAsoForm">Limpar formulário</button>
           <a class="btn btn--light" href="{{ url_for('home') }}">Voltar ao início</a>
         </div>
@@ -106,8 +106,11 @@
   const cnpj = document.getElementById('cnpj');
   const cpf = document.getElementById('cpf');
   const clear = document.getElementById('clearAsoForm');
+  const generateBtn = document.getElementById('generateAsoBtn');
   const locais = {{ locais|tojson }};
-  const dateInputs = Array.from(document.querySelectorAll('.aso-date'));
+  const birthDate = document.getElementById('data_nascimento');
+  const clinicalDate = document.getElementById('datacomp_1');
+  const asoDate = document.getElementById('data_aso');
 
   function maskCnpj(value){ const d=value.replace(/\D/g,'').slice(0,14); return d.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2'); }
   function maskCpf(value){ const d=value.replace(/\D/g,'').slice(0,11); return d.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2'); }
@@ -127,19 +130,57 @@
   }
   cnpj.addEventListener('input', e=>e.target.value=maskCnpj(e.target.value));
   cpf.addEventListener('input', e=>e.target.value=maskCpf(e.target.value));
-  dateInputs.forEach(input=>{
-    input.addEventListener('paste', event=>{
-      const pasted=(event.clipboardData || window.clipboardData).getData('text');
-      if(/^\s*\d{4}[-\/.]\d{2}[-\/.]\d{2}/.test(pasted)){
-        event.preventDefault();
-        input.value=maskDateBR(pasted);
+  // Somente a data de nascimento aceita digitação/colagem em DD/MM/AAAA.
+  birthDate.addEventListener('paste', event=>{
+    const pasted=(event.clipboardData || window.clipboardData).getData('text');
+    if(/^\s*\d{4}[-\/.]\d{2}[-\/.]\d{2}/.test(pasted)){
+      event.preventDefault();
+      birthDate.value=maskDateBR(pasted);
+    }
+  });
+  birthDate.addEventListener('input', ()=>{ birthDate.value=maskDateBR(birthDate.value); });
+  if(birthDate.value) birthDate.value=maskDateBR(birthDate.value);
+
+  function validateAsoDates(){
+    const missing=[];
+    let firstMissing=null;
+    if(!asoDate.value){ missing.push('Data do ASO'); firstMissing=firstMissing || asoDate; }
+    if(!clinicalDate.value){ missing.push('Data do Exame Clínico'); firstMissing=firstMissing || clinicalDate; }
+    for(let numero=2; numero<=6; numero++){
+      const exame=document.getElementById(`complementar_${numero}`);
+      const data=document.getElementById(`datacomp_${numero}`);
+      const exameValue=(exame.value || '').trim();
+      const dataValue=(data.value || '').trim();
+      if(exameValue && !dataValue){
+        missing.push(`Data do Exame ${numero} (${exameValue})`);
+        firstMissing=firstMissing || data;
       }
-    });
-    input.addEventListener('input', ()=>{ input.value=maskDateBR(input.value); });
-    if(input.value) input.value=maskDateBR(input.value);
+      if(dataValue && !exameValue){
+        missing.push(`Nome do Exame ${numero}`);
+        firstMissing=firstMissing || exame;
+      }
+    }
+    if(missing.length){
+      alert('Antes de gerar o ASO, preencha:\n- ' + missing.join('\n- '));
+      if(firstMissing) firstMissing.focus();
+      return false;
+    }
+    return true;
+  }
+  generateBtn.addEventListener('click', event=>{
+    if(!validateAsoDates()){
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  });
+  form.addEventListener('submit', event=>{
+    if(!validateAsoDates()){
+      event.preventDefault();
+      event.stopPropagation();
+    }
   });
   unidade.addEventListener('change', updateUnit);
-  clear.addEventListener('click', ()=>{ form.reset(); updateUnit(); });
+  clear.addEventListener('click', ()=>{ form.reset(); clinicalDate.value='{{ today_iso }}'; updateUnit(); });
   if(cnpj.value) cnpj.value=maskCnpj(cnpj.value);
   if(cpf.value) cpf.value=maskCpf(cpf.value);
   updateUnit();

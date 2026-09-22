@@ -27,7 +27,7 @@
       <a class="nav-link {% if request.path.startswith('/separar-exames') %}active{% endif %}" href="/separar-exames/"><span class="nav-icon">▣</span><span class="nav-label">Separar exames</span></a>
       <a class="nav-link {% if request.path.startswith('/exames-a-prazo') %}active{% endif %}" href="{{ url_for('exames_a_prazo') }}"><span class="nav-icon">▤</span><span class="nav-label">Exames a Prazo</span></a>
       <a class="nav-link {% if request.path.startswith('/renumerador') %}active{% endif %}" href="{{ url_for('renumerador') }}"><span class="nav-icon">#</span><span class="nav-label">Renumerador</span></a>
-      <a class="nav-link {% if request.path.startswith('/esocial') %}active{% endif %}" href="{{ url_for('esocial') }}"><span class="nav-icon">⇄</span><span class="nav-label">E-SOCIAL</span></a>
+      <a class="nav-link {% if request.path.startswith('/esocial') %}active{% endif %}" href="{{ url_for('esocial') }}"><span class="nav-icon">⇄</span><span class="nav-label">Recibo eSocial</span></a>
       <a class="nav-link {% if request.path.startswith('/pgr/') or request.path == '/pgr' %}active{% endif %}" href="/pgr/"><span class="nav-icon">▨</span><span class="nav-label">PGR / SST</span></a>
       <div class="nav-group-title">Sistema</div>
       <a class="nav-link {% if request.path.startswith('/status-sistema') %}active{% endif %}" href="{{ url_for('status_sistema') }}"><span class="nav-icon">●</span><span class="nav-label">Status do sistema</span></a>

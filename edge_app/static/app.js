@@ -9,6 +9,7 @@ const selectionSummary = document.getElementById('selectionSummary');
 const loadingOverlay = document.getElementById('loadingOverlay');
 const baseFileInput = document.getElementById('baseFile');
 const baseSheetSelect = document.getElementById('baseSheetSelect');
+const esocialMonthHint = document.getElementById('esocialMonthHint');
 
 let selectedFiles = [];
 
@@ -47,6 +48,23 @@ function setSheetOptions(options) {
     option.textContent = item.label;
     baseSheetSelect.appendChild(option);
   });
+  updateEsocialMonthHint();
+}
+
+function updateEsocialMonthHint() {
+  if (!esocialMonthHint || !baseSheetSelect) return;
+  const value = baseSheetSelect.value || '';
+  if (!value) {
+    esocialMonthHint.textContent = 'O mês dos PDFs será identificado pelo nome da guia escolhida.';
+    return;
+  }
+  const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  const months = ['JANEIRO','FEVEREIRO','MARCO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
+  const labels = {MARCO:'MARÇO'};
+  const month = months.find(item => normalized.includes(item));
+  esocialMonthHint.textContent = month
+    ? `Os PDFs serão nomeados com o mês ${labels[month] || month}.`
+    : 'A guia foi selecionada, mas o mês será validado ao processar.';
 }
 
 async function loadBaseSheets() {
@@ -85,7 +103,7 @@ async function loadBaseSheets() {
 }
 
 function isValidRelFile(file) {
-  return ['.xls', '.xlsx', '.html', '.htm'].some(ext => file.name.toLowerCase().endsWith(ext));
+  return ['.xls', '.xlsx'].some(ext => file.name.toLowerCase().endsWith(ext));
 }
 
 function buildKey(file) {
@@ -111,7 +129,7 @@ function renderFileList() {
   fileListBody.innerHTML = '';
 
   if (selectedFiles.length === 0) {
-    fileListBody.innerHTML = '<tr class="empty-row"><td colspan="4">Nenhum RELFUNCGERAL selecionado.</td></tr>';
+    fileListBody.innerHTML = '<tr class="empty-row"><td colspan="4">Nenhuma planilha de envio selecionada.</td></tr>';
     updateSummary();
     syncHiddenInput();
     return;
@@ -155,12 +173,16 @@ function addFiles(fileList, sourceLabel) {
   renderFileList();
 
   if (ignored > 0) {
-    alert(`${ignored} arquivo(s) foram ignorados porque não são .xls, .xlsx, .html ou .htm.`);
+    alert(`${ignored} arquivo(s) foram ignorados porque não são .xls ou .xlsx.`);
   }
 }
 
 if (baseFileInput) {
   baseFileInput.addEventListener('change', loadBaseSheets);
+}
+
+if (baseSheetSelect) {
+  baseSheetSelect.addEventListener('change', updateEsocialMonthHint);
 }
 
 if (relFilesPicker) {
@@ -190,7 +212,7 @@ if (uploadForm) {
     if (selectedFiles.length === 0) {
       e.preventDefault();
       hideLoading();
-      alert('Selecione pelo menos um arquivo RELFUNCGERAL.');
+      alert('Selecione pelo menos uma planilha de envios do eSocial.');
       return;
     }
 
@@ -198,7 +220,7 @@ if (uploadForm) {
     const selectedSheet = baseSheetSelect.value;
     if (optionsCount > 1 && !selectedSheet) {
       e.preventDefault();
-      alert('Selecione a aba da planilha base.');
+      alert('Selecione a guia/mês da planilha base.');
       return;
     }
 

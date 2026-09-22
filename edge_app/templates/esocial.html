@@ -1,11 +1,17 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#f5f7fb"><title>{{ title }}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><meta name="csrf-token" content="{{ csrf_token() }}"></head>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f5f7fb">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
 <body>
 <div class="app-layout">
   <aside class="sidebar">
-    <div class="brand"><img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho"><div>EDGE<small>E-SOCIAL</small></div></div>
+    <div class="brand"><img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho"><div>EDGE<small>Recibo eSocial</small></div></div>
     <div class="nav-card edge-sidebar-nav">
       <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{{ url_for('home') }}"><span class="nav-icon">⌂</span><span class="nav-label">Início</span></a>
       <div class="nav-group-title">Clínica</div>
@@ -21,7 +27,7 @@
       <a class="nav-link {% if request.path.startswith('/separar-exames') %}active{% endif %}" href="/separar-exames/"><span class="nav-icon">▣</span><span class="nav-label">Separar exames</span></a>
       <a class="nav-link {% if request.path.startswith('/exames-a-prazo') %}active{% endif %}" href="{{ url_for('exames_a_prazo') }}"><span class="nav-icon">▤</span><span class="nav-label">Exames a Prazo</span></a>
       <a class="nav-link {% if request.path.startswith('/renumerador') %}active{% endif %}" href="{{ url_for('renumerador') }}"><span class="nav-icon">#</span><span class="nav-label">Renumerador</span></a>
-      <a class="nav-link {% if request.path.startswith('/esocial') %}active{% endif %}" href="{{ url_for('esocial') }}"><span class="nav-icon">⇄</span><span class="nav-label">E-SOCIAL</span></a>
+      <a class="nav-link {% if request.path.startswith('/esocial') %}active{% endif %}" href="{{ url_for('esocial') }}"><span class="nav-icon">⇄</span><span class="nav-label">Recibo eSocial</span></a>
       <a class="nav-link {% if request.path.startswith('/pgr/') or request.path == '/pgr' %}active{% endif %}" href="/pgr/"><span class="nav-icon">▨</span><span class="nav-label">PGR / SST</span></a>
       <div class="nav-group-title">Sistema</div>
       <a class="nav-link {% if request.path.startswith('/status-sistema') %}active{% endif %}" href="{{ url_for('status_sistema') }}"><span class="nav-icon">●</span><span class="nav-label">Status do sistema</span></a>
@@ -31,34 +37,86 @@
       <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}"><span class="nav-icon">↪</span><span class="nav-label">Sair</span></a>
     </div>
   </aside>
+
   <main class="main-area">
     <div class="topbar compact-topbar">
-      <div class="page-title"><h1>E-SOCIAL EVELLYN</h1></div>
-      
+      <div class="page-title">
+        <h1>Recibo eSocial</h1>
+        <p>Selecione o mês na planilha base e cruze automaticamente os funcionários marcados com OK E-SOCIAL com uma ou mais planilhas de envios do eSocial.</p>
+      </div>
     </div>
 
     <section class="content-card">
       {% with messages = get_flashed_messages() %}{% if messages %}<div class="alert error">{% for message in messages %}<div>{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
+
       <form id="uploadForm" action="{{ url_for('esocial_processar_async') }}" method="post" enctype="multipart/form-data">
-        <div class="form-grid">
-          <div class="field col-4"><label for="pdfMonth">Mês no nome dos PDFs</label><select name="pdf_month" id="pdfMonth" required><option value="" selected disabled>Selecione o mês</option><option>JANEIRO</option><option>FEVEREIRO</option><option>MARÇO</option><option>ABRIL</option><option>MAIO</option><option>JUNHO</option><option>JULHO</option><option>AGOSTO</option><option>SETEMBRO</option><option>OUTUBRO</option><option>NOVEMBRO</option><option>DEZEMBRO</option></select><small>Os arquivos serão nomeados como EMPRESA - CNPJ - MÊS.pdf.</small></div>
-          <div class="field col-2"><label>Planilha base</label><input type="file" name="base_file" id="baseFile" accept=".xls,.xlsx,.html,.htm" required><small>Colunas esperadas: FUNCIONÁRIO, TIPO DE EXAME, DEPOSITANTE e coluna da empresa.</small></div>
-          <div class="field col-2"><label>Aba da planilha base</label><select name="base_sheet" id="baseSheetSelect"><option value="">Carregue a planilha base primeiro</option></select></div>
-          <div class="field col-2"><label>Adicionar RELFUNCGERAL por arquivo</label><input type="file" id="relFilesPicker" accept=".xls,.xlsx,.html,.htm" multiple></div>
-          <div class="field col-2"><label>Adicionar RELFUNCGERAL por pasta</label><input type="file" id="relFolderPicker" accept=".xls,.xlsx,.html,.htm" webkitdirectory directory multiple></div>
+        <div class="section-head">
+          <div>
+            <h2>1. Planilha base</h2>
+            <p>O sistema utilizará somente as linhas da guia escolhida que contenham OK E-SOCIAL.</p>
+          </div>
         </div>
+
+        <div class="form-grid">
+          <div class="field col-2">
+            <label for="baseFile">Planilha base</label>
+            <input type="file" name="base_file" id="baseFile" accept=".xls,.xlsx" required>
+            <small>Após selecionar o arquivo, as guias disponíveis serão carregadas automaticamente.</small>
+          </div>
+          <div class="field col-2">
+            <label for="baseSheetSelect">Guia / mês</label>
+            <select name="base_sheet" id="baseSheetSelect" required>
+              <option value="">Carregue a planilha base primeiro</option>
+            </select>
+            <small id="esocialMonthHint">O mês dos PDFs será identificado pelo nome da guia escolhida.</small>
+          </div>
+        </div>
+
+        <div class="section-head" style="margin-top:26px">
+          <div>
+            <h2>2. Planilhas de envios do eSocial</h2>
+            <p>Envie uma ou várias planilhas. O sistema identifica o CNPJ e cruza somente os funcionários que também estão na planilha base.</p>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="field col-4">
+            <label for="relFilesPicker">Selecionar planilhas</label>
+            <input type="file" id="relFilesPicker" accept=".xls,.xlsx" multiple>
+            <small>Você pode selecionar vários arquivos de uma vez.</small>
+          </div>
+        </div>
+
         <div class="toolbar" style="margin:16px 0">
-          <button type="button" class="btn btn--light" id="clearAllBtn">Limpar lista</button>
-          <span class="helper-box" id="selectionSummary">Nenhum arquivo selecionado.</span>
+          <button type="button" class="btn btn--light" id="clearAllBtn">Limpar planilhas</button>
+          <span class="helper-box" id="selectionSummary">Nenhuma planilha selecionada.</span>
           <span class="selected-chip" id="fileCount">0 arquivo(s)</span>
         </div>
-        <div class="table-wrap"><table class="file-table"><thead><tr><th>Arquivo</th><th>Tamanho</th><th>Origem</th><th>Ação</th></tr></thead><tbody id="fileListBody"><tr class="empty-row"><td colspan="4">Nenhum RELFUNCGERAL selecionado.</td></tr></tbody></table></div>
+
+        <div class="table-wrap">
+          <table class="file-table">
+            <thead><tr><th>Arquivo</th><th>Tamanho</th><th>Origem</th><th>Ação</th></tr></thead>
+            <tbody id="fileListBody"><tr class="empty-row"><td colspan="4">Nenhuma planilha de envio selecionada.</td></tr></tbody>
+          </table>
+        </div>
         <input type="file" name="rel_files" id="hiddenRelFiles" multiple hidden>
-        <div class="actions"><button type="submit" class="btn btn--primary">Processar e baixar ZIP final</button></div>
+
+        <div class="info-box" style="margin-top:18px">
+          <strong>Como o cruzamento funciona:</strong><br>
+          CNPJ da empresa + funcionário da guia base com OK E-SOCIAL → funcionário da planilha de envios → recibo correspondente. Funcionários que existirem apenas na planilha de envios serão ignorados.
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn btn--primary">Gerar recibos e baixar ZIP</button>
+        </div>
       </form>
     </section>
   </main>
 </div>
-<div class="loading-overlay is-hidden" id="loadingOverlay" aria-hidden="true"><div class="loading-card"><div class="spinner"></div><h3>Processando arquivos</h3></div></div>
+
+<div class="loading-overlay is-hidden" id="loadingOverlay" aria-hidden="true">
+  <div class="loading-card"><div class="spinner"></div><h3>Preparando Recibo eSocial</h3><p>O processamento continuará na tela de progresso.</p></div>
+</div>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
-</body></html>
+</body>
+</html>

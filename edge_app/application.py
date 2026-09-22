@@ -21,7 +21,7 @@ from docxtpl import DocxTemplate, RichText
 from docx import Document
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-from docx.shared import Inches, Pt
+from docx.shared import Inches, Pt, Mm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
 from lxml import etree
@@ -2793,27 +2793,65 @@ def anamnese_ocupacional_gerar():
 # =========================
 # ASO MANUAL
 # =========================
+def aso_today_br() -> str:
+    """Data local padrão das unidades EDGE (Belém/Macapá, UTC-3) em DD/MM/AAAA."""
+    return (datetime.utcnow() - timedelta(hours=3)).strftime('%d/%m/%Y')
+
+
 def aso_manual_render_home(form_data=None):
-    form_data = form_data or {}
+    form_data = dict(form_data or {})
     return render_template(
         'aso_manual.html',
         title='ASO manual',
         locais=CLINIC_LOCATIONS,
         form_data=form_data,
+        today_br=aso_today_br(),
     )
+
+
+def parse_date_br(raw_date: str):
+    """Aceita DD/MM/AAAA, DD-MM-AAAA, DD.MM.AAAA, AAAA-MM-DD e datas coladas só com números."""
+    value = (raw_date or '').strip()
+    if not value:
+        return None
+
+    normalized = value.replace('.', '/').replace('-', '/')
+    for fmt in ('%d/%m/%Y', '%Y/%m/%d'):
+        try:
+            return datetime.strptime(normalized, fmt)
+        except ValueError:
+            pass
+
+    digits = re.sub(r'\D', '', value)
+    if len(digits) == 8:
+        # AAAAMMDD quando os quatro primeiros dígitos formam um ano plausível;
+        # caso contrário, interpreta como DDMMAAAA.
+        year_first = int(digits[:4])
+        formats = ('%Y%m%d', '%d%m%Y') if 1900 <= year_first <= 2100 else ('%d%m%Y', '%Y%m%d')
+        for fmt in formats:
+            try:
+                return datetime.strptime(digits, fmt)
+            except ValueError:
+                pass
+
+    raise ValueError('Data inválida.')
 
 
 def format_date_br(raw_date: str) -> str:
     """Converte datas dos formulários para DD/MM/AAAA; vazio permanece vazio."""
-    value = (raw_date or '').strip()
-    if not value:
-        return ''
-    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
-        try:
-            return datetime.strptime(value, fmt).strftime('%d/%m/%Y')
-        except ValueError:
-            pass
-    raise ValueError('Data inválida.')
+    parsed = parse_date_br(raw_date)
+    return parsed.strftime('%d/%m/%Y') if parsed else ''
+
+
+def calculate_age_from_birth(birth_date, reference_date) -> int:
+    if birth_date is None:
+        raise ValueError('Data de nascimento inválida.')
+    reference_date = reference_date or datetime.utcnow()
+    if birth_date.date() > reference_date.date():
+        raise ValueError('A data de nascimento não pode ser posterior à data de referência.')
+    return reference_date.year - birth_date.year - (
+        (reference_date.month, reference_date.day) < (birth_date.month, birth_date.day)
+    )
 
 
 def aso_set_cell_text(cell, text: str) -> None:
@@ -2828,16 +2866,85 @@ def aso_set_cell_text(cell, text: str) -> None:
         paragraph.add_run(text)
 
 
+def aso_apply_one_page_layout(doc, replacements: dict[str, str], complementares: list[tuple[str, str]]) -> None:
+    """Mantém o ASO em uma única página A4 sem alterar a organização visual do modelo."""
+    for section in doc.sections:
+        section.page_width = Mm(210)
+        section.page_height = Mm(297)
+
+    # O modelo possui alguns parágrafos vazios de posicionamento no rodapé.
+    # Eles são comprimidos (não removidos) para preservar linhas/âncoras e evitar 2ª página.
+    doctor_seen = False
+    employee_text = (replacements.get('{{FUNCIONÁRIO}}') or replacements.get('{{FUNCIONARIO}}') or '').strip()
+    for paragraph in doc.paragraphs:
+        text = (paragraph.text or '').strip()
+        if text.startswith('DR. MARLON TEIXEIRA'):
+            doctor_seen = True
+            # identificação final em tamanho discreto para caber no bloco original
+            for run in paragraph.runs:
+                if not run.font.size or run.font.size.pt > 8:
+                    run.font.size = Pt(8)
+        elif doctor_seen and not text:
+            paragraph.paragraph_format.space_before = Pt(0)
+            paragraph.paragraph_format.space_after = Pt(0)
+            paragraph.paragraph_format.line_spacing = Pt(1)
+            for run in paragraph.runs:
+                run.font.size = Pt(1)
+        elif doctor_seen and employee_text and text == employee_text:
+            paragraph.paragraph_format.space_before = Pt(0)
+            paragraph.paragraph_format.space_after = Pt(0)
+            employee_size = 6 if len(employee_text) > 45 else 8
+            paragraph.paragraph_format.line_spacing = Pt(employee_size)
+            for run in paragraph.runs:
+                run.font.size = Pt(employee_size)
+
+    # Campos principais muito longos recebem redução leve de fonte em vez de criar linhas extras.
+    for paragraph in doc.paragraphs:
+        txt = paragraph.text or ''
+        if 'Empresa:' in txt and 'Funcionario:' in txt:
+            target_size = None
+            if len(txt) > 300:
+                target_size = 6.5
+            elif len(txt) > 235:
+                target_size = 7.0
+            elif len(txt) > 185:
+                target_size = 7.5
+            if target_size:
+                for run in paragraph.runs:
+                    run.font.size = Pt(target_size)
+        elif txt.startswith('Tipo de Exame:') and len(txt) > 52:
+            for run in paragraph.runs:
+                run.font.size = Pt(7.5)
+
+    if doc.tables:
+        table = doc.tables[0]
+        for row in table.rows[1:4]:
+            for cell in row.cells:
+                value = (cell.text or '').strip()
+                if len(value) > 42:
+                    target_size = 6
+                elif len(value) > 32:
+                    target_size = 6.5
+                elif len(value) > 24:
+                    target_size = 7.5
+                else:
+                    target_size = None
+                if target_size:
+                    for paragraph in cell.paragraphs:
+                        paragraph.paragraph_format.space_before = Pt(0)
+                        paragraph.paragraph_format.space_after = Pt(0)
+                        for run in paragraph.runs:
+                            run.font.size = Pt(target_size)
+
+
 def aso_fill_docx(template_path: str, output_path: str, replacements: dict[str, str], complementares: list[tuple[str, str]]) -> None:
-    """Preenche o ASO preservando o modelo e as seis linhas de exames complementares."""
-    # Os campos repetidos COMPLEMENTAR/DATACOMP são tratados diretamente na tabela.
-    scalar_replacements = {k: v for k, v in replacements.items() if k not in {'{{COMPLEMENTAR}}', '{{DATACOMP}}'}}
+    """Preenche o ASO preservando o modelo, com exame clínico fixo e até cinco complementares."""
     temp_path = output_path + '.base.docx'
-    replace_docx_placeholders_preserve_layout(template_path, temp_path, scalar_replacements)
+    replace_docx_placeholders_preserve_layout(template_path, temp_path, replacements)
     try:
         doc = Document(temp_path)
         if not doc.tables or len(doc.tables[0].rows) < 4:
-            raise ValueError('O modelo de ASO não contém a tabela de exames complementares esperada.')
+            raise ValueError('O modelo de ASO não contém a tabela de exames esperada.')
         table = doc.tables[0]
         # Visualmente: 1/4 na primeira linha, 2/5 na segunda, 3/6 na terceira.
         mapping = [
@@ -2850,8 +2957,14 @@ def aso_fill_docx(template_path: str, output_path: str, replacements: dict[str, 
         ]
         for idx, (row_exam, col_exam, row_date, col_date) in enumerate(mapping, start=1):
             exame, data = complementares[idx - 1]
-            aso_set_cell_text(table.rows[row_exam].cells[col_exam], f'{idx} – {exame}' if exame else f'{idx} –')
+            if idx == 1:
+                exam_text = '1 – EXAME CLÍNICO'
+            else:
+                exam_text = f'{idx} – {exame}' if exame else f'{idx} –'
+            aso_set_cell_text(table.rows[row_exam].cells[col_exam], exam_text)
             aso_set_cell_text(table.rows[row_date].cells[col_date], data)
+
+        aso_apply_one_page_layout(doc, replacements, complementares)
         doc.save(output_path)
     finally:
         try:
@@ -2880,14 +2993,14 @@ def aso_manual_gerar():
     rg = fisico_clean_text(request.form.get('rg', ''))
     cpf = (request.form.get('cpf') or '').strip()
     data_nascimento_raw = (request.form.get('data_nascimento') or '').strip()
-    idade = (request.form.get('idade') or '').strip()
     cargo = fisico_clean_text(request.form.get('cargo', ''))
     setor = fisico_clean_text(request.form.get('setor', ''))
     tipo_exame = fisico_clean_text(request.form.get('tipo_exame', ''))
     data_aso_raw = (request.form.get('data_aso') or '').strip()
+    data_clinico_raw = (request.form.get('datacomp_1') or '').strip() or aso_today_br()
     formato = (request.form.get('formato', 'docx') or 'docx').lower()
 
-    required = [empresa, cnpj, funcionario, rg, cpf, data_nascimento_raw, idade, cargo, setor, tipo_exame, data_aso_raw]
+    required = [empresa, cnpj, funcionario, rg, cpf, data_nascimento_raw, cargo, setor, tipo_exame, data_aso_raw]
     if any(not value for value in required):
         flash('Preencha todos os dados principais do ASO.', 'error')
         return aso_manual_render_home(form_data)
@@ -2900,15 +3013,20 @@ def aso_manual_gerar():
         return aso_manual_render_home(form_data)
 
     try:
-        data_nascimento = format_date_br(data_nascimento_raw)
-        data_aso = format_date_br(data_aso_raw)
-        complementares = []
-        for numero in range(1, 7):
+        nascimento_dt = parse_date_br(data_nascimento_raw)
+        data_nascimento = nascimento_dt.strftime('%d/%m/%Y')
+        data_aso_dt = parse_date_br(data_aso_raw)
+        data_aso = data_aso_dt.strftime('%d/%m/%Y')
+        idade = str(calculate_age_from_birth(nascimento_dt, data_aso_dt))
+
+        # Exame clínico é fixo; somente a data é editável e vem com hoje por padrão.
+        complementares = [('EXAME CLÍNICO', format_date_br(data_clinico_raw))]
+        for numero in range(2, 7):
             exame = fisico_clean_text(request.form.get(f'complementar_{numero}', ''))
             data_comp = format_date_br(request.form.get(f'datacomp_{numero}', ''))
             complementares.append((exame, data_comp))
-    except ValueError:
-        flash('Confira as datas informadas.', 'error')
+    except ValueError as exc:
+        flash(str(exc) if str(exc) else 'Confira as datas informadas.', 'error')
         return aso_manual_render_home(form_data)
 
     replacements = {
@@ -2919,8 +3037,10 @@ def aso_manual_gerar():
         '{{FUNCIONÁRIO}}': funcionario,
         '{{RG}}': rg,
         '{{CPF}}': cpf,
+        '{{DATANASC}}': data_nascimento,
         '{{DATANASCIMENTO}}': data_nascimento,
         '{{IDADE}}': idade,
+        '{{}}': idade,
         '{{CARGO}}': cargo,
         '{{SETOR}}': setor,
         '{{TIPODEEXAME}}': tipo_exame,

@@ -69,21 +69,22 @@
           <div class="field col-2"><label for="funcionario">Funcionário</label><input id="funcionario" name="funcionario" type="text" required value="{{ form_data.get('funcionario','') }}" placeholder="Nome completo"></div>
           <div class="field col-1"><label for="rg">RG</label><input id="rg" name="rg" type="text" required value="{{ form_data.get('rg','') }}"></div>
           <div class="field col-1"><label for="cpf">CPF</label><input id="cpf" name="cpf" type="text" required maxlength="14" value="{{ form_data.get('cpf','') }}" placeholder="000.000.000-00"></div>
-          <div class="field col-1"><label for="data_nascimento">Data de nascimento</label><input id="data_nascimento" name="data_nascimento" type="date" required value="{{ form_data.get('data_nascimento','') }}"></div>
-          <div class="field col-1"><label for="idade">Idade</label><input id="idade" name="idade" type="number" min="0" max="120" required value="{{ form_data.get('idade','') }}"></div>
+          <div class="field col-1"><label for="data_nascimento">Data de nascimento</label><input id="data_nascimento" name="data_nascimento" class="aso-date" type="text" inputmode="numeric" maxlength="10" required value="{{ form_data.get('data_nascimento','') }}" placeholder="DD/MM/AAAA"><small>A idade é calculada automaticamente a partir desta data.</small></div>
           <div class="field col-2"><label for="cargo">Cargo</label><input id="cargo" name="cargo" type="text" required value="{{ form_data.get('cargo','') }}"></div>
           <div class="field col-2"><label for="setor">Setor</label><input id="setor" name="setor" type="text" required value="{{ form_data.get('setor','') }}"></div>
           <div class="field col-2"><label for="tipo_exame">Tipo de exame</label><input id="tipo_exame" name="tipo_exame" type="text" required value="{{ form_data.get('tipo_exame','') }}" placeholder="Ex.: ADMISSIONAL, PERIÓDICO, DEMISSIONAL"></div>
-          <div class="field col-1"><label for="data_aso">Data do ASO</label><input id="data_aso" name="data_aso" type="date" required value="{{ form_data.get('data_aso','') }}"></div>
+          <div class="field col-1"><label for="data_aso">Data do ASO</label><input id="data_aso" name="data_aso" class="aso-date" type="text" inputmode="numeric" maxlength="10" required value="{{ form_data.get('data_aso','') }}" placeholder="DD/MM/AAAA"></div>
         </div>
 
         <div class="info-box" id="unidadeInfo" style="margin-top:18px">Selecione Belém ou Macapá para visualizar os dados automáticos da EDGE.</div>
 
-        <div class="section-head" style="margin-top:24px"><div><h2>Exames complementares</h2><p>Informe até 6 exames. Todas as datas serão impressas no formato DD/MM/AAAA.</p></div></div>
+        <div class="section-head" style="margin-top:24px"><div><h2>Exames</h2><p>O Exame Clínico é fixo. A data dele vem com a data de hoje, mas pode ser alterada. Os demais exames e datas iniciam em branco.</p></div></div>
         <div class="form-grid aso-complementares-grid">
-          {% for numero in range(1, 7) %}
-          <div class="field col-2"><label for="complementar_{{ numero }}">Exame complementar {{ numero }}</label><input id="complementar_{{ numero }}" name="complementar_{{ numero }}" type="text" value="{{ form_data.get('complementar_' ~ numero,'') }}" placeholder="Ex.: AUDIOMETRIA"></div>
-          <div class="field col-1"><label for="datacomp_{{ numero }}">Data {{ numero }}</label><input id="datacomp_{{ numero }}" name="datacomp_{{ numero }}" type="date" value="{{ form_data.get('datacomp_' ~ numero,'') }}"></div>
+          <div class="field col-2"><label>Exame 1</label><input type="text" value="EXAME CLÍNICO" readonly aria-readonly="true"></div>
+          <div class="field col-1"><label for="datacomp_1">Data do Exame Clínico</label><input id="datacomp_1" name="datacomp_1" class="aso-date" type="text" inputmode="numeric" maxlength="10" required value="{{ form_data.get('datacomp_1', today_br) }}" placeholder="DD/MM/AAAA"></div>
+          {% for numero in range(2, 7) %}
+          <div class="field col-2"><label for="complementar_{{ numero }}">Exame {{ numero }}</label><input id="complementar_{{ numero }}" name="complementar_{{ numero }}" type="text" value="{{ form_data.get('complementar_' ~ numero,'') }}" placeholder="Ex.: AUDIOMETRIA"></div>
+          <div class="field col-1"><label for="datacomp_{{ numero }}">Data {{ numero }}</label><input id="datacomp_{{ numero }}" name="datacomp_{{ numero }}" class="aso-date" type="text" inputmode="numeric" maxlength="10" value="{{ form_data.get('datacomp_' ~ numero,'') }}" placeholder="DD/MM/AAAA"></div>
           {% endfor %}
           <div class="field col-1"><label for="formato">Formato de saída</label><select id="formato" name="formato"><option value="docx" {% if form_data.get('formato','docx') == 'docx' %}selected{% endif %}>Word (.docx)</option><option value="pdf" {% if form_data.get('formato') == 'pdf' %}selected{% endif %}>PDF</option></select></div>
         </div>
@@ -106,9 +107,19 @@
   const cpf = document.getElementById('cpf');
   const clear = document.getElementById('clearAsoForm');
   const locais = {{ locais|tojson }};
+  const dateInputs = Array.from(document.querySelectorAll('.aso-date'));
 
   function maskCnpj(value){ const d=value.replace(/\D/g,'').slice(0,14); return d.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2'); }
   function maskCpf(value){ const d=value.replace(/\D/g,'').slice(0,11); return d.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2'); }
+  function maskDateBR(value){
+    const raw=(value || '').trim();
+    const iso=raw.match(/^(\d{4})[-\/.](\d{2})[-\/.](\d{2})/);
+    if(iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+    const d=raw.replace(/\D/g,'').slice(0,8);
+    if(d.length <= 2) return d;
+    if(d.length <= 4) return `${d.slice(0,2)}/${d.slice(2)}`;
+    return `${d.slice(0,2)}/${d.slice(2,4)}/${d.slice(4)}`;
+  }
   function updateUnit(){
     const local = locais[unidade.value];
     if(!local){ info.textContent='Selecione Belém ou Macapá para visualizar os dados automáticos da EDGE.'; return; }
@@ -116,6 +127,17 @@
   }
   cnpj.addEventListener('input', e=>e.target.value=maskCnpj(e.target.value));
   cpf.addEventListener('input', e=>e.target.value=maskCpf(e.target.value));
+  dateInputs.forEach(input=>{
+    input.addEventListener('paste', event=>{
+      const pasted=(event.clipboardData || window.clipboardData).getData('text');
+      if(/^\s*\d{4}[-\/.]\d{2}[-\/.]\d{2}/.test(pasted)){
+        event.preventDefault();
+        input.value=maskDateBR(pasted);
+      }
+    });
+    input.addEventListener('input', ()=>{ input.value=maskDateBR(input.value); });
+    if(input.value) input.value=maskDateBR(input.value);
+  });
   unidade.addEventListener('change', updateUnit);
   clear.addEventListener('click', ()=>{ form.reset(); updateUnit(); });
   if(cnpj.value) cnpj.value=maskCnpj(cnpj.value);

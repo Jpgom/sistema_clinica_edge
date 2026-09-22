@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f5f7fb">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho">
+      <div>EDGE<small>ASO manual</small></div>
+    </div>
+    <div class="nav-card edge-sidebar-nav">
+      <a class="nav-link" href="{{ url_for('home') }}"><span class="nav-icon">⌂</span><span class="nav-label">Início</span></a>
+      <div class="nav-group-title">Clínica</div>
+      <a class="nav-link" href="{{ url_for('encaminhamento_especialista') }}"><span class="nav-icon">☰</span><span class="nav-label">Enc. individual</span></a>
+      <a class="nav-link" href="{{ url_for('encaminhamento_complementares') }}"><span class="nav-icon">＋</span><span class="nav-label">Enc. complementares</span></a>
+      <a class="nav-link" href="{{ url_for('laudo_pcd') }}"><span class="nav-icon">◉</span><span class="nav-label">Laudo PCD</span></a>
+      <a class="nav-link" href="{{ url_for('fisico_mental') }}"><span class="nav-icon">◆</span><span class="nav-label">Físico e Mental</span></a>
+      <a class="nav-link" href="{{ url_for('atestado_medico') }}"><span class="nav-icon">▧</span><span class="nav-label">Atestado Médico</span></a>
+      <a class="nav-link" href="{{ url_for('anamnese_ocupacional') }}"><span class="nav-icon">✓</span><span class="nav-label">Anamnese Ocupacional</span></a>
+      <a class="nav-link active" href="{{ url_for('aso_manual') }}"><span class="nav-icon">▤</span><span class="nav-label">ASO manual</span></a>
+      <div class="nav-group-title">Interno</div>
+      <a class="nav-link" href="/envio-periodicos/"><span class="nav-icon">✉</span><span class="nav-label">Envio periódicos</span></a>
+      <a class="nav-link" href="/separar-exames/"><span class="nav-icon">▣</span><span class="nav-label">Separar exames</span></a>
+      <a class="nav-link" href="{{ url_for('exames_a_prazo') }}"><span class="nav-icon">▤</span><span class="nav-label">Exames a Prazo</span></a>
+      <a class="nav-link" href="{{ url_for('renumerador') }}"><span class="nav-icon">#</span><span class="nav-label">Renumerador</span></a>
+      <a class="nav-link" href="{{ url_for('esocial') }}"><span class="nav-icon">⇄</span><span class="nav-label">E-SOCIAL</span></a>
+      <a class="nav-link" href="/pgr/"><span class="nav-icon">▨</span><span class="nav-label">PGR / SST</span></a>
+      <div class="nav-group-title">Sistema</div>
+      <a class="nav-link" href="{{ url_for('status_sistema') }}"><span class="nav-icon">●</span><span class="nav-label">Status do sistema</span></a>
+      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}"><span class="nav-icon">◌</span><span class="nav-label">Usuários</span></a>{% endif %}
+      <a class="nav-link" href="{{ url_for('minha_conta') }}"><span class="nav-icon">⌁</span><span class="nav-label">Minha conta</span></a>
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}"><span class="nav-icon">↪</span><span class="nav-label">Sair</span></a>
+    </div>
+  </aside>
+
+  <main class="main-area">
+    <div class="topbar compact-topbar">
+      <div class="page-title">
+        <h1>ASO manual</h1>
+        <p>Preencha os dados do ASO e escolha a unidade. Os dados da EDGE, CRM/RQE e UF são definidos automaticamente para Belém ou Macapá.</p>
+      </div>
+    </div>
+
+    <section class="content-card" id="formulario">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}{% for category, message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}{% endif %}
+      {% endwith %}
+
+      <form action="{{ url_for('aso_manual_gerar') }}" method="post" id="asoManualForm" autocomplete="off" data-download-reset="1" data-has-server-form="{% if form_data %}1{% else %}0{% endif %}">
+        <div class="section-head"><div><h2>Unidade e dados principais</h2><p>Os campos começam vazios ao entrar na funcionalidade e permanecem preenchidos depois da geração até você limpar ou sair.</p></div></div>
+
+        <div class="form-grid">
+          <div class="field col-1">
+            <label for="unidade">Unidade do ASO</label>
+            <select id="unidade" name="unidade" required>
+              <option value="">Selecione</option>
+              {% for key, local in locais.items() %}<option value="{{ key }}" {% if form_data.get('unidade') == key %}selected{% endif %}>{{ local['label'] }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field col-2"><label for="empresa">Empresa</label><input id="empresa" name="empresa" type="text" required value="{{ form_data.get('empresa','') }}" placeholder="Razão social"></div>
+          <div class="field col-1"><label for="cnpj">CNPJ da empresa</label><input id="cnpj" name="cnpj" type="text" required maxlength="18" value="{{ form_data.get('cnpj','') }}" placeholder="00.000.000/0000-00"></div>
+          <div class="field col-2"><label for="funcionario">Funcionário</label><input id="funcionario" name="funcionario" type="text" required value="{{ form_data.get('funcionario','') }}" placeholder="Nome completo"></div>
+          <div class="field col-1"><label for="rg">RG</label><input id="rg" name="rg" type="text" required value="{{ form_data.get('rg','') }}"></div>
+          <div class="field col-1"><label for="cpf">CPF</label><input id="cpf" name="cpf" type="text" required maxlength="14" value="{{ form_data.get('cpf','') }}" placeholder="000.000.000-00"></div>
+          <div class="field col-1"><label for="data_nascimento">Data de nascimento</label><input id="data_nascimento" name="data_nascimento" type="date" required value="{{ form_data.get('data_nascimento','') }}"></div>
+          <div class="field col-1"><label for="idade">Idade</label><input id="idade" name="idade" type="number" min="0" max="120" required value="{{ form_data.get('idade','') }}"></div>
+          <div class="field col-2"><label for="cargo">Cargo</label><input id="cargo" name="cargo" type="text" required value="{{ form_data.get('cargo','') }}"></div>
+          <div class="field col-2"><label for="setor">Setor</label><input id="setor" name="setor" type="text" required value="{{ form_data.get('setor','') }}"></div>
+          <div class="field col-2"><label for="tipo_exame">Tipo de exame</label><input id="tipo_exame" name="tipo_exame" type="text" required value="{{ form_data.get('tipo_exame','') }}" placeholder="Ex.: ADMISSIONAL, PERIÓDICO, DEMISSIONAL"></div>
+          <div class="field col-1"><label for="data_aso">Data do ASO</label><input id="data_aso" name="data_aso" type="date" required value="{{ form_data.get('data_aso','') }}"></div>
+        </div>
+
+        <div class="info-box" id="unidadeInfo" style="margin-top:18px">Selecione Belém ou Macapá para visualizar os dados automáticos da EDGE.</div>
+
+        <div class="section-head" style="margin-top:24px"><div><h2>Exames complementares</h2><p>Informe até 6 exames. Todas as datas serão impressas no formato DD/MM/AAAA.</p></div></div>
+        <div class="form-grid aso-complementares-grid">
+          {% for numero in range(1, 7) %}
+          <div class="field col-2"><label for="complementar_{{ numero }}">Exame complementar {{ numero }}</label><input id="complementar_{{ numero }}" name="complementar_{{ numero }}" type="text" value="{{ form_data.get('complementar_' ~ numero,'') }}" placeholder="Ex.: AUDIOMETRIA"></div>
+          <div class="field col-1"><label for="datacomp_{{ numero }}">Data {{ numero }}</label><input id="datacomp_{{ numero }}" name="datacomp_{{ numero }}" type="date" value="{{ form_data.get('datacomp_' ~ numero,'') }}"></div>
+          {% endfor %}
+          <div class="field col-1"><label for="formato">Formato de saída</label><select id="formato" name="formato"><option value="docx" {% if form_data.get('formato','docx') == 'docx' %}selected{% endif %}>Word (.docx)</option><option value="pdf" {% if form_data.get('formato') == 'pdf' %}selected{% endif %}>PDF</option></select></div>
+        </div>
+
+        <div class="actions inline-actions">
+          <button class="btn btn--primary" type="submit">Gerar ASO manual</button>
+          <button class="btn btn--light" type="button" id="clearAsoForm">Limpar formulário</button>
+          <a class="btn btn--light" href="{{ url_for('home') }}">Voltar ao início</a>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+<script>
+(function(){
+  const form = document.getElementById('asoManualForm');
+  const unidade = document.getElementById('unidade');
+  const info = document.getElementById('unidadeInfo');
+  const cnpj = document.getElementById('cnpj');
+  const cpf = document.getElementById('cpf');
+  const clear = document.getElementById('clearAsoForm');
+  const locais = {{ locais|tojson }};
+
+  function maskCnpj(value){ const d=value.replace(/\D/g,'').slice(0,14); return d.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2'); }
+  function maskCpf(value){ const d=value.replace(/\D/g,'').slice(0,11); return d.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2'); }
+  function updateUnit(){
+    const local = locais[unidade.value];
+    if(!local){ info.textContent='Selecione Belém ou Macapá para visualizar os dados automáticos da EDGE.'; return; }
+    info.innerHTML = `<strong>${local.label}</strong><br>CNPJ EDGE: ${local.cnpj_edge_aso}<br>Dr. Marlon Teixeira: ${local.info_doutor_aso}<br>UF: ${local.uf}`;
+  }
+  cnpj.addEventListener('input', e=>e.target.value=maskCnpj(e.target.value));
+  cpf.addEventListener('input', e=>e.target.value=maskCpf(e.target.value));
+  unidade.addEventListener('change', updateUnit);
+  clear.addEventListener('click', ()=>{ form.reset(); updateUnit(); });
+  if(cnpj.value) cnpj.value=maskCnpj(cnpj.value);
+  if(cpf.value) cpf.value=maskCpf(cpf.value);
+  updateUnit();
+})();
+</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

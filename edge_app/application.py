@@ -60,6 +60,8 @@ ATESTADO_MEDICO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ATESTAD
 PCD_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "MODELO LAUDO PCD.docx")
 ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE.docx")
 ENCAMINHAMENTO_COMPLEMENTARES_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTO_COMPLEMENTARES_TEMPLATE.docx")
+ANAMNESE_OCUPACIONAL_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ANAMNESE_OCUPACIONAL_TEMPLATE.docx")
+ASO_MANUAL_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ASO_MANUAL_TEMPLATE.docx")
 
 # Dados oficiais das unidades usados em todos os modelos da Clínica.
 # Manter centralizado evita divergência de endereço/telefone entre documentos.
@@ -72,6 +74,9 @@ CLINIC_LOCATIONS = {
         'endereco': 'TRAVESSA DO CHACO, Nº2546, ENTRE ALMIRANTE BARROSO E JOÃO PAULO – BELÉM – PA',
         'telefone': '91– 3349-6948',
         'medico_fisico_mental': 'CRM Nº 4480 – RQE Nº6041 PA',
+        'cnpj_edge_aso': '28.589.436/0001-87',
+        'info_doutor_aso': 'Nº 4480 – RQE Nº 6041 PA',
+        'uf': 'PA',
     },
     'macapa': {
         'label': 'MACAPÁ, AP',
@@ -81,6 +86,9 @@ CLINIC_LOCATIONS = {
         'endereco': 'RUA ELIÉZER LEVY, Nº 2583, TREM, MACAPÁ-AP',
         'telefone': '91– 98356-8044',
         'medico_fisico_mental': 'CRM Nº 002800 – RQE Nº959 AP',
+        'cnpj_edge_aso': '33.789.248/0001-32',
+        'info_doutor_aso': 'Nº 0002800 – RQE Nº 959 AP',
+        'uf': 'AP',
     },
 }
 
@@ -2696,6 +2704,256 @@ def atestado_medico_gerar():
         payload = Path(docx_path).read_bytes()
         return send_file(io.BytesIO(payload), as_attachment=True, download_name=f'{filename_base}.docx', mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 
+
+
+# =========================
+# ANAMNESE OCUPACIONAL - SRQ-20
+# =========================
+def anamnese_render_home(form_data=None):
+    form_data = form_data or {}
+    return render_template(
+        'anamnese_ocupacional.html',
+        title='Anamnese Ocupacional',
+        form_data=form_data,
+    )
+
+
+def anamnese_fill_docx(template_path: str, output_path: str, empresa: str, cnpj: str, nome: str, funcao: str) -> None:
+    """Preenche somente os campos explicitamente marcados com {{ }} no modelo.
+
+    As perguntas, colunas SIM/NÃO e a pontuação permanecem em branco para
+    preenchimento manual no documento impresso.
+    """
+    replacements = {
+        '{{EMPRESA}}': empresa,
+        '{{CNPJ}}': cnpj,
+        '{{NOME}}': nome,
+        '{{FUNCAO}}': funcao,
+    }
+    replace_docx_placeholders_preserve_layout(template_path, output_path, replacements)
+
+
+@app.route('/anamnese-ocupacional', methods=['GET'])
+def anamnese_ocupacional():
+    return anamnese_render_home()
+
+
+@app.route('/anamnese-ocupacional/gerar', methods=['POST'])
+def anamnese_ocupacional_gerar():
+    form_data = request.form.to_dict(flat=True)
+    empresa = fisico_clean_text(request.form.get('empresa', ''))
+    cnpj = (request.form.get('cnpj') or '').strip()
+    nome = fisico_clean_text(request.form.get('nome', ''))
+    funcao = fisico_clean_text(request.form.get('funcao', ''))
+    formato = (request.form.get('formato', 'docx') or 'docx').lower()
+
+    if not empresa or not cnpj or not nome or not funcao:
+        flash('Preencha empresa, CNPJ, nome e função.', 'error')
+        return anamnese_render_home(form_data)
+
+    cnpj_digits = somente_numeros(cnpj)
+    if len(cnpj_digits) != 14:
+        flash('CNPJ inválido. Informe os 14 números do CNPJ.', 'error')
+        return anamnese_render_home(form_data)
+
+    filename_base = sanitize_filename(f'ANAMNESE OCUPACIONAL - {nome}')
+    with tempfile.TemporaryDirectory() as tmpdir:
+        docx_path = os.path.join(tmpdir, f'{filename_base}.docx')
+        try:
+            anamnese_fill_docx(
+                ANAMNESE_OCUPACIONAL_TEMPLATE_PATH,
+                docx_path,
+                empresa,
+                cnpj,
+                nome,
+                funcao,
+            )
+        except Exception:
+            logger.exception('Erro ao gerar anamnese ocupacional')
+            flash('Não foi possível gerar a anamnese. Confira os dados e tente novamente.', 'error')
+            return anamnese_render_home(form_data)
+
+        if formato == 'pdf':
+            try:
+                pdf_path = fisico_convert_to_pdf(docx_path, tmpdir)
+                payload = Path(pdf_path).read_bytes()
+                return send_file(io.BytesIO(payload), as_attachment=True, download_name=f'{filename_base}.pdf', mimetype='application/pdf')
+            except Exception as exc:
+                flash(f'Não foi possível gerar PDF agora: {exc}. O arquivo foi enviado em Word.', 'error')
+
+        payload = Path(docx_path).read_bytes()
+        return send_file(
+            io.BytesIO(payload),
+            as_attachment=True,
+            download_name=f'{filename_base}.docx',
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        )
+
+
+# =========================
+# ASO MANUAL
+# =========================
+def aso_manual_render_home(form_data=None):
+    form_data = form_data or {}
+    return render_template(
+        'aso_manual.html',
+        title='ASO manual',
+        locais=CLINIC_LOCATIONS,
+        form_data=form_data,
+    )
+
+
+def format_date_br(raw_date: str) -> str:
+    """Converte datas dos formulários para DD/MM/AAAA; vazio permanece vazio."""
+    value = (raw_date or '').strip()
+    if not value:
+        return ''
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
+        try:
+            return datetime.strptime(value, fmt).strftime('%d/%m/%Y')
+        except ValueError:
+            pass
+    raise ValueError('Data inválida.')
+
+
+def aso_set_cell_text(cell, text: str) -> None:
+    """Atualiza o texto de uma célula preservando o máximo do estilo/layout original."""
+    paragraph = cell.paragraphs[0] if cell.paragraphs else cell.add_paragraph()
+    if paragraph.runs:
+        first = paragraph.runs[0]
+        first.text = text
+        for run in paragraph.runs[1:]:
+            run.text = ''
+    else:
+        paragraph.add_run(text)
+
+
+def aso_fill_docx(template_path: str, output_path: str, replacements: dict[str, str], complementares: list[tuple[str, str]]) -> None:
+    """Preenche o ASO preservando o modelo e as seis linhas de exames complementares."""
+    # Os campos repetidos COMPLEMENTAR/DATACOMP são tratados diretamente na tabela.
+    scalar_replacements = {k: v for k, v in replacements.items() if k not in {'{{COMPLEMENTAR}}', '{{DATACOMP}}'}}
+    temp_path = output_path + '.base.docx'
+    replace_docx_placeholders_preserve_layout(template_path, temp_path, scalar_replacements)
+    try:
+        doc = Document(temp_path)
+        if not doc.tables or len(doc.tables[0].rows) < 4:
+            raise ValueError('O modelo de ASO não contém a tabela de exames complementares esperada.')
+        table = doc.tables[0]
+        # Visualmente: 1/4 na primeira linha, 2/5 na segunda, 3/6 na terceira.
+        mapping = [
+            (1, 0, 1, 1),
+            (2, 0, 2, 1),
+            (3, 0, 3, 1),
+            (1, 2, 1, 3),
+            (2, 2, 2, 3),
+            (3, 2, 3, 3),
+        ]
+        for idx, (row_exam, col_exam, row_date, col_date) in enumerate(mapping, start=1):
+            exame, data = complementares[idx - 1]
+            aso_set_cell_text(table.rows[row_exam].cells[col_exam], f'{idx} – {exame}' if exame else f'{idx} –')
+            aso_set_cell_text(table.rows[row_date].cells[col_date], data)
+        doc.save(output_path)
+    finally:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+
+
+@app.route('/aso-manual', methods=['GET'])
+def aso_manual():
+    return aso_manual_render_home()
+
+
+@app.route('/aso-manual/gerar', methods=['POST'])
+def aso_manual_gerar():
+    form_data = request.form.to_dict(flat=True)
+    unidade = (request.form.get('unidade') or '').strip().lower()
+    local = CLINIC_LOCATIONS.get(unidade)
+    if not local:
+        flash('Selecione a unidade de Belém ou Macapá.', 'error')
+        return aso_manual_render_home(form_data)
+
+    empresa = fisico_clean_text(request.form.get('empresa', ''))
+    cnpj = (request.form.get('cnpj') or '').strip()
+    funcionario = fisico_clean_text(request.form.get('funcionario', ''))
+    rg = fisico_clean_text(request.form.get('rg', ''))
+    cpf = (request.form.get('cpf') or '').strip()
+    data_nascimento_raw = (request.form.get('data_nascimento') or '').strip()
+    idade = (request.form.get('idade') or '').strip()
+    cargo = fisico_clean_text(request.form.get('cargo', ''))
+    setor = fisico_clean_text(request.form.get('setor', ''))
+    tipo_exame = fisico_clean_text(request.form.get('tipo_exame', ''))
+    data_aso_raw = (request.form.get('data_aso') or '').strip()
+    formato = (request.form.get('formato', 'docx') or 'docx').lower()
+
+    required = [empresa, cnpj, funcionario, rg, cpf, data_nascimento_raw, idade, cargo, setor, tipo_exame, data_aso_raw]
+    if any(not value for value in required):
+        flash('Preencha todos os dados principais do ASO.', 'error')
+        return aso_manual_render_home(form_data)
+
+    if len(somente_numeros(cnpj)) != 14:
+        flash('CNPJ inválido. Informe os 14 números do CNPJ.', 'error')
+        return aso_manual_render_home(form_data)
+    if len(somente_numeros(cpf)) != 11:
+        flash('CPF inválido. Informe os 11 números do CPF.', 'error')
+        return aso_manual_render_home(form_data)
+
+    try:
+        data_nascimento = format_date_br(data_nascimento_raw)
+        data_aso = format_date_br(data_aso_raw)
+        complementares = []
+        for numero in range(1, 7):
+            exame = fisico_clean_text(request.form.get(f'complementar_{numero}', ''))
+            data_comp = format_date_br(request.form.get(f'datacomp_{numero}', ''))
+            complementares.append((exame, data_comp))
+    except ValueError:
+        flash('Confira as datas informadas.', 'error')
+        return aso_manual_render_home(form_data)
+
+    replacements = {
+        '{{cnpjedge}}': local['cnpj_edge_aso'],
+        '{{EMPRESA}}': empresa,
+        '{{CNPJ}}': cnpj,
+        '{{FUNCIONARIO}}': funcionario,
+        '{{FUNCIONÁRIO}}': funcionario,
+        '{{RG}}': rg,
+        '{{CPF}}': cpf,
+        '{{DATANASCIMENTO}}': data_nascimento,
+        '{{IDADE}}': idade,
+        '{{CARGO}}': cargo,
+        '{{SETOR}}': setor,
+        '{{TIPODEEXAME}}': tipo_exame,
+        '{{DATA}}': data_aso,
+        '{{INFODOUTOR}}': local['info_doutor_aso'],
+        '{{UF}}': local['uf'],
+    }
+
+    filename_base = sanitize_filename(f'ASO MANUAL - {funcionario}')
+    with tempfile.TemporaryDirectory() as tmpdir:
+        docx_path = os.path.join(tmpdir, f'{filename_base}.docx')
+        try:
+            aso_fill_docx(ASO_MANUAL_TEMPLATE_PATH, docx_path, replacements, complementares)
+        except Exception:
+            logger.exception('Erro ao gerar ASO manual')
+            flash('Não foi possível gerar o ASO manual. Confira os dados e tente novamente.', 'error')
+            return aso_manual_render_home(form_data)
+
+        if formato == 'pdf':
+            try:
+                pdf_path = fisico_convert_to_pdf(docx_path, tmpdir)
+                payload = Path(pdf_path).read_bytes()
+                return send_file(io.BytesIO(payload), as_attachment=True, download_name=f'{filename_base}.pdf', mimetype='application/pdf')
+            except Exception as exc:
+                flash(f'Não foi possível gerar PDF agora: {exc}. O arquivo foi enviado em Word.', 'error')
+
+        payload = Path(docx_path).read_bytes()
+        return send_file(
+            io.BytesIO(payload),
+            as_attachment=True,
+            download_name=f'{filename_base}.docx',
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        )
 
 # =========================
 # LAUDO PCD

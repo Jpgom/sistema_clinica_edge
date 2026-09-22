@@ -1694,3 +1694,94 @@ body.edge-bold-site .btn--primary,body.edge-bold-site .btn-primary,body.edge-bol
     padding:28px clamp(18px,2.8vw,40px) 46px !important;
   }
 }
+
+/* Anamnese Ocupacional / SRQ-20 */
+.anamnese-question-head{
+  margin-top:28px!important;
+  align-items:flex-end!important;
+}
+.anamnese-score-box{
+  min-width:260px;
+  padding:12px 14px;
+  border:1px solid var(--border);
+  border-radius:9px;
+  background:#f8fbfa;
+}
+.anamnese-score-box>label{
+  display:block;
+  margin-bottom:6px;
+  font-size:12px;
+  font-weight:700;
+  color:#303733;
+}
+.anamnese-score-line{display:flex;gap:8px;align-items:center}
+.anamnese-score-line input{width:110px!important;min-height:38px!important}
+.anamnese-score-box small{display:block;margin-top:6px;font-size:11px;color:var(--muted)}
+.anamnese-list{
+  border:1px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+  background:#fff;
+}
+.anamnese-row{
+  display:grid;
+  grid-template-columns:44px minmax(0,1fr) 78px 78px;
+  min-height:52px;
+  border-bottom:1px solid var(--border);
+  align-items:stretch;
+}
+.anamnese-row:last-child{border-bottom:0}
+.anamnese-number{
+  display:grid;
+  place-items:center;
+  font-weight:800;
+  font-size:13px;
+  background:#f6f9f8;
+  border-right:1px solid var(--border);
+}
+.anamnese-question{
+  display:flex;
+  align-items:center;
+  padding:10px 12px;
+  font-size:13px;
+  font-weight:600;
+  color:#252a27;
+}
+.anamnese-choice{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  margin:0;
+  padding:8px;
+  border-left:1px solid var(--border);
+  cursor:pointer;
+  font-size:12px;
+  font-weight:800;
+  color:#3f4844;
+  background:#fff;
+}
+.anamnese-choice:hover{background:#f8fbfa}
+.anamnese-choice input{width:16px;height:16px;accent-color:var(--primary)}
+.anamnese-result-box{
+  margin-top:16px;
+  padding:13px 15px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:#f8fbfa;
+  font-size:13px;
+}
+.anamnese-result-box strong{display:block;margin-bottom:3px;color:#202421}
+.anamnese-item17-alert{margin-top:12px!important}
+
+@media (max-width:760px){
+  .anamnese-question-head{align-items:stretch!important}
+  .anamnese-score-box{width:100%;min-width:0}
+  .anamnese-row{grid-template-columns:38px minmax(0,1fr) 62px 62px}
+  .anamnese-question{font-size:12px;padding:9px 8px}
+  .anamnese-choice{font-size:11px;padding:6px 4px;gap:4px}
+}
+@media (max-width:520px){
+  .anamnese-row{grid-template-columns:34px minmax(0,1fr) 54px 54px}
+  .anamnese-choice span{font-size:10px}
+}

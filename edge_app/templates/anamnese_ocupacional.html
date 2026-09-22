@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f5f7fb">
+<title>{{ title }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho">
+      <div>EDGE<small>Anamnese Ocupacional</small></div>
+    </div>
+    <div class="nav-card edge-sidebar-nav">
+      <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{{ url_for('home') }}"><span class="nav-icon">⌂</span><span class="nav-label">Início</span></a>
+      <div class="nav-group-title">Clínica</div>
+      <a class="nav-link {% if request.path.startswith('/encaminhamento-especialista') %}active{% endif %}" href="{{ url_for('encaminhamento_especialista') }}"><span class="nav-icon">☰</span><span class="nav-label">Enc. individual</span></a>
+      <a class="nav-link {% if request.path.startswith('/encaminhamento-complementares') %}active{% endif %}" href="{{ url_for('encaminhamento_complementares') }}"><span class="nav-icon">＋</span><span class="nav-label">Enc. complementares</span></a>
+      <a class="nav-link {% if request.path.startswith('/laudo-pcd') %}active{% endif %}" href="{{ url_for('laudo_pcd') }}"><span class="nav-icon">◉</span><span class="nav-label">Laudo PCD</span></a>
+      <a class="nav-link {% if request.path.startswith('/fisico-mental') %}active{% endif %}" href="{{ url_for('fisico_mental') }}"><span class="nav-icon">◆</span><span class="nav-label">Físico e Mental</span></a>
+      <a class="nav-link {% if request.path.startswith('/atestado-medico') %}active{% endif %}" href="{{ url_for('atestado_medico') }}"><span class="nav-icon">▧</span><span class="nav-label">Atestado Médico</span></a>
+      <a class="nav-link active" href="{{ url_for('anamnese_ocupacional') }}"><span class="nav-icon">✓</span><span class="nav-label">Anamnese Ocupacional</span></a>
+      <a class="nav-link {% if request.path.startswith('/aso-manual') %}active{% endif %}" href="{{ url_for('aso_manual') }}"><span class="nav-icon">▤</span><span class="nav-label">ASO manual</span></a>
+      <div class="nav-group-title">Interno</div>
+      <a class="nav-link" href="/envio-periodicos/"><span class="nav-icon">✉</span><span class="nav-label">Envio periódicos</span></a>
+      <a class="nav-link" href="/separar-exames/"><span class="nav-icon">▣</span><span class="nav-label">Separar exames</span></a>
+      <a class="nav-link" href="{{ url_for('exames_a_prazo') }}"><span class="nav-icon">▤</span><span class="nav-label">Exames a Prazo</span></a>
+      <a class="nav-link" href="{{ url_for('renumerador') }}"><span class="nav-icon">#</span><span class="nav-label">Renumerador</span></a>
+      <a class="nav-link" href="{{ url_for('esocial') }}"><span class="nav-icon">⇄</span><span class="nav-label">E-SOCIAL</span></a>
+      <a class="nav-link" href="/pgr/"><span class="nav-icon">▨</span><span class="nav-label">PGR / SST</span></a>
+      <div class="nav-group-title">Sistema</div>
+      <a class="nav-link" href="{{ url_for('status_sistema') }}"><span class="nav-icon">●</span><span class="nav-label">Status do sistema</span></a>
+      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}"><span class="nav-icon">◌</span><span class="nav-label">Usuários</span></a>{% endif %}
+      <a class="nav-link" href="{{ url_for('minha_conta') }}"><span class="nav-icon">⌁</span><span class="nav-label">Minha conta</span></a>
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}"><span class="nav-icon">↪</span><span class="nav-label">Sair</span></a>
+    </div>
+  </aside>
+
+  <main class="main-area">
+    <div class="topbar compact-topbar">
+      <div class="page-title">
+        <h1>Anamnese Ocupacional</h1>
+        <p>O sistema preenche somente os campos marcados com {{ '{{' }} {{ '}}' }} no modelo. As respostas do SRQ-20 e a pontuação serão marcadas manualmente após a impressão.</p>
+      </div>
+    </div>
+
+    <section class="content-card" id="formulario">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}{% for category, message in messages %}<div class="alert {{ category }}">{{ message }}</div>{% endfor %}{% endif %}
+      {% endwith %}
+
+      <form action="{{ url_for('anamnese_ocupacional_gerar') }}" method="post" id="anamneseForm" autocomplete="off" data-download-reset="1" data-has-server-form="{% if form_data %}1{% else %}0{% endif %}">
+        <div class="section-head">
+          <div>
+            <h2>Dados da anamnese</h2>
+            <p>As perguntas, SIM/NÃO e pontuação permanecem em branco no documento.</p>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="field col-2">
+            <label for="empresa">Empresa</label>
+            <input id="empresa" name="empresa" type="text" required placeholder="Razão social" value="{{ form_data.get('empresa','') }}">
+          </div>
+          <div class="field col-1">
+            <label for="cnpj">CNPJ</label>
+            <input id="cnpj" name="cnpj" type="text" required maxlength="18" placeholder="00.000.000/0000-00" value="{{ form_data.get('cnpj','') }}">
+          </div>
+          <div class="field col-2">
+            <label for="nome">Nome</label>
+            <input id="nome" name="nome" type="text" required placeholder="Nome completo do colaborador" value="{{ form_data.get('nome','') }}">
+          </div>
+          <div class="field col-2">
+            <label for="funcao">Função</label>
+            <input id="funcao" name="funcao" type="text" required placeholder="Função do colaborador" value="{{ form_data.get('funcao','') }}">
+          </div>
+          <div class="field col-1">
+            <label for="formato">Formato de saída</label>
+            <select id="formato" name="formato">
+              <option value="docx" {% if form_data.get('formato','docx') == 'docx' %}selected{% endif %}>Word (.docx)</option>
+              <option value="pdf" {% if form_data.get('formato','') == 'pdf' %}selected{% endif %}>PDF</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="info-box" style="margin-top:18px">
+          <strong>Preenchimento manual no impresso:</strong> as 20 perguntas, as colunas SIM/NÃO e a pontuação total não serão alteradas pelo sistema.
+        </div>
+
+        <div class="actions inline-actions">
+          <button class="btn btn--primary" type="submit">Gerar anamnese</button>
+          <button class="btn btn--light" type="button" id="clearAnamneseForm">Limpar formulário</button>
+          <a class="btn btn--light" href="{{ url_for('home') }}">Voltar ao início</a>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+<script>
+(function(){
+  const form = document.getElementById('anamneseForm');
+  const cnpjInput = document.getElementById('cnpj');
+  const clearButton = document.getElementById('clearAnamneseForm');
+  function maskCnpj(value){
+    const digits = value.replace(/\D/g, '').slice(0,14);
+    return digits.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
+  }
+  cnpjInput.addEventListener('input', e => { e.target.value = maskCnpj(e.target.value); });
+  if(cnpjInput.value) cnpjInput.value = maskCnpj(cnpjInput.value);
+  clearButton.addEventListener('click', () => form.reset());
+})();
+</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

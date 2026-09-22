@@ -20,6 +20,8 @@
       <a class="nav-link {% if request.path.startswith('/laudo-pcd') %}active{% endif %}" href="{{ url_for('laudo_pcd') }}"><span class="nav-icon">◉</span><span class="nav-label">Laudo PCD</span></a>
       <a class="nav-link {% if request.path.startswith('/fisico-mental') %}active{% endif %}" href="{{ url_for('fisico_mental') }}"><span class="nav-icon">◆</span><span class="nav-label">Físico e Mental</span></a>
       <a class="nav-link {% if request.path.startswith('/atestado-medico') %}active{% endif %}" href="{{ url_for('atestado_medico') }}"><span class="nav-icon">▧</span><span class="nav-label">Atestado Médico</span></a>
+      <a class="nav-link {% if request.path.startswith('/anamnese-ocupacional') %}active{% endif %}" href="{{ url_for('anamnese_ocupacional') }}"><span class="nav-icon">✓</span><span class="nav-label">Anamnese Ocupacional</span></a>
+      <a class="nav-link {% if request.path.startswith('/aso-manual') %}active{% endif %}" href="{{ url_for('aso_manual') }}"><span class="nav-icon">▤</span><span class="nav-label">ASO manual</span></a>
       <div class="nav-group-title">Interno</div>
       <a class="nav-link {% if request.path.startswith('/envio-periodicos') %}active{% endif %}" href="/envio-periodicos/"><span class="nav-icon">✉</span><span class="nav-label">Envio periódicos</span></a>
       <a class="nav-link {% if request.path.startswith('/separar-exames') %}active{% endif %}" href="/separar-exames/"><span class="nav-icon">▣</span><span class="nav-label">Separar exames</span></a>

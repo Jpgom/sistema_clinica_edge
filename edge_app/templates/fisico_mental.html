@@ -121,6 +121,17 @@
           </div>
 
           <div class="field col-1">
+            <label for="local_exame">Unidade de atendimento</label>
+            <select id="local_exame" name="local_exame" required>
+              <option value="">Selecione</option>
+              {% for key, local in locais.items() %}
+                <option value="{{ key }}" {% if form_data.get('local_exame','') == key %}selected{% endif %}>{{ local['label'] }}</option>
+              {% endfor %}
+            </select>
+            <small>Define cidade, endereço e CRM/RQE do médico no documento.</small>
+          </div>
+
+          <div class="field col-1">
             <label for="formato">Formato de saída</label>
             <select id="formato" name="formato">
               <option value="docx" {% if form_data.get('formato','docx') == 'docx' %}selected{% endif %}>Word (.docx)</option>

@@ -90,6 +90,17 @@
             <input id="data_laudo" name="data_laudo" type="date" value="{{ form_data.get('data_laudo', today) }}">
           </div>
 
+          <div class="field col-1">
+            <label for="local_exame">Unidade de atendimento</label>
+            <select id="local_exame" name="local_exame" required>
+              <option value="">Selecione</option>
+              {% for key, local in locais.items() %}
+                <option value="{{ key }}" {% if form_data.get('local_exame','') == key %}selected{% endif %}>{{ local['label'] }}</option>
+              {% endfor %}
+            </select>
+            <small>A cidade do laudo será preenchida automaticamente.</small>
+          </div>
+
           <div class="field col-2">
             <label for="nome">Nome do colaborador</label>
             <input id="nome" name="nome" type="text" required placeholder="Nome completo" value="{{ form_data.get('nome','') }}">

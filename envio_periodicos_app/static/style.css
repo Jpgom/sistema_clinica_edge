@@ -44,3 +44,22 @@
 
 /* Repaginação geral EDGE */
 .card,.panel,.content-card{box-shadow:0 10px 30px rgba(16,24,40,.06)!important}.btn,.edge-menu-link,.nav-link{transition:transform .15s ease,background .15s ease,box-shadow .15s ease}.btn:hover,.edge-menu-link:hover,.nav-link:hover{transform:translateY(-1px)}.page-head,.edge-module-topbar,.topbar{border-radius:20px}
+
+/* EDGE minimal 2026-09 — visual simplificado e coerente com o sistema principal */
+:root{
+  --navy:#12679a;--navy-dark:#0d557f;--navy-soft:#eef6fa;
+  --bg:#f4f8f7;--surface:#fff;--text:#202421;--muted:#66706c;
+  --line:#dce4e1;--line-dark:#cbd5d1;--shadow:none;--radius:10px;
+}
+body{font-family:Arial,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+.sidebar{background:#fff;color:var(--text);border-right:1px solid var(--line);box-shadow:none}
+.brand{color:#111}.brand-mark{background:var(--navy-soft);color:var(--navy);border:1px solid #d8e8f1;border-radius:8px}
+.brand small,.version{color:#7b8580}.nav-label{color:#8a9490}.nav-link{color:#525d58;border-radius:7px}
+.nav-link:hover,.nav-link.active{background:var(--navy-soft);color:var(--navy-dark)}
+.nav-link.active{box-shadow:inset 3px 0 0 var(--navy)}.sidebar-footer{border-color:var(--line)}.logout-link{color:#8d3439}
+.topbar{background:#fff;border-color:var(--line);backdrop-filter:none;box-shadow:none}
+.content{max-width:1320px;padding:26px}.page-head h1{font-size:28px}.eyebrow{color:var(--navy)}
+.card,.summary-strip,.unit-card,.kpi-card,.workflow-card,.toolbar-card{box-shadow:none;border-color:var(--line);border-radius:10px}
+.unit-card:hover{transform:none;box-shadow:none;border-color:#aebdb7}.unit-initial,.mini-mark{border-radius:7px}.btn{border-radius:7px;box-shadow:none}.btn:hover{transform:none;box-shadow:none}
+.form-control{border-radius:7px}.upload-box{border-radius:9px;background:#fbfdfc}.upload-icon{border-radius:7px}.table-toolbar{background:#fbfdfc}
+@media(max-width:900px){.content{padding:18px}}

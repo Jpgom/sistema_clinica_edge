@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}EDGE | Separar exames{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=edge-repaginado-recibo-1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=edge-minimal-20260922">
 </head>
 <body class="edge-integrated-body">
 <div class="edge-integrated-layout">
@@ -19,7 +19,6 @@
       <a class="edge-menu-link" href="/envio-periodicos/">📧 Envio periódicos</a>
       <a class="edge-menu-link active" href="{{ request.script_root or '/separar-exames' }}/">📂 Separar exames</a>
       <a class="edge-menu-link" href="/exames-a-prazo">🧾 Exames a Prazo</a>
-      <a class="edge-menu-link" href="/encaminhamentos">📄 Encaminhamentos</a>
       <a class="edge-menu-link" href="/encaminhamento-especialista">📝 Enc. individual</a>
       <a class="edge-menu-link" href="/encaminhamento-complementares">🧪 Enc. complementares</a>
       <a class="edge-menu-link" href="/renumerador">🔢 Renumerador</a>
@@ -54,7 +53,7 @@
 </div>
 <div id="toast" class="toast" aria-live="polite"></div>
 <script>window.EDGE_BASE_PATH = {{ (request.script_root or "")|tojson }};</script>
-<script src="{{ url_for('static', filename='common.js') }}?v=edge-repaginado-recibo-1"></script>
+<script src="{{ url_for('static', filename='common.js') }}?v=edge-minimal-20260922"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

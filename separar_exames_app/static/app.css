@@ -225,3 +225,17 @@
 
 /* Repaginação geral EDGE */
 .card,.panel,.content-card{box-shadow:0 10px 30px rgba(16,24,40,.06)!important}.btn,.edge-menu-link,.nav-link{transition:transform .15s ease,background .15s ease,box-shadow .15s ease}.btn:hover,.edge-menu-link:hover,.nav-link:hover{transform:translateY(-1px)}.page-head,.edge-module-topbar,.topbar{border-radius:20px}
+
+/* EDGE minimal 2026-09 — menos elementos chamativos */
+:root{--edge-bg:#f4f8f7;--edge-surface:#fff;--edge-text:#202421;--edge-muted:#66706c;--edge-line:#dce4e1;--edge-primary:#12679a;--edge-primary-soft:#eef6fa}
+body.edge-integrated-body{background:var(--edge-bg)!important;color:var(--edge-text)!important;font-family:Arial,"Segoe UI",sans-serif!important}
+.edge-integrated-sidebar{background:#fff!important;color:var(--edge-text)!important;border-right:1px solid var(--edge-line)!important;box-shadow:none!important}
+.edge-brand{color:#111!important}.edge-brand img{box-shadow:none!important;border-radius:8px!important}.edge-brand small{color:#7b8580!important}
+.edge-menu-link{color:#525d58!important;border-radius:7px!important;box-shadow:none!important;background:transparent!important}
+.edge-menu-link:hover,.edge-menu-link.active{background:var(--edge-primary-soft)!important;color:var(--edge-primary)!important;transform:none!important;box-shadow:none!important}
+.edge-sidebar-footer{border-color:var(--edge-line)!important}.edge-back-home{color:var(--edge-primary)!important}
+.edge-integrated-main{background:var(--edge-bg)!important}.edge-module-topbar{background:transparent!important;border:0!important;box-shadow:none!important}
+.edge-module-topbar h1{color:#111!important}.edge-breadcrumb{color:var(--edge-primary)!important}
+.card,.panel,.hero,.stat-card,.upload-card,.review-card,.archive-card,.settings-card,.model-card{box-shadow:none!important;border-radius:10px!important;border-color:var(--edge-line)!important;background:#fff!important}
+.btn{border-radius:7px!important;box-shadow:none!important;transform:none!important}.btn:hover{box-shadow:none!important;transform:none!important}
+input,select,textarea{border-radius:7px!important;box-shadow:none!important}

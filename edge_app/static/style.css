@@ -1317,3 +1317,257 @@ body.edge-bold-site .btn--light{
   .edge-area-tabs a{padding:14px;border-radius:18px}.edge-area-tabs span{width:36px;height:36px;border-radius:12px}.edge-area-tabs strong{font-size:17px}
   .edge-bento-card h3{font-size:25px}
 }
+
+/* ==========================================================
+   EDGE MINIMAL 2026-09 — navegação limpa inspirada na UNAMA
+   ========================================================== */
+:root{
+  --bg:#f4f8f7;
+  --panel:#ffffff;
+  --panel-2:#f8fbfa;
+  --text:#171a1f;
+  --muted:#66706c;
+  --muted-2:#89918e;
+  --border:#dce4e1;
+  --border-strong:#c9d4d0;
+  --primary:#12679a;
+  --primary-dark:#0d557f;
+  --primary-soft:#eef6fa;
+  --success:#18794e;
+  --success-bg:#eef8f2;
+  --danger:#b4232c;
+  --danger-bg:#fff3f3;
+  --warning:#8a5a00;
+  --warning-bg:#fff8e8;
+  --radius-sm:7px;
+  --radius-md:9px;
+  --radius-lg:12px;
+  --radius-xl:14px;
+  --shadow-sm:0 1px 2px rgba(16,24,40,.04);
+  --shadow-md:0 4px 14px rgba(16,24,40,.06);
+  --shadow-lg:0 8px 24px rgba(16,24,40,.08);
+}
+body{background:var(--bg);font-family:Arial,"Segoe UI",sans-serif;color:var(--text)}
+.app-layout{display:block;min-height:100vh;background:var(--bg)}
+.sidebar,
+body.edge-bold-site .sidebar.edge-bold-sidebar{
+  position:sticky!important;
+  top:0!important;
+  z-index:100!important;
+  width:100%!important;
+  height:auto!important;
+  min-height:72px;
+  padding:9px clamp(16px,4vw,56px)!important;
+  display:grid!important;
+  grid-template-columns:auto minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:22px!important;
+  overflow:visible!important;
+  background:#fff!important;
+  border:0!important;
+  border-bottom:1px solid var(--border)!important;
+  box-shadow:none!important;
+  backdrop-filter:none!important;
+  color:var(--text)!important;
+}
+.brand,
+body.edge-bold-site .brand{
+  display:flex!important;
+  align-items:center!important;
+  gap:10px!important;
+  min-height:48px!important;
+  margin:0!important;
+  padding:0!important;
+  color:#111!important;
+  font-size:19px!important;
+  font-weight:800!important;
+  letter-spacing:-.02em!important;
+  white-space:nowrap;
+}
+.brand-logo,
+body.edge-bold-site .brand-logo{
+  width:44px!important;
+  height:44px!important;
+  max-width:44px!important;
+  object-fit:contain!important;
+  border-radius:8px!important;
+  background:#fff!important;
+  box-shadow:none!important;
+}
+.brand small,
+body.edge-bold-site .brand small{
+  display:block!important;
+  margin-top:0!important;
+  color:#747d79!important;
+  font-size:10px!important;
+  font-weight:600!important;
+}
+.nav-card.edge-sidebar-nav,
+body.edge-bold-site .nav-card.edge-sidebar-nav{
+  min-width:0!important;
+  display:flex!important;
+  flex-direction:row!important;
+  align-items:center!important;
+  gap:2px!important;
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+  max-height:none!important;
+  padding:2px 0 4px!important;
+  scrollbar-width:thin;
+  scrollbar-color:#cfd8d4 transparent;
+}
+.nav-group-title{display:none!important}
+.nav-card.edge-sidebar-nav .nav-link,
+body.edge-bold-site .nav-card.edge-sidebar-nav .nav-link{
+  flex:0 0 auto!important;
+  min-height:38px!important;
+  height:38px!important;
+  margin:0!important;
+  padding:0 11px!important;
+  border:0!important;
+  border-radius:7px!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:#4c5551!important;
+  font-size:12px!important;
+  font-weight:650!important;
+  line-height:1!important;
+  transform:none!important;
+  white-space:nowrap!important;
+}
+.nav-card.edge-sidebar-nav .nav-link:hover,
+body.edge-bold-site .nav-card.edge-sidebar-nav .nav-link:hover{
+  background:#f3f7f5!important;
+  color:var(--primary)!important;
+  transform:none!important;
+}
+.nav-card.edge-sidebar-nav .nav-link.active,
+body.edge-bold-site .nav-card.edge-sidebar-nav .nav-link.active{
+  background:var(--primary-soft)!important;
+  color:var(--primary-dark)!important;
+  box-shadow:none!important;
+}
+.nav-link-muted,
+body.edge-bold-site .nav-link-muted{margin-top:0!important;color:#9b2c35!important;background:transparent!important}
+.nav-icon{width:auto!important;min-width:16px!important;font-size:13px!important;color:inherit!important}
+.nav-label{overflow:visible!important;text-overflow:clip!important}
+
+.main-area,
+.edge-website-shell{
+  width:min(1280px,calc(100% - 32px))!important;
+  margin:0 auto!important;
+  padding:34px 0 54px!important;
+  background:transparent!important;
+}
+.edge-website-shell:before,.edge-website-shell:after{display:none!important}
+.topbar,.compact-topbar{max-width:none!important;margin:0 0 22px!important;padding:0!important}
+.page-title h1{font-size:clamp(28px,3vw,38px)!important;line-height:1.12!important;letter-spacing:-.035em!important;color:#111!important;font-weight:800!important}
+.page-title p{margin-top:8px!important;max-width:760px!important;font-size:14px!important;color:var(--muted)!important}
+.content-card,.list-panel,.table-wrap,.mini-card{
+  max-width:none!important;
+  border:1px solid var(--border)!important;
+  border-radius:10px!important;
+  background:#fff!important;
+  box-shadow:none!important;
+}
+.content-card{padding:24px!important}
+.section-head,.section-header{margin-bottom:18px!important;gap:12px!important}
+.section-head h2,.section-header h2{font-size:21px!important;line-height:1.2!important;letter-spacing:-.02em!important;color:#171a1f!important}
+.section-head p,.section-header p{margin-top:5px!important;font-size:13px!important;color:var(--muted)!important}
+.form-grid{gap:15px!important}
+.field{gap:6px!important}
+.field label{font-size:12px!important;font-weight:700!important;color:#303733!important}
+input[type="text"],input[type="number"],input[type="date"],input[type="file"],input[type="password"],input[type="email"],select,textarea{
+  min-height:44px!important;
+  padding:10px 12px!important;
+  border:1px solid #d6dfdb!important;
+  border-radius:7px!important;
+  background:#fff!important;
+  box-shadow:none!important;
+  color:#171a1f!important;
+}
+input:focus,select:focus,textarea:focus{outline:2px solid rgba(18,103,154,.12)!important;border-color:#6d9fbd!important;box-shadow:none!important}
+.btn,
+body.edge-bold-site .btn{
+  min-height:42px!important;
+  padding:9px 15px!important;
+  border:1px solid var(--border-strong)!important;
+  border-radius:7px!important;
+  box-shadow:none!important;
+  font-size:13px!important;
+  font-weight:700!important;
+  transform:none!important;
+}
+.btn:hover,body.edge-bold-site .btn:hover{transform:none!important;box-shadow:none!important}
+.btn--primary,.btn-primary,button[type="submit"],input[type="submit"],
+body.edge-bold-site .btn--primary,body.edge-bold-site .btn-primary,body.edge-bold-site button[type="submit"]{
+  background:var(--primary)!important;
+  border-color:var(--primary)!important;
+  color:#fff!important;
+}
+.btn--light,.btn-secondary,.btn-ghost,body.edge-bold-site .btn--light{
+  background:#fff!important;
+  border-color:var(--border-strong)!important;
+  color:#303733!important;
+}
+.info-box,.helper-box,.soft-note{border:1px solid var(--border)!important;border-radius:8px!important;background:#f8fbfa!important;box-shadow:none!important}
+.alert,.flash{border-radius:8px!important;box-shadow:none!important}
+
+/* Página inicial em cartões simples, no estilo de catálogo */
+.simple-home{padding-top:30px!important}
+.simple-home-intro{margin-bottom:28px;padding:0 2px}
+.simple-kicker{margin:0 0 7px;color:var(--primary);font-size:13px;font-weight:700}
+.simple-home-intro h1{margin:0;font-size:clamp(30px,3.5vw,44px);line-height:1.08;letter-spacing:-.04em;color:#111}
+.simple-home-intro>p:last-child{margin:8px 0 0;max-width:720px;color:var(--muted);font-size:15px}
+.simple-module-section{margin-top:32px}
+.simple-section-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:12px}
+.simple-section-head h2{margin:0;font-size:24px;letter-spacing:-.025em}
+.simple-section-head p{margin:3px 0 0;color:var(--muted);font-size:13px}
+.simple-card-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.simple-card-grid--five{grid-template-columns:repeat(3,minmax(0,1fr))}
+.simple-module-card{
+  min-height:190px;
+  display:flex;
+  flex-direction:column;
+  padding:18px;
+  text-decoration:none;
+  background:#fff;
+  border:1px solid #d5ddda;
+  border-radius:10px;
+  box-shadow:none;
+  transition:border-color .14s ease,background .14s ease;
+}
+.simple-module-card:hover{border-color:#8ba9a0;background:#fcfefd}
+.simple-module-card h3{margin:0;font-size:18px;line-height:1.2;letter-spacing:-.02em;color:#202421}
+.simple-module-card p{margin:9px 0 18px;color:#5f6965;font-size:13px;line-height:1.5;flex:1}
+.simple-module-card span{display:inline-flex;width:max-content;align-items:center;min-height:34px;padding:0 11px;border-radius:6px;background:var(--primary);color:#fff;font-size:12px;font-weight:700}
+.simple-system-links{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:30px;padding-top:22px;border-top:1px solid var(--border)}
+.simple-system-links a{display:block;padding:14px 16px;background:#fff;border:1px solid var(--border);border-radius:9px;text-decoration:none}
+.simple-system-links strong{display:block;font-size:13px;color:#202421}.simple-system-links small{display:block;margin-top:3px;font-size:11px;color:var(--muted)}
+
+/* Neutraliza elementos antigos mais chamativos caso alguma tela ainda os use */
+.hero-banner,.home-clean-hero,.edge-web-hero{background:#fff!important;border:1px solid var(--border)!important;border-radius:10px!important;box-shadow:none!important}
+.hero-banner:before,.hero-banner:after,.edge-web-hero:before,.edge-hero-visual,.edge-spark,.edge-floating-card{display:none!important}
+.edge-pill,.area-tag,.badge-inline{box-shadow:none!important;border:1px solid var(--border)!important;background:var(--primary-soft)!important;color:var(--primary)!important}
+.feature-card,.stat-card,.quick-card,.module-category,.flow-card,.status-card-v2,.home-action-card,.home-area-card,.edge-bento-card,.edge-area-tabs a,.edge-bottom-panel{
+  border:1px solid var(--border)!important;border-radius:10px!important;box-shadow:none!important;background:#fff!important;color:var(--text)!important;transform:none!important;
+}
+.feature-card:hover,.stat-card:hover,.quick-card:hover,.home-action-card:hover,.edge-bento-card:hover,.edge-area-tabs a:hover{transform:none!important;box-shadow:none!important}
+.edge-section-title h2,.edge-section-title p{color:var(--text)!important}.edge-section-title span{box-shadow:none!important;border:0!important;border-radius:6px!important;background:var(--primary)!important}.edge-bento-card b{box-shadow:none!important;border:1px solid var(--border)!important;border-radius:6px!important}.edge-card-icon{box-shadow:none!important;border:1px solid var(--border)!important;border-radius:7px!important}
+
+@media (max-width:980px){
+  .sidebar,body.edge-bold-site .sidebar.edge-bold-sidebar{grid-template-columns:1fr!important;gap:6px!important;padding:8px 14px!important;position:relative!important}
+  .brand{justify-content:flex-start!important}.nav-card.edge-sidebar-nav{width:100%!important}
+  .main-area,.edge-website-shell{width:min(100% - 24px,1280px)!important;padding:24px 0 38px!important}
+  .simple-card-grid,.simple-card-grid--five{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .simple-system-links{grid-template-columns:1fr 1fr}
+}
+@media (max-width:640px){
+  .sidebar,body.edge-bold-site .sidebar.edge-bold-sidebar{padding:8px 10px!important}
+  .brand-logo,body.edge-bold-site .brand-logo{width:38px!important;height:38px!important;max-width:38px!important}.brand,body.edge-bold-site .brand{font-size:16px!important}
+  .nav-card.edge-sidebar-nav .nav-link,body.edge-bold-site .nav-card.edge-sidebar-nav .nav-link{height:36px!important;min-height:36px!important;padding:0 9px!important;font-size:11.5px!important}
+  .main-area,.edge-website-shell{width:calc(100% - 20px)!important;padding-top:20px!important}
+  .content-card{padding:16px!important}.form-grid{grid-template-columns:1fr!important}.field[class*="col-"]{grid-column:auto!important}
+  .simple-card-grid,.simple-card-grid--five,.simple-system-links{grid-template-columns:1fr}
+  .simple-module-card{min-height:0}.simple-home-intro h1{font-size:31px}
+}

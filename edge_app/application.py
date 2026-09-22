@@ -60,6 +60,30 @@ ATESTADO_MEDICO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ATESTAD
 PCD_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "MODELO LAUDO PCD.docx")
 ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE.docx")
 ENCAMINHAMENTO_COMPLEMENTARES_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "ENCAMINHAMENTO_COMPLEMENTARES_TEMPLATE.docx")
+
+# Dados oficiais das unidades usados em todos os modelos da Clínica.
+# Manter centralizado evita divergência de endereço/telefone entre documentos.
+CLINIC_LOCATIONS = {
+    'belem': {
+        'label': 'BELÉM, PA',
+        'cidade_uf': 'BELÉM, PA',
+        'cidade_data': 'BELÉM, PA',
+        'cidade_hifen': 'BELÉM-PA',
+        'endereco': 'TRAVESSA DO CHACO, Nº2546, ENTRE ALMIRANTE BARROSO E JOÃO PAULO – BELÉM – PA',
+        'telefone': '91– 3349-6948',
+        'medico_fisico_mental': 'CRM Nº 4480 – RQE Nº6041 PA',
+    },
+    'macapa': {
+        'label': 'MACAPÁ, AP',
+        'cidade_uf': 'MACAPÁ, AP',
+        'cidade_data': 'MACAPÁ, AP',
+        'cidade_hifen': 'MACAPÁ-AP',
+        'endereco': 'RUA ELIÉZER LEVY, Nº 2583, TREM, MACAPÁ-AP',
+        'telefone': '91– 98356-8044',
+        'medico_fisico_mental': 'CRM Nº 002800 – RQE Nº959 AP',
+    },
+}
+
 EXAMES_A_PRAZO_SOLO_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "exames_a_prazo_templates", "MODELO_PRA_EMPRESA_SOLO.xlsx")
 EXAMES_A_PRAZO_GROUP_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "exames_a_prazo_templates", "MODELO_PARA_MULTIPLAS_EMPRESAS.xlsx")
 EXAMES_A_PRAZO_SOURCE_EXTENSIONS = {".xlsx"}
@@ -1487,7 +1511,7 @@ def _gerar_encaminhamento_pdf(contexto, destino):
         [Paragraph("Funcionário:", normal), Paragraph(funcionario, normal), "", Paragraph("Função", normal), Paragraph(funcao, normal)],
         [Paragraph("Local do Exame", header), "", "", "", ""],
         [Paragraph("Prestador", normal), Paragraph("EDGE, SEGURANÇA SAÚDE E MEDICINA DO TRABALHO", normal), "", "", ""],
-        [Paragraph("Endereço<br/>Fone", normal), Paragraph("Avenida Feliciano Coelho, Nº327, Trem, Macapá - AP<br/>91 98113-3744", normal), "", "", ""],
+        [Paragraph("Endereço<br/>Fone", normal), Paragraph(f"{CLINIC_LOCATIONS['macapa']['endereco']}<br/>{CLINIC_LOCATIONS['macapa']['telefone']}", normal), "", "", ""],
         [Paragraph("Horário", normal), Paragraph("8h às 11h e 14h às 16h", normal), "", "", ""],
         [Paragraph("Tipo de Exame", header), "", "", "", ""],
         [Paragraph("Tipo de Exame: PERIÓDICO", normal), "", "", "", ""],
@@ -2288,6 +2312,39 @@ def fisico_make_rich(value: str) -> RichText:
     rt.add(fisico_clean_text(value), bold=True)
     return rt
 
+def docx_escape_text(value: str) -> str:
+    value = '' if value is None else str(value)
+    lines = value.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    escaped = [line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;') for line in lines]
+    return '</w:t><w:br/><w:t>'.join(escaped)
+
+
+def docx_placeholder_pattern(placeholder: str) -> str:
+    # O Word pode quebrar um placeholder entre vários runs/tags XML.
+    return r'(?:<[^>]+>)*'.join(re.escape(ch) for ch in placeholder)
+
+
+def replace_docx_placeholders_preserve_layout(template_path: str, output_path: str, replacements: dict[str, str]) -> None:
+    """Substitui placeholders em documento, cabeçalhos e rodapés sem remontar o layout."""
+    with zipfile.ZipFile(template_path, 'r') as zin, zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == 'word/document.xml' or item.filename.startswith('word/header') or item.filename.startswith('word/footer'):
+                try:
+                    xml = data.decode('utf-8')
+                except UnicodeDecodeError:
+                    zout.writestr(item, data)
+                    continue
+                for placeholder, value in replacements.items():
+                    xml = re.sub(
+                        docx_placeholder_pattern(placeholder),
+                        lambda _m, v=value: docx_escape_text(v),
+                        xml,
+                    )
+                data = xml.encode('utf-8')
+            zout.writestr(item, data)
+
+
 def fisico_build_orgao_texto(empresa: str, edital: str, pss: str) -> str:
     parts = [fisico_clean_text(empresa), fisico_clean_text(edital), fisico_clean_text(pss)]
     parts = [p for p in parts if p]
@@ -2340,6 +2397,7 @@ def fisico_render_home(form_data=None):
                            today=form_data.get('data_exame') or datetime.today().strftime('%Y-%m-%d'),
                            empresas=fisico_list_empresas(),
                            cargos=fisico_list_cargos(),
+                           locais=CLINIC_LOCATIONS,
                            form_data=form_data)
 
 def fisico_render_cadastros(search=''):
@@ -2461,34 +2519,48 @@ def fisico_gerar():
     pss = fisico_clean_text(request.form.get('pss', ''))
     funcao = fisico_clean_text(request.form.get('funcao_nome', ''))
     data_exame = request.form.get('data_exame', '')
+    local_key = (request.form.get('local_exame') or '').strip().lower()
     formato = (request.form.get('formato', 'docx') or 'docx').lower()
+    local = CLINIC_LOCATIONS.get(local_key)
 
-    if not nome or not rg or not cpf or not empresa or not funcao:
-        flash('Preencha pelo menos: nome, RG, CPF, empresa e cargo.', 'error')
+    if not nome or not rg or not cpf or not empresa or not funcao or not local:
+        flash('Preencha nome, RG, CPF, empresa, cargo e unidade de atendimento.', 'error')
         return fisico_render_home(form_data)
 
     if len(somente_numeros(cpf)) != 11:
         flash('CPF inválido. Informe os 11 números do CPF.', 'error')
         return fisico_render_home(form_data)
 
-    context = {
-        'nome': fisico_make_rich(nome),
-        'rg': fisico_make_rich(rg),
-        'cpf': fisico_make_rich(cpf),
-        'empresa': fisico_make_rich(empresa),
-        'edital': fisico_make_rich(edital),
-        'pss': fisico_make_rich(pss),
-        'orgao_texto': fisico_make_rich(fisico_build_orgao_texto(empresa, edital, pss)),
-        'funcao': fisico_make_rich(funcao),
-        'data_extenso': fisico_make_rich(fisico_format_date_extenso(data_exame)),
+    replacements = {
+        '{{ nome }}': nome,
+        '{{nome}}': nome,
+        '{{ rg }}': rg,
+        '{{rg}}': rg,
+        '{{ cpf }}': cpf,
+        '{{cpf}}': cpf,
+        '{{ empresa }}': empresa,
+        '{{empresa}}': empresa,
+        '{{ orgao_texto }}': fisico_build_orgao_texto(empresa, edital, pss),
+        '{{orgao_texto}}': fisico_build_orgao_texto(empresa, edital, pss),
+        '{{ funcao }}': funcao,
+        '{{funcao}}': funcao,
+        '{{ data_extenso }}': fisico_format_date_extenso(data_exame),
+        '{{data_extenso}}': fisico_format_date_extenso(data_exame),
+        '{{CIDADE, UF}}': local['cidade_uf'],
+        '{{ENDEREÇO}}': local['endereco'],
+        '{{telefone}}': local['telefone'],
+        '{{informações do dr}}': local['medico_fisico_mental'],
     }
 
     filename_base = fisico_slugify(f'fisico_mental_{nome}')
     with tempfile.TemporaryDirectory() as tmpdir:
         docx_path = os.path.join(tmpdir, f'{filename_base}.docx')
-        doc = DocxTemplate(FISICO_TEMPLATE_PATH)
-        doc.render(context)
-        doc.save(docx_path)
+        try:
+            replace_docx_placeholders_preserve_layout(FISICO_TEMPLATE_PATH, docx_path, replacements)
+        except Exception:
+            logger.exception('Erro ao gerar atestado físico e mental')
+            flash('Não foi possível gerar o documento. Confira os dados e tente novamente.', 'error')
+            return fisico_render_home(form_data)
         if formato == 'pdf':
             try:
                 pdf_path = fisico_convert_to_pdf(docx_path, tmpdir)
@@ -2503,10 +2575,7 @@ def fisico_gerar():
 # =========================
 # ATESTADO MÉDICO
 # =========================
-ATESTADO_CIDADES = {
-    'BELEM-PA': 'BELÉM-PA',
-    'MACAPA-AP': 'MACAPÁ-AP',
-}
+ATESTADO_CIDADES = {key: data['label'] for key, data in CLINIC_LOCATIONS.items()}
 
 
 def atestado_render_home(form_data=None):
@@ -2585,8 +2654,8 @@ def atestado_medico_gerar():
         flash('Preencha nome, data, quantidade de dias, CID e cidade/UF.', 'error')
         return atestado_render_home(form_data)
 
-    if cidade_key not in ATESTADO_CIDADES:
-        flash('Selecione uma cidade válida: BELÉM-PA ou MACAPÁ-AP.', 'error')
+    if cidade_key not in CLINIC_LOCATIONS:
+        flash('Selecione uma unidade válida: BELÉM, PA ou MACAPÁ, AP.', 'error')
         return atestado_render_home(form_data)
 
     if not dias.isdigit() or int(dias) <= 0:
@@ -2594,13 +2663,16 @@ def atestado_medico_gerar():
         return atestado_render_home(form_data)
 
     data_formatada = atestado_format_date(data_atestado)
-    cidade_uf = ATESTADO_CIDADES[cidade_key]
+    local = CLINIC_LOCATIONS[cidade_key]
     replacements = {
         '{{Nome}}': nome,
         '{{data}}': data_formatada,
         '{{dias}}': str(int(dias)),
         '{{cid}}': cid,
-        '{{cidade-uf}}': cidade_uf,
+        '{{cidade-uf}}': local['cidade_hifen'],
+        '{{CIDADE, UF}}': local['cidade_uf'],
+        '{{ENDEREÇO}}': local['endereco'],
+        '{{telefone}}': local['telefone'],
     }
 
     filename_base = sanitize_filename(f'ATESTADO MEDICO - {nome}')
@@ -2646,6 +2718,7 @@ def pcd_render_home(form_data=None):
         empresas=fisico_list_empresas(),
         cargos=fisico_list_cargos(),
         tipos=PCD_TIPOS,
+        locais=CLINIC_LOCATIONS,
         form_data=form_data,
     )
 
@@ -2764,12 +2837,14 @@ def laudo_pcd_gerar():
     cid = fisico_clean_text(request.form.get('cid', ''))
     obs = (request.form.get('obs') or '').strip()
     data_laudo = request.form.get('data_laudo', '')
+    local_key = (request.form.get('local_exame') or '').strip().lower()
+    local = CLINIC_LOCATIONS.get(local_key)
 
     if tipo not in PCD_TIPOS:
         flash('Selecione o tipo de laudo PCD.', 'error')
         return pcd_render_home(form_data)
-    if not empresa or not nome or not cpf or not rg or not cid:
-        flash('Preencha empresa, nome, CPF, RG e CID.', 'error')
+    if not empresa or not nome or not cpf or not rg or not cid or not local:
+        flash('Preencha empresa, nome, CPF, RG, CID e unidade de atendimento.', 'error')
         return pcd_render_home(form_data)
 
     cpf_digits = somente_numeros(cpf)
@@ -2803,7 +2878,9 @@ def laudo_pcd_gerar():
         '{{CPF}}': formatar_documento(cpf_digits) or cpf,
         '{{RG}}': rg,
         '{{UF}}': uf,
+        '{{DIA}}': dia,
         '{{dia}}': dia,
+        '{{CIDADE, UF}}': local['cidade_uf'],
         '{{MÊS}}': mes_extenso,
         '{{ANO}}': ano,
         '{{OlhoDAcuidade}}': request.form.get('olho_d_acuidade', ''),
@@ -2873,18 +2950,7 @@ def encaminhamento_especialista_name(value: str) -> str:
     return encaminhamento_title_name(value)
 
 
-ENCAMINHAMENTO_LOCAIS_EXAME = {
-    'belem': {
-        'label': 'BELÉM-PA',
-        'cidade_data': 'BELÉM, PA',
-        'endereco': 'TRAVESSA DO CHACO, Nº2546, MARCO, BELÉM-PA',
-    },
-    'macapa': {
-        'label': 'MACAPÁ-AP',
-        'cidade_data': 'MACAPÁ, AP',
-        'endereco': 'AVENIDA FELICIANO COELHO, Nº 327, BAIRRO: TREM',
-    },
-}
+ENCAMINHAMENTO_LOCAIS_EXAME = CLINIC_LOCATIONS
 
 
 def encaminhamento_get_local_exame(value: str) -> dict | None:
@@ -3116,7 +3182,7 @@ def encaminhamento_add_block(doc, logo_path: str | None, empresa_upper: str, fun
 
     encaminhamento_add_paragraph(cell, text=f"Endereço: {local_exame['endereco']}",
                                  bold=True, size=8, space_after=0)
-    encaminhamento_add_paragraph(cell, text='Fone: 91– 3349-6948 e-mail: edgeocupacional@hotmail.com',
+    encaminhamento_add_paragraph(cell, text=f"Fone: {local_exame['telefone']} e-mail: edgeocupacional@hotmail.com",
                                  bold=True, size=8, space_after=0)
 
 
@@ -3128,35 +3194,24 @@ def gerar_encaminhamento_especialista_docx(empresa: str, funcionario: str, rg: s
     cpf_clean = encaminhamento_clean_text(cpf)
     especialista_clean = encaminhamento_especialista_name(especialista)
     data_fmt = encaminhamento_format_date(data_doc)
-    local_exame = encaminhamento_get_local_exame(local_exame_key)
-    if not local_exame:
+    local = encaminhamento_get_local_exame(local_exame_key)
+    if not local:
         raise ValueError('Local de exame inválido.')
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        logo_path = encaminhamento_extract_logo(tmpdir)
-        doc = Document()
-        section = doc.sections[0]
-        section.top_margin = Inches(0.18)
-        section.bottom_margin = Inches(0.18)
-        section.left_margin = Inches(0.20)
-        section.right_margin = Inches(0.20)
-
-        # Primeiro encaminhamento
-        encaminhamento_add_block(doc, logo_path, empresa_upper, funcionario_upper, funcionario_frase,
-                                 rg_clean, cpf_clean, especialista_clean, data_fmt, local_exame)
-
-        # Espaço real entre os dois blocos. Não usa tabela copiada do Word, então não
-        # herda a linha/borda residual que estava encostando no segundo formulário.
-        spacer = doc.add_paragraph()
-        spacer.paragraph_format.space_after = Pt(12)
-        spacer.paragraph_format.space_before = Pt(0)
-        spacer.paragraph_format.line_spacing = 1.0
-
-        # Segundo encaminhamento limpo
-        encaminhamento_add_block(doc, logo_path, empresa_upper, funcionario_upper, funcionario_frase,
-                                 rg_clean, cpf_clean, especialista_clean, data_fmt, local_exame)
-
-        doc.save(output_path)
+    replacements = {
+        '{{EMPRESA - CNPJ}}': empresa_upper,
+        '{{NOME}}': funcionario_upper,
+        '{{Nome}}': funcionario_frase,
+        '{{RG}}': rg_clean,
+        '{{CPF}}': cpf_clean,
+        '{{tipo de especialista}}': especialista_clean,
+        '{{CIDADE, UF}}': local['cidade_uf'],
+        '{{DATA}}': data_fmt,
+        '{{DEPENDE DA CIDADE}}': local['endereco'],
+        '{{ENDEREÇO}}': local['endereco'],
+        '{{telefone}}': local['telefone'],
+    }
+    replace_docx_placeholders_preserve_layout(ENCAMINHAMENTO_PREENCHIMENTO_TEMPLATE_PATH, output_path, replacements)
 
 
 def encaminhamento_especialista_render(form_data=None):
@@ -3840,18 +3895,7 @@ def relatorios_empresas_cnpj_importar():
 # =========================
 # ENCAMINHAMENTO DE EXAMES COMPLEMENTARES
 # =========================
-ENCAMINHAMENTO_COMPLEMENTARES_LOCAIS = {
-    'belem': {
-        'label': 'BELÉM',
-        'cidade_uf': 'BELÉM, PA',
-        'endereco': 'TRAVESSA DO CHACO, Nº2546, MARCO, BELÉM-PA',
-    },
-    'macapa': {
-        'label': 'MACAPÁ',
-        'cidade_uf': 'MACAPÁ, AP',
-        'endereco': 'AV. FELICIANO COELHO, N° 327 - BAIRRO DO TREM - EM FRENTE A AUTO ESCOLA SÃO CRISTOVÃO, MACAPÁ-AP',
-    },
-}
+ENCAMINHAMENTO_COMPLEMENTARES_LOCAIS = CLINIC_LOCATIONS
 
 
 def encaminhamento_complementares_get_local(value: str) -> dict | None:
@@ -3862,7 +3906,7 @@ def encaminhamento_complementares_render(form_data=None, exames=None):
     if form_data is None:
         form_data = {}
     if exames is None:
-        exames = [''] * 5
+        exames = ['']
     return render_template(
         'encaminhamento_complementares.html',
         title='Encaminhamento de Exames Complementares',
@@ -4018,6 +4062,7 @@ def gerar_encaminhamento_complementares_docx(nome: str, cpf: str, data_doc: str,
         '{{CIDADE, UF}}': local['cidade_uf'],
         '{{DATA}}': encaminhamento_format_date(data_doc),
         '{{ENDEREÇO}}': local['endereco'],
+        '{{telefone}}': local['telefone'],
     }
 
     parser = etree.XMLParser(remove_blank_text=False, recover=False)
@@ -4049,21 +4094,21 @@ def encaminhamento_complementares_gerar():
 
     if not nome or not cpf or not data_documento or not local_exame_key:
         flash('Preencha nome, CPF, data e local do exame.', 'error')
-        return encaminhamento_complementares_render(form_data, exames_raw or [''] * 5)
+        return encaminhamento_complementares_render(form_data, exames_raw or [''])
     if not encaminhamento_complementares_get_local(local_exame_key):
         flash('Selecione um local do exame válido.', 'error')
-        return encaminhamento_complementares_render(form_data, exames_raw or [''] * 5)
+        return encaminhamento_complementares_render(form_data, exames_raw or [''])
     if not exames:
         flash('Informe pelo menos um exame.', 'error')
-        return encaminhamento_complementares_render(form_data, exames_raw or [''] * 5)
+        return encaminhamento_complementares_render(form_data, exames_raw or [''])
     if len(exames) > 5:
-        flash('Informe no máximo 5 exames por encaminhamento, conforme o modelo do documento.', 'error')
-        return encaminhamento_complementares_render(form_data, exames_raw or [''] * 5)
+        flash('Informe no máximo 5 exames por encaminhamento.', 'error')
+        return encaminhamento_complementares_render(form_data, exames_raw or [''])
     try:
         datetime.strptime(data_documento, '%Y-%m-%d')
     except ValueError:
         flash('Data inválida.', 'error')
-        return encaminhamento_complementares_render(form_data, exames_raw or [''] * 5)
+        return encaminhamento_complementares_render(form_data, exames_raw or [''])
 
     filename_base = sanitize_filename(f'ENCAMINHAMENTO COMPLEMENTARES - {nome}')
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -4073,7 +4118,7 @@ def encaminhamento_complementares_gerar():
         except Exception:
             logger.exception('Erro ao gerar encaminhamento de exames complementares')
             flash('Não foi possível gerar o encaminhamento. Confira os dados e tente novamente.', 'error')
-            return encaminhamento_complementares_render(form_data, exames_raw or [''] * 5)
+            return encaminhamento_complementares_render(form_data, exames_raw or [''])
         payload = Path(output_path).read_bytes()
         return send_file(
             io.BytesIO(payload),

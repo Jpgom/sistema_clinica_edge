@@ -96,7 +96,7 @@
         <div class="section-head" style="margin-top:22px">
           <div>
             <h2>Exames</h2>
-            <p>Informe até 5 exames. Linhas vazias serão ignoradas no documento final.</p>
+            <p>Adicione somente os exames necessários. Linhas vazias serão ignoradas no documento final.</p>
           </div>
           <button class="btn btn--light" type="button" id="addExamBtn">Adicionar exame</button>
         </div>
@@ -115,8 +115,8 @@
 
         <div class="info-box" style="margin-top:18px">
           <strong>Preenchimento automático pelo local do exame:</strong><br>
-          BELÉM — BELÉM, PA / TRAVESSA DO CHACO, Nº2546, MARCO, BELÉM-PA<br>
-          MACAPÁ — MACAPÁ, AP / AV. FELICIANO COELHO, N° 327 - BAIRRO DO TREM - EM FRENTE A AUTO ESCOLA SÃO CRISTOVÃO, MACAPÁ-AP
+          BELÉM, PA — TRAVESSA DO CHACO, Nº2546, ENTRE ALMIRANTE BARROSO E JOÃO PAULO – BELÉM – PA — 91– 3349-6948<br>
+          MACAPÁ, AP — RUA ELIÉZER LEVY, Nº 2583, TREM, MACAPÁ-AP — 91– 98356-8044
         </div>
 
         <div class="actions inline-actions">
@@ -164,7 +164,7 @@ function attachRemoveButtons(){
 addBtn.addEventListener('click', () => {
   const rows = container.querySelectorAll('.exam-row');
   if(rows.length >= 5){
-    alert('O modelo permite até 5 exames por encaminhamento.');
+    alert('O modelo permite no máximo 5 exames por encaminhamento.');
     return;
   }
   const row = document.createElement('div');

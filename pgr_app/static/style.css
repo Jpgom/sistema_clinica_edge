@@ -355,3 +355,14 @@ body.modal-open{overflow:hidden}
 
 /* Repaginação EDGE - alinhamento visual */
 body{background:#f5f7fb}.sidebar{box-shadow:8px 0 32px rgba(79,124,255,.06)}.sidebar nav a{border-radius:12px;transition:background .15s ease,transform .15s ease}.sidebar nav a:hover{transform:translateX(2px)}.content>header,.page-header,.card,section{border-radius:18px}.flash{border-radius:14px;box-shadow:0 10px 24px rgba(16,24,40,.06)}
+
+/* EDGE minimal 2026-09 — mantém as funções SST com aparência mais limpa */
+:root{--edge-bg:#f4f8f7;--edge-surface:#fff;--edge-text:#202421;--edge-muted:#66706c;--edge-line:#dce4e1;--edge-primary:#12679a;--edge-primary-soft:#eef6fa}
+body{background:var(--edge-bg)!important;color:var(--edge-text)!important;font-family:Arial,"Segoe UI",sans-serif!important}
+.sidebar{background:#fff!important;color:var(--edge-text)!important;border-right:1px solid var(--edge-line)!important;box-shadow:none!important}
+.sidebar .brand,.sidebar .brand strong{color:#111!important}.sidebar .brand span{color:#7b8580!important}.sidebar .logo{background:var(--edge-primary-soft)!important;color:var(--edge-primary)!important;border:1px solid #d8e8f1!important;box-shadow:none!important;border-radius:8px!important}
+.sidebar nav a{color:#525d58!important;border-radius:7px!important;background:transparent!important;box-shadow:none!important}
+.sidebar nav a:hover,.sidebar nav a.active{background:var(--edge-primary-soft)!important;color:var(--edge-primary)!important;box-shadow:none!important;transform:none!important}
+.content{background:var(--edge-bg)!important}.panel,.card,.stat-card,.list-panel,.form-card,.wizard-sidebar-progress,.modal-card,.mini-section,.saved-config-box,.soft-note,.preview-box,.import-summary-box,.aet-preset-box{box-shadow:none!important;border-radius:10px!important}
+.btn,button{box-shadow:none!important;transform:none!important}.btn:hover,button:hover{box-shadow:none!important;transform:none!important}
+input,select,textarea{border-radius:7px!important;box-shadow:none!important}

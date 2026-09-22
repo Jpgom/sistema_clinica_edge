@@ -3,174 +3,109 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#07111f">
+<meta name="theme-color" content="#ffffff">
 <title>{{ title }}</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=edge-positivus-layout-1">
-<meta name="csrf-token" content="{{ csrf_token() }}"></head>
-<body class="home-page edge-dashboard-page edge-bold-site">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=edge-minimal-unama-1">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body class="home-page edge-minimal-site">
 <div class="app-layout">
-  <aside class="sidebar edge-bold-sidebar">
+  <aside class="sidebar">
     <div class="brand">
       <img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho">
-      <div>EDGE<small>Medicina do Trabalho</small></div>
+      <div>EDGE<small>Sistema Interno</small></div>
     </div>
     <div class="nav-card edge-sidebar-nav">
-      <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{{ url_for('home') }}"><span class="nav-icon">⌂</span><span class="nav-label">Início</span></a>
+      <a class="nav-link active" href="{{ url_for('home') }}"><span class="nav-icon">⌂</span><span class="nav-label">Início</span></a>
       <div class="nav-group-title">Clínica</div>
-      <a class="nav-link {% if request.path.startswith('/encaminhamento-especialista') %}active{% endif %}" href="{{ url_for('encaminhamento_especialista') }}"><span class="nav-icon">▤</span><span class="nav-label">Enc. individual</span></a>
-      <a class="nav-link {% if request.path.startswith('/encaminhamento-complementares') %}active{% endif %}" href="{{ url_for('encaminhamento_complementares') }}"><span class="nav-icon">＋</span><span class="nav-label">Enc. complementares</span></a>
-      <a class="nav-link {% if request.path.startswith('/laudo-pcd') %}active{% endif %}" href="{{ url_for('laudo_pcd') }}"><span class="nav-icon">◉</span><span class="nav-label">Laudo PCD</span></a>
-      <a class="nav-link {% if request.path.startswith('/fisico-mental') %}active{% endif %}" href="{{ url_for('fisico_mental') }}"><span class="nav-icon">✚</span><span class="nav-label">Físico e Mental</span></a>
-      <a class="nav-link {% if request.path.startswith('/atestado-medico') %}active{% endif %}" href="{{ url_for('atestado_medico') }}"><span class="nav-icon">▧</span><span class="nav-label">Atestado Médico</span></a>
+      <a class="nav-link" href="{{ url_for('encaminhamento_especialista') }}"><span class="nav-label">Enc. individual</span></a>
+      <a class="nav-link" href="{{ url_for('encaminhamento_complementares') }}"><span class="nav-label">Enc. complementares</span></a>
+      <a class="nav-link" href="{{ url_for('laudo_pcd') }}"><span class="nav-label">Laudo PCD</span></a>
+      <a class="nav-link" href="{{ url_for('fisico_mental') }}"><span class="nav-label">Físico e Mental</span></a>
+      <a class="nav-link" href="{{ url_for('atestado_medico') }}"><span class="nav-label">Atestado Médico</span></a>
       <div class="nav-group-title">Interno</div>
-      <a class="nav-link {% if request.path.startswith('/envio-periodicos') %}active{% endif %}" href="/envio-periodicos/"><span class="nav-icon">✉</span><span class="nav-label">Envio periódicos</span></a>
-      <a class="nav-link {% if request.path.startswith('/separar-exames') %}active{% endif %}" href="/separar-exames/"><span class="nav-icon">▣</span><span class="nav-label">Separar exames</span></a>
-      <a class="nav-link {% if request.path.startswith('/exames-a-prazo') %}active{% endif %}" href="{{ url_for('exames_a_prazo') }}"><span class="nav-icon">▤</span><span class="nav-label">Exames a Prazo</span></a>
-      <a class="nav-link {% if request.path.startswith('/renumerador') %}active{% endif %}" href="{{ url_for('renumerador') }}"><span class="nav-icon">#</span><span class="nav-label">Renumerador</span></a>
-      <a class="nav-link {% if request.path.startswith('/esocial') %}active{% endif %}" href="{{ url_for('esocial') }}"><span class="nav-icon">⇄</span><span class="nav-label">E-SOCIAL</span></a>
-      <a class="nav-link {% if request.path.startswith('/pgr/') or request.path == '/pgr' %}active{% endif %}" href="/pgr/"><span class="nav-icon">▨</span><span class="nav-label">PGR / SST</span></a>
+      <a class="nav-link" href="/envio-periodicos/"><span class="nav-label">Envio periódicos</span></a>
+      <a class="nav-link" href="/separar-exames/"><span class="nav-label">Separar exames</span></a>
+      <a class="nav-link" href="{{ url_for('exames_a_prazo') }}"><span class="nav-label">Exames a Prazo</span></a>
+      <a class="nav-link" href="{{ url_for('renumerador') }}"><span class="nav-label">Renumerador</span></a>
+      <a class="nav-link" href="{{ url_for('esocial') }}"><span class="nav-label">E-SOCIAL</span></a>
+      <a class="nav-link" href="/pgr/"><span class="nav-label">PGR / SST</span></a>
       <div class="nav-group-title">Sistema</div>
-      <a class="nav-link {% if request.path.startswith('/status-sistema') %}active{% endif %}" href="{{ url_for('status_sistema') }}"><span class="nav-icon">●</span><span class="nav-label">Status</span></a>
-      {% if is_admin %}<a class="nav-link {% if request.path.startswith('/usuarios') %}active{% endif %}" href="{{ url_for('usuarios') }}"><span class="nav-icon">◌</span><span class="nav-label">Usuários</span></a>{% endif %}
-      {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link {% if request.path.startswith('/auditoria') %}active{% endif %}" href="{{ url_for('auditoria') }}"><span class="nav-icon">≡</span><span class="nav-label">Auditoria</span></a>{% endif %}
-      <a class="nav-link {% if request.path.startswith('/minha-conta') %}active{% endif %}" href="{{ url_for('minha_conta') }}"><span class="nav-icon">⌁</span><span class="nav-label">Minha conta</span></a>
-      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}"><span class="nav-icon">↪</span><span class="nav-label">Sair</span></a>
+      <a class="nav-link" href="{{ url_for('status_sistema') }}"><span class="nav-label">Status</span></a>
+      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}"><span class="nav-label">Usuários</span></a>{% endif %}
+      {% if current_user and current_user['cargo'] in ['admin','supervisor'] %}<a class="nav-link" href="{{ url_for('auditoria') }}"><span class="nav-label">Auditoria</span></a>{% endif %}
+      <a class="nav-link" href="{{ url_for('minha_conta') }}"><span class="nav-label">Minha conta</span></a>
+      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}"><span class="nav-label">Sair</span></a>
     </div>
   </aside>
 
-  <main class="main-area edge-website-shell">
-    <section class="edge-web-hero">
-      <div class="edge-hero-copy">
-        <span class="edge-pill">Sistema EDGE</span>
-        <h1>Rotinas ocupacionais em um painel simples, bonito e direto.</h1>
-        <p>Use a área Clínica para documentos de atendimento e a área Interno para periódicos, exames, eSocial e SST. Tudo organizado para a equipe não se perder.</p>
-        <div class="edge-hero-actions">
-          <a class="btn btn--primary" href="#clinica">Abrir Clínica</a>
-          <a class="btn btn--light edge-btn-outline" href="#interno">Abrir Interno</a>
-          <a class="btn btn--light edge-btn-outline" href="{{ url_for('status_sistema') }}">Status</a>
-        </div>
-        <div class="edge-trust-strip">
-          <span>Belém</span><span>Macapá</span><span>Ananindeua</span><span>SST</span>
-        </div>
-      </div>
-      <div class="edge-hero-visual" aria-hidden="true">
-        <div class="edge-window edge-window-main">
-          <div class="edge-window-dots"><i></i><i></i><i></i></div>
-          <strong>EDGE</strong>
-          <span>Medicina do Trabalho</span>
-          <div class="edge-orbit">
-            <b></b><b></b><b></b>
-          </div>
-        </div>
-        <div class="edge-floating-card edge-floating-card-a"><strong>OCR</strong><small>Exames escaneados</small></div>
-        <div class="edge-floating-card edge-floating-card-b"><strong>SST</strong><small>PGR / PCMSO / LTCAT</small></div>
-        <div class="edge-spark edge-spark-one"></div>
-        <div class="edge-spark edge-spark-two"></div>
-      </div>
+  <main class="main-area simple-home">
+    <section class="simple-home-intro">
+      <p class="simple-kicker">Sistema interno EDGE</p>
+      <h1>Escolha o que você precisa fazer.</h1>
+      <p>As rotinas foram separadas em Clínica e Interno para manter a navegação simples e rápida.</p>
     </section>
 
-    <section class="edge-area-tabs" aria-label="Áreas do sistema">
-      <a href="#clinica"><span>01</span><strong>Clínica</strong><small>Documentos individuais</small></a>
-      <a href="#interno"><span>02</span><strong>Interno</strong><small>Operação e SST</small></a>
-      <a href="{{ url_for('status_sistema') }}"><span>03</span><strong>Status</strong><small>Banco, OCR e disco</small></a>
-    </section>
-
-    <section id="clinica" class="edge-section-block">
-      <div class="edge-section-title">
-        <span>Clínica</span>
-        <h2>Afazeres de atendimento</h2>
-        <p>Rotinas para gerar documentos individuais com poucos cliques.</p>
+    <section class="simple-module-section" id="clinica">
+      <div class="simple-section-head">
+        <div>
+          <h2>Clínica</h2>
+          <p>Documentos utilizados no atendimento.</p>
+        </div>
       </div>
-      <div class="edge-bento-grid edge-bento-clinica">
-        <a class="edge-bento-card edge-card-blue" href="{{ url_for('encaminhamento_especialista') }}">
-          <span class="edge-card-icon">▤</span>
+      <div class="simple-card-grid simple-card-grid--five">
+        <a class="simple-module-card" href="{{ url_for('encaminhamento_especialista') }}">
           <h3>Encaminhamento individual</h3>
-          <p>Gere encaminhamento individual para atendimento, especialista ou preenchimento.</p>
-          <b>Abrir →</b>
+          <p>Encaminhamento para especialista com unidade de Belém ou Macapá.</p>
+          <span>Abrir</span>
         </a>
-        <a class="edge-bento-card edge-card-white" href="{{ url_for('encaminhamento_complementares') }}">
-          <span class="edge-card-icon">＋</span>
+        <a class="simple-module-card" href="{{ url_for('encaminhamento_complementares') }}">
           <h3>Enc. complementares</h3>
-          <p>Monte encaminhamentos com exames e local de atendimento.</p>
-          <b>Abrir →</b>
+          <p>Geração de encaminhamento com a quantidade de exames informada.</p>
+          <span>Abrir</span>
         </a>
-        <a class="edge-bento-card edge-card-black" href="{{ url_for('laudo_pcd') }}">
-          <span class="edge-card-icon">◉</span>
+        <a class="simple-module-card" href="{{ url_for('laudo_pcd') }}">
           <h3>Laudo PCD</h3>
-          <p>Preencha e gere o laudo PCD conforme modelo da clínica.</p>
-          <b>Abrir →</b>
+          <p>Preenchimento do laudo técnico conforme o modelo da clínica.</p>
+          <span>Abrir</span>
         </a>
-        <a class="edge-bento-card edge-card-white" href="{{ url_for('fisico_mental') }}">
-          <span class="edge-card-icon">✚</span>
+        <a class="simple-module-card" href="{{ url_for('fisico_mental') }}">
           <h3>Físico e Mental</h3>
-          <p>Documento de aptidão física e mental com padrão EDGE.</p>
-          <b>Abrir →</b>
+          <p>Atestado de aptidão com dados específicos de cada unidade.</p>
+          <span>Abrir</span>
         </a>
-        <a class="edge-bento-card edge-card-red" href="{{ url_for('atestado_medico') }}">
-          <span class="edge-card-icon">▧</span>
+        <a class="simple-module-card" href="{{ url_for('atestado_medico') }}">
           <h3>Atestado Médico</h3>
-          <p>Crie atestados com data, dias, CID e cidade em poucos passos.</p>
-          <b>Abrir →</b>
+          <p>Atestado com cidade, endereço e telefone preenchidos automaticamente.</p>
+          <span>Abrir</span>
         </a>
       </div>
     </section>
 
-    <section id="interno" class="edge-section-block">
-      <div class="edge-section-title">
-        <span>Interno</span>
-        <h2>Operação, exames e SST</h2>
-        <p>Área de uso interno para rotinas maiores, bases, eSocial e documentos técnicos.</p>
+    <section class="simple-module-section" id="interno">
+      <div class="simple-section-head">
+        <div>
+          <h2>Interno</h2>
+          <p>Rotinas administrativas, exames, eSocial e SST.</p>
+        </div>
       </div>
-      <div class="edge-bento-grid edge-bento-interno">
-        <a class="edge-bento-card edge-card-black edge-card-wide" href="/envio-periodicos/">
-          <span class="edge-card-icon">✉</span>
-          <h3>Envio periódicos</h3>
-          <p>Competências, convocados, encaminhamentos, e-mails e controle de comparecimento.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-blue edge-card-wide" href="/separar-exames/">
-          <span class="edge-card-icon">▣</span>
-          <h3>Separar exames</h3>
-          <p>Separe PDFs, revise pendências, use OCR e salve no Arquivo de Exames.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-white" href="{{ url_for('exames_a_prazo') }}">
-          <span class="edge-card-icon">▤</span>
-          <h3>Exames a Prazo</h3>
-          <p>Filtre bases com recibo ou observação A PRAZO.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-white" href="{{ url_for('renumerador') }}">
-          <span class="edge-card-icon">#</span>
-          <h3>Renumerador</h3>
-          <p>Ajuste recibos e numerações em planilhas.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-red" href="{{ url_for('esocial') }}">
-          <span class="edge-card-icon">⇄</span>
-          <h3>E-SOCIAL</h3>
-          <p>Ferramentas internas de conferência e processamento.</p>
-          <b>Abrir →</b>
-        </a>
-        <a class="edge-bento-card edge-card-white" href="/pgr/">
-          <span class="edge-card-icon">▨</span>
-          <h3>PGR / SST</h3>
-          <p>Empresas, GES, riscos, exames, PGR, PCMSO, LTCAT e AET.</p>
-          <b>Abrir →</b>
-        </a>
+      <div class="simple-card-grid">
+        <a class="simple-module-card" href="/envio-periodicos/"><h3>Envio periódicos</h3><p>Convocações, encaminhamentos, e-mails e controle de comparecimento.</p><span>Abrir</span></a>
+        <a class="simple-module-card" href="/separar-exames/"><h3>Separar exames</h3><p>Separação de PDFs, OCR, revisão e organização dos exames.</p><span>Abrir</span></a>
+        <a class="simple-module-card" href="{{ url_for('exames_a_prazo') }}"><h3>Exames a Prazo</h3><p>Consulta de empresas e exames identificados como A PRAZO.</p><span>Abrir</span></a>
+        <a class="simple-module-card" href="{{ url_for('renumerador') }}"><h3>Renumerador</h3><p>Ajuste de datas e numerações nos arquivos de recibos.</p><span>Abrir</span></a>
+        <a class="simple-module-card" href="{{ url_for('esocial') }}"><h3>E-SOCIAL</h3><p>Ferramentas de apoio às rotinas e arquivos do eSocial.</p><span>Abrir</span></a>
+        <a class="simple-module-card" href="/pgr/"><h3>PGR / SST</h3><p>Cadastros e geração de documentos de Segurança do Trabalho.</p><span>Abrir</span></a>
       </div>
     </section>
 
-    <section class="edge-bottom-panel">
-      <div>
-        <span>Conferência rápida</span>
-        <h2>Antes de iniciar uma rotina, confira o sistema.</h2>
-        <p>Veja se o banco, o disco persistente e o OCR/Tesseract estão ativos.</p>
-      </div>
-      <a class="btn btn--primary" href="{{ url_for('status_sistema') }}">Abrir status do sistema</a>
+    <section class="simple-system-links">
+      <a href="{{ url_for('status_sistema') }}"><strong>Status do sistema</strong><small>Banco, armazenamento e serviços.</small></a>
+      <a href="{{ url_for('minha_conta') }}"><strong>Minha conta</strong><small>Dados de acesso e senha.</small></a>
+      {% if is_admin %}<a href="{{ url_for('usuarios') }}"><strong>Usuários</strong><small>Gerencie os acessos da equipe.</small></a>{% endif %}
     </section>
   </main>
 </div>
-<script src="{{ url_for('static', filename='app.js') }}?v=edge-positivus-layout-1"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

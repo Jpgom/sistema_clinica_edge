@@ -1571,3 +1571,126 @@ body.edge-bold-site .btn--primary,body.edge-bold-site .btn-primary,body.edge-bol
   .simple-card-grid,.simple-card-grid--five,.simple-system-links{grid-template-columns:1fr}
   .simple-module-card{min-height:0}.simple-home-intro h1{font-size:31px}
 }
+
+
+/* ==========================================================
+   AJUSTE FINAL — menu lateral no desktop
+   ========================================================== */
+@media (min-width: 981px){
+  .app-layout{
+    display:grid !important;
+    grid-template-columns:260px minmax(0,1fr) !important;
+    min-height:100vh !important;
+    background:linear-gradient(90deg,#f7fafc 0,#f7fafc 260px,var(--bg) 260px,var(--bg) 100%) !important;
+  }
+
+  .sidebar,
+  body.edge-bold-site .sidebar.edge-bold-sidebar{
+    position:sticky !important;
+    top:0 !important;
+    width:260px !important;
+    min-width:260px !important;
+    height:100vh !important;
+    min-height:100vh !important;
+    padding:20px 16px !important;
+    display:flex !important;
+    flex-direction:column !important;
+    align-items:stretch !important;
+    align-content:stretch !important;
+    gap:18px !important;
+    overflow:hidden !important;
+    background:#ffffff !important;
+    border-right:1px solid var(--border) !important;
+    border-bottom:0 !important;
+    box-shadow:none !important;
+  }
+
+  .brand,
+  body.edge-bold-site .brand{
+    min-height:52px !important;
+    padding:4px 6px !important;
+    justify-content:flex-start !important;
+    white-space:normal !important;
+  }
+
+  .brand-logo,
+  body.edge-bold-site .brand-logo{
+    width:42px !important;
+    height:42px !important;
+    max-width:42px !important;
+  }
+
+  .nav-card.edge-sidebar-nav,
+  body.edge-bold-site .nav-card.edge-sidebar-nav{
+    min-width:0 !important;
+    width:100% !important;
+    display:flex !important;
+    flex-direction:column !important;
+    align-items:stretch !important;
+    gap:6px !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    max-height:none !important;
+    padding:0 4px 0 0 !important;
+  }
+
+  .nav-group-title{
+    display:block !important;
+    margin:14px 4px 4px !important;
+    padding:0 8px !important;
+    color:#8a97aa !important;
+    font-size:10px !important;
+    font-weight:800 !important;
+    text-transform:uppercase !important;
+    letter-spacing:.12em !important;
+  }
+
+  .nav-card.edge-sidebar-nav .nav-link,
+  body.edge-bold-site .nav-card.edge-sidebar-nav .nav-link,
+  .nav-link{
+    width:100% !important;
+    flex:0 0 auto !important;
+    min-height:40px !important;
+    height:auto !important;
+    padding:0 12px !important;
+    justify-content:flex-start !important;
+    gap:10px !important;
+    border-radius:10px !important;
+    font-size:13px !important;
+    line-height:1.2 !important;
+    white-space:nowrap !important;
+  }
+
+  .nav-card.edge-sidebar-nav .nav-link.active,
+  body.edge-bold-site .nav-card.edge-sidebar-nav .nav-link.active,
+  .nav-link.active{
+    box-shadow:inset 3px 0 0 var(--primary) !important;
+  }
+
+  .nav-link-muted,
+  body.edge-bold-site .nav-link-muted{
+    margin-top:auto !important;
+  }
+
+  .nav-icon{
+    width:18px !important;
+    min-width:18px !important;
+    display:grid !important;
+    place-items:center !important;
+  }
+
+  .nav-label{
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+    white-space:nowrap !important;
+  }
+
+  .main-area,
+  .edge-website-shell{
+    width:auto !important;
+    max-width:none !important;
+    min-width:0 !important;
+    margin:0 !important;
+    padding:28px clamp(18px,2.8vw,40px) 46px !important;
+  }
+}

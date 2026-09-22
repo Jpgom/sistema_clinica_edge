@@ -62,7 +62,7 @@
         <a class="btn btn--light" href="{{ url_for('fisico_mental_cadastros') }}">Editar cadastros</a>
       </div>
 
-      <form action="{{ url_for('fisico_gerar') }}" method="post" id="fisicoForm">
+      <form action="{{ url_for('fisico_gerar') }}" method="post" id="fisicoForm" autocomplete="off" data-download-reset="1" data-has-server-form="{% if form_data %}1{% else %}0{% endif %}">
         <div class="form-grid">
           <div class="field col-2">
             <label for="nome">Nome</label>
@@ -117,7 +117,7 @@
 
           <div class="field col-1">
             <label for="data_exame">Data</label>
-            <input id="data_exame" name="data_exame" type="date" value="{{ form_data.get('data_exame', today) }}">
+            <input id="data_exame" name="data_exame" type="date" required value="{{ form_data.get('data_exame', '') }}">
           </div>
 
           <div class="field col-1">
@@ -142,6 +142,7 @@
 
         <div class="actions inline-actions">
           <button class="btn btn--primary" type="submit">Gerar documento</button>
+          <button class="btn btn--light" type="button" id="clearFisicoForm">Limpar formulário</button>
           <a class="btn btn--light" href="{{ url_for('fisico_mental_cadastros') }}">Gerenciar empresas e cargos</a>
         </div>
       </form>
@@ -182,31 +183,53 @@ function filterSelect(selectEl, searchText){
 
 function bindSearch(searchEl, selectEl, hiddenEl, chipEl, emptyText){
   searchEl.addEventListener('input', () => {
-    const firstVisible = filterSelect(selectEl, searchEl.value);
-    if (firstVisible) firstVisible.selected = true;
+    filterSelect(selectEl, searchEl.value);
+    hiddenEl.value = searchEl.value.trim();
+    chipEl.textContent = hiddenEl.value || emptyText;
   });
 
   selectEl.addEventListener('change', () => {
     const selected = selectEl.options[selectEl.selectedIndex];
     if (!selected) return;
     hiddenEl.value = selected.value;
+    searchEl.value = selected.value;
     chipEl.textContent = selected.value || emptyText;
   });
 
-  const initialSelected = selectEl.options[selectEl.selectedIndex];
-  if (initialSelected && initialSelected.value) {
-    hiddenEl.value = initialSelected.value;
-    chipEl.textContent = initialSelected.value;
+  if (hiddenEl.value) {
+    searchEl.value = hiddenEl.value;
+    chipEl.textContent = hiddenEl.value;
+  } else {
+    selectEl.selectedIndex = -1;
+    searchEl.value = '';
+    chipEl.textContent = emptyText;
   }
 }
 
 bindSearch(empresaSearch, empresaSelect, empresaNome, empresaEscolhida, 'Nenhuma empresa selecionada');
 bindSearch(cargoSearch, cargoSelect, funcaoNome, cargoEscolhido, 'Nenhum cargo selecionado');
 
-document.getElementById('fisicoForm').addEventListener('submit', () => {
+const fisicoForm = document.getElementById('fisicoForm');
+fisicoForm.addEventListener('submit', () => {
   if (!empresaNome.value.trim()) empresaNome.value = empresaSearch.value.trim();
   if (!funcaoNome.value.trim()) funcaoNome.value = cargoSearch.value.trim();
 });
+
+function resetFisicoForm(){
+  fisicoForm.reset();
+  empresaSearch.value = '';
+  empresaNome.value = '';
+  cargoSearch.value = '';
+  funcaoNome.value = '';
+  empresaEscolhida.textContent = 'Nenhuma empresa selecionada';
+  cargoEscolhido.textContent = 'Nenhum cargo selecionado';
+  Array.from(empresaSelect.options).forEach(opt => { opt.selected = false; opt.hidden = false; });
+  Array.from(cargoSelect.options).forEach(opt => { opt.selected = false; opt.hidden = false; });
+  cpfInput.value = '';
+}
+
+fisicoForm.addEventListener('edge:form-reset', resetFisicoForm);
+document.getElementById('clearFisicoForm').addEventListener('click', resetFisicoForm);
 </script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

@@ -232,7 +232,6 @@ def init_db():
             name TEXT NOT NULL,
             email TEXT,
             email_cc TEXT,
-            responsible TEXT,
             active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
@@ -1048,7 +1047,6 @@ def company_edit(company_id=None):
         name = request.form.get("name", "").strip().upper()
         email = request.form.get("email", "").strip().lower()
         email_cc = request.form.get("email_cc", "").strip().lower()
-        responsible = request.form.get("responsible", "").strip().upper()
         active = 1 if request.form.get("active") else 0
         errors = []
         if len(cnpj) != 14: errors.append("Informe um CNPJ com 14 dígitos.")
@@ -1062,13 +1060,13 @@ def company_edit(company_id=None):
             try:
                 if company_id:
                     conn.execute(
-                        "UPDATE companies SET cnpj=?,name=?,email=?,email_cc=?,responsible=?,active=?,updated_at=? WHERE id=?",
-                        (cnpj,name,email,email_cc,responsible,active,now_iso(),company_id),
+                        "UPDATE companies SET cnpj=?,name=?,email=?,email_cc=?,active=?,updated_at=? WHERE id=?",
+                        (cnpj,name,email,email_cc,active,now_iso(),company_id),
                     )
                 else:
                     conn.execute(
-                        "INSERT INTO companies(cnpj,name,email,email_cc,responsible,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
-                        (cnpj,name,email,email_cc,responsible,active,now_iso(),now_iso()),
+                        "INSERT INTO companies(cnpj,name,email,email_cc,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+                        (cnpj,name,email,email_cc,active,now_iso(),now_iso()),
                     )
                 conn.commit(); conn.close()
                 flash("Cadastro salvo.", "success")
@@ -1129,7 +1127,6 @@ COMPANY_ALIASES = {
     "name": {"EMPRESA", "NOMEEMPRESA", "RAZAOSOCIAL", "RAZAOSOCIALNOMEOFICIAL"},
     "email": {"EMAIL", "EMAILPRINCIPAL", "EMAILRH", "EMAILDP"},
     "email_cc": {"EMAILCC", "CC", "EMAILCOPIA"},
-    "responsible": {"RESPONSAVEL", "CONTATO", "RESPONSAVELEMPRESA"},
     "active": {"ATIVO", "SITUACAO"},
 }
 
@@ -1155,14 +1152,13 @@ def companies_import():
                 name = str(row[mapping["name"]] or "").strip().upper() if "name" in mapping and mapping["name"] < len(row) else f"EMPRESA {format_cnpj(cnpj)}"
                 email = str(row[mapping["email"]] or "").strip().lower() if "email" in mapping and mapping["email"] < len(row) else ""
                 email_cc = str(row[mapping["email_cc"]] or "").strip().lower() if "email_cc" in mapping and mapping["email_cc"] < len(row) else ""
-                responsible = str(row[mapping["responsible"]] or "").strip().upper() if "responsible" in mapping and mapping["responsible"] < len(row) else ""
                 active_raw = normalize_text(row[mapping["active"]]) if "active" in mapping and mapping["active"] < len(row) else "SIM"
                 active = 0 if active_raw in {"NAO","N","0","INATIVO","INATIVA"} else 1
                 existing = conn.execute("SELECT id FROM companies WHERE cnpj=?", (cnpj,)).fetchone()
                 if existing:
-                    conn.execute("UPDATE companies SET name=?,email=?,email_cc=?,responsible=?,active=?,updated_at=? WHERE id=?", (name,email,email_cc,responsible,active,now_iso(),existing["id"])); updated += 1
+                    conn.execute("UPDATE companies SET name=?,email=?,email_cc=?,active=?,updated_at=? WHERE id=?", (name,email,email_cc,active,now_iso(),existing["id"])); updated += 1
                 else:
-                    conn.execute("INSERT INTO companies(cnpj,name,email,email_cc,responsible,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)", (cnpj,name,email,email_cc,responsible,active,now_iso(),now_iso())); imported += 1
+                    conn.execute("INSERT INTO companies(cnpj,name,email,email_cc,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", (cnpj,name,email,email_cc,active,now_iso(),now_iso())); imported += 1
         conn.commit(); conn.close()
         flash(f"Importação concluída: {imported} nova(s), {updated} atualizada(s), {errors} linha(s) ignorada(s).", "success")
     except Exception as e:
@@ -1173,10 +1169,10 @@ def companies_import():
 @app.route("/companies/template.xlsx")
 def company_template():
     wb=Workbook(); ws=wb.active; ws.title="EMPRESAS"
-    ws.append(["CNPJ","EMPRESA","EMAIL","EMAIL_CC","RESPONSAVEL","ATIVO"])
-    ws.append(["00.000.000/0001-00","EMPRESA EXEMPLO LTDA","rh@empresa.com.br","financeiro@empresa.com.br","MARIA","SIM"])
+    ws.append(["CNPJ","EMPRESA","EMAIL","EMAIL_CC","ATIVO"])
+    ws.append(["00.000.000/0001-00","EMPRESA EXEMPLO LTDA","rh@empresa.com.br","financeiro@empresa.com.br","SIM"])
     style_export_header(ws)
-    for i,w in enumerate([22,45,32,35,25,12],1): ws.column_dimensions[chr(64+i)].width=w
+    for i,w in enumerate([22,45,32,35,12],1): ws.column_dimensions[chr(64+i)].width=w
     bio=io.BytesIO(); wb.save(bio); bio.seek(0)
     return send_file(bio,as_attachment=True,download_name="MODELO_CADASTRO_EMPRESAS.xlsx",mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
@@ -1219,7 +1215,7 @@ def ensure_company(conn, cnpj, source_name):
             conn.execute("UPDATE companies SET name=?,updated_at=? WHERE id=?", (cleaned,now_iso(),company["id"]))
             company = conn.execute("SELECT * FROM companies WHERE id=?", (company["id"],)).fetchone()
         return company
-    cur = conn.execute("INSERT INTO companies(cnpj,name,email,email_cc,responsible,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)", (cnpj,cleaned,"","","",1,now_iso(),now_iso()))
+    cur = conn.execute("INSERT INTO companies(cnpj,name,email,email_cc,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", (cnpj,cleaned,"","",1,now_iso(),now_iso()))
     return conn.execute("SELECT * FROM companies WHERE id=?", (cur.lastrowid,)).fetchone()
 
 

@@ -55,13 +55,13 @@
         {% endif %}
       {% endwith %}
 
-      <form action="{{ url_for('laudo_pcd_gerar') }}" method="post" id="pcdForm" data-draft-key="edge_laudo_pcd_draft" data-has-server-form="{% if form_data %}1{% else %}0{% endif %}">
+      <form action="{{ url_for('laudo_pcd_gerar') }}" method="post" id="pcdForm" autocomplete="off" data-has-server-form="{% if form_data %}1{% else %}0{% endif %}" data-download-reset="1">
         <div class="section-head">
           <div>
             <h2>Dados principais</h2>
             <p class="muted">Você pode selecionar empresa/cargo cadastrado ou digitar manualmente sem cadastrar.</p>
           </div>
-          <button class="btn btn--light" type="button" id="clearPcdDraft">Limpar rascunho</button>
+          <button class="btn btn--light" type="button" id="clearPcdForm">Limpar formulário</button>
         </div>
 
         <div class="form-grid">
@@ -82,12 +82,12 @@
 
           <div class="field col-1">
             <label for="empresa_cnpj">CNPJ da empresa</label>
-            <input id="empresa_cnpj" name="empresa_cnpj" type="text" placeholder="00.000.000/0000-00" value="{{ form_data.get('empresa_cnpj','') }}">
+            <input id="empresa_cnpj" name="empresa_cnpj" type="text" placeholder="00.000.000/0000-00" value="{{ form_data.get('empresa_cnpj','') }}" autocomplete="off">
           </div>
 
           <div class="field col-1">
             <label for="data_laudo">Data do laudo</label>
-            <input id="data_laudo" name="data_laudo" type="date" value="{{ form_data.get('data_laudo', today) }}">
+            <input id="data_laudo" name="data_laudo" type="date" required value="{{ form_data.get('data_laudo','') }}" autocomplete="off">
           </div>
 
           <div class="field col-1">
@@ -103,22 +103,22 @@
 
           <div class="field col-2">
             <label for="nome">Nome do colaborador</label>
-            <input id="nome" name="nome" type="text" required placeholder="Nome completo" value="{{ form_data.get('nome','') }}">
+            <input id="nome" name="nome" type="text" required placeholder="Nome completo" value="{{ form_data.get('nome','') }}" autocomplete="off">
           </div>
 
           <div class="field col-1">
             <label for="cpf">CPF</label>
-            <input id="cpf" name="cpf" type="text" required maxlength="14" placeholder="000.000.000-00" value="{{ form_data.get('cpf','') }}">
+            <input id="cpf" name="cpf" type="text" required maxlength="14" placeholder="000.000.000-00" value="{{ form_data.get('cpf','') }}" autocomplete="off">
           </div>
 
           <div class="field col-1">
             <label for="rg">RG</label>
-            <input id="rg" name="rg" type="text" required placeholder="Número do RG" value="{{ form_data.get('rg','') }}">
+            <input id="rg" name="rg" type="text" required placeholder="Número do RG" value="{{ form_data.get('rg','') }}" autocomplete="off">
           </div>
 
           <div class="field col-1">
             <label for="uf">Órgão emissor/UF</label>
-            <input id="uf" name="uf" type="text" placeholder="Ex.: SSP/PA" value="{{ form_data.get('uf','') }}">
+            <input id="uf" name="uf" type="text" placeholder="Ex.: SSP/PA" value="{{ form_data.get('uf','') }}" autocomplete="off">
           </div>
 
           <div class="field col-1 list-panel">
@@ -316,44 +316,39 @@ document.getElementById('quickAddCargo').addEventListener('click', () => {
   quickAdd("{{ url_for('laudo_pcd_adicionar_cargo_rapido') }}", cargoSearch.value || cargoNome.value, cargoSelect, cargoNome, cargoSearch, cargoEscolhido);
 });
 
-const draftKey = pcdForm.dataset.draftKey;
-function saveDraft(){
-  const data = {};
-  new FormData(pcdForm).forEach((value, key) => { data[key] = value; });
-  data.empresa_search = empresaSearch.value;
-  data.cargo_search = cargoSearch.value;
-  localStorage.setItem(draftKey, JSON.stringify(data));
-}
-function restoreDraft(){
-  if (pcdForm.dataset.hasServerForm === '1') return;
-  try {
-    const data = JSON.parse(localStorage.getItem(draftKey) || '{}');
-    Object.entries(data).forEach(([key, value]) => {
-      const field = pcdForm.elements[key] || document.getElementById(key);
-      if (field && typeof field.value !== 'undefined') field.value = value;
-      else document.querySelectorAll(`[name="${key}"]`).forEach(item => { item.value = value; });
-    });
-    if (data.empresa_nome) { empresaNome.value = data.empresa_nome; empresaSearch.value = data.empresa_search || data.empresa_nome; empresaEscolhida.textContent = data.empresa_nome; }
-    if (data.cargo_nome) { cargoNome.value = data.cargo_nome; cargoSearch.value = data.cargo_search || data.cargo_nome; cargoEscolhido.textContent = data.cargo_nome; }
-    togglePcdPanels();
-  } catch {}
-}
-restoreDraft();
-pcdForm.addEventListener('input', saveDraft);
-pcdForm.addEventListener('change', saveDraft);
-pcdForm.addEventListener('submit', () => {
-  if (!empresaNome.value.trim()) empresaNome.value = empresaSearch.value.trim();
-  if (!cargoNome.value.trim()) cargoNome.value = cargoSearch.value.trim();
-  saveDraft();
-});
-document.getElementById('clearPcdDraft').addEventListener('click', () => {
-  localStorage.removeItem(draftKey);
+function clearPcdForm(){
   pcdForm.reset();
+  empresaSearch.value = '';
   empresaNome.value = '';
+  cargoSearch.value = '';
   cargoNome.value = '';
   empresaEscolhida.textContent = 'Nenhuma empresa selecionada';
   cargoEscolhido.textContent = 'Nenhum cargo selecionado';
+  Array.from(empresaSelect.options).forEach(opt => { opt.selected = false; opt.hidden = false; });
+  Array.from(cargoSelect.options).forEach(opt => { opt.selected = false; opt.hidden = false; });
+  cpfInput.value = '';
   togglePcdPanels();
+}
+
+/* Não reaproveitar dados de atendimentos anteriores. */
+try { localStorage.removeItem('edge_laudo_pcd_draft'); } catch (_) {}
+
+/* Em uma abertura normal do formulário, todos os campos começam vazios.
+   Dados só são preservados quando o servidor devolve o formulário por erro de validação. */
+if (pcdForm.dataset.hasServerForm !== '1') {
+  clearPcdForm();
+}
+
+pcdForm.addEventListener('submit', () => {
+  if (!empresaNome.value.trim()) empresaNome.value = empresaSearch.value.trim();
+  if (!cargoNome.value.trim()) cargoNome.value = cargoSearch.value.trim();
+});
+
+document.getElementById('clearPcdForm').addEventListener('click', clearPcdForm);
+pcdForm.addEventListener('edge:form-reset', clearPcdForm);
+
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted && pcdForm.dataset.hasServerForm !== '1') clearPcdForm();
 });
 </script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>

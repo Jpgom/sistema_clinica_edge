@@ -32,12 +32,12 @@
     <div class="topbar compact-topbar"><div class="page-title"><h1>Renumerador de Recibos</h1></div></div>
     <section class="content-card">
       {% with messages = get_flashed_messages() %}{% for m in messages %}<div class="alert error">{{ m }}</div>{% endfor %}{% endwith %}
-      <form method="POST" enctype="multipart/form-data">
+      <form method="POST" enctype="multipart/form-data" autocomplete="off" data-download-reset="1">
         <div class="form-grid">
           <div class="field col-2"><label for="arquivo">Arquivo .docx ou .zip</label><input type="file" id="arquivo" name="arquivo" accept=".docx,.zip" required></div>
           <div class="field col-2"><label for="nova_data">Nova data</label><input type="text" id="nova_data" name="nova_data" placeholder="dd/mm/aaaa" required></div>
         </div>
-        <div class="actions"><button class="btn btn--primary" type="submit">Processar</button></div>
+        <div class="actions"><button class="btn btn--primary" type="submit">Processar</button><button class="btn btn--light" type="reset">Limpar formulário</button></div>
       </form>
     </section>
   </main>

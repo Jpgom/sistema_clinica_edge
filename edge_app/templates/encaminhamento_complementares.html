@@ -63,7 +63,7 @@
         </div>
       </div>
 
-      <form action="{{ url_for('encaminhamento_complementares_gerar') }}" method="post" id="encaminhamentoComplementaresForm">
+      <form action="{{ url_for('encaminhamento_complementares_gerar') }}" method="post" id="encaminhamentoComplementaresForm" autocomplete="off" data-download-reset="1" data-has-server-form="{% if form_data %}1{% else %}0{% endif %}">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <div class="form-grid">
           <div class="field col-2">
@@ -78,7 +78,7 @@
 
           <div class="field col-1">
             <label for="data_documento">Data</label>
-            <input id="data_documento" name="data_documento" type="date" required value="{{ form_data.get('data_documento', today) }}">
+            <input id="data_documento" name="data_documento" type="date" required value="{{ form_data.get('data_documento', '') }}">
           </div>
 
           <div class="field col-2">
@@ -121,6 +121,7 @@
 
         <div class="actions inline-actions">
           <button class="btn btn--primary" type="submit">Gerar Word</button>
+          <button class="btn btn--light" type="button" id="clearComplementaresForm">Limpar formulário</button>
           <a class="btn btn--light" href="{{ url_for('home') }}">Voltar ao início</a>
         </div>
       </form>
@@ -182,6 +183,24 @@ addBtn.addEventListener('click', () => {
 });
 attachRemoveButtons();
 updateExamLabels();
+
+function resetComplementaresForm(){
+  document.getElementById('encaminhamentoComplementaresForm').reset();
+  container.innerHTML = `
+    <div class="field col-2 exam-row">
+      <label>Exame 1</label>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input name="exames" type="text" placeholder="Ex.: HEMOGRAMA COMPLETO" value="">
+        <button class="btn btn--light remove-exam" type="button" aria-label="Remover exame">Remover</button>
+      </div>
+    </div>`;
+  attachRemoveButtons();
+  updateExamLabels();
+  cpfInput.value = '';
+}
+
+document.getElementById('encaminhamentoComplementaresForm').addEventListener('edge:form-reset', resetComplementaresForm);
+document.getElementById('clearComplementaresForm').addEventListener('click', resetComplementaresForm);
 </script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

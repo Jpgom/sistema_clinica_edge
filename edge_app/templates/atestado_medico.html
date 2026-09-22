@@ -62,7 +62,7 @@
         </div>
       </div>
 
-      <form action="{{ url_for('atestado_medico_gerar') }}" method="post" id="atestadoForm">
+      <form action="{{ url_for('atestado_medico_gerar') }}" method="post" id="atestadoForm" autocomplete="off" data-download-reset="1" data-has-server-form="{% if form_data %}1{% else %}0{% endif %}">
         <div class="form-grid">
           <div class="field col-2">
             <label for="nome">Nome do paciente</label>
@@ -71,7 +71,7 @@
 
           <div class="field col-1">
             <label for="data">Data do atendimento</label>
-            <input id="data" name="data" type="date" required value="{{ form_data.get('data', today) }}">
+            <input id="data" name="data" type="date" required value="{{ form_data.get('data', '') }}">
           </div>
 
           <div class="field col-1">
@@ -105,12 +105,18 @@
 
         <div class="actions inline-actions">
           <button class="btn btn--primary" type="submit">Gerar atestado</button>
+          <button class="btn btn--light" type="button" id="clearAtestadoForm">Limpar formulário</button>
           <a class="btn btn--light" href="{{ url_for('home') }}">Voltar ao início</a>
         </div>
       </form>
     </section>
   </main>
 </div>
+<script>
+document.getElementById('clearAtestadoForm').addEventListener('click', () => {
+  document.getElementById('atestadoForm').reset();
+});
+</script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

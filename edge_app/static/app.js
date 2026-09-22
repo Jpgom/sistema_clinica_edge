@@ -342,6 +342,9 @@ hideLoading();
 document.addEventListener('submit', function(e){
   const form=e.target;
   if(!(form instanceof HTMLFormElement)) return;
+  // Formulários de download são controlados pelo fluxo assíncrono abaixo.
+  // Não bloqueie o próximo documento depois que o arquivo for baixado.
+  if(form.dataset.downloadReset==='1') return;
   if(form.dataset.edgeSubmitting==='1'){ e.preventDefault(); return; }
   if(!form.checkValidity()) return;
   form.dataset.edgeSubmitting='1';
@@ -359,3 +362,109 @@ window.addEventListener('pageshow',()=>{
     form.querySelectorAll('button:disabled,input:disabled').forEach(btn=>{btn.disabled=false; if(btn.dataset.originalLabel){ if(btn.tagName==='INPUT') btn.value=btn.dataset.originalLabel; else btn.textContent=btn.dataset.originalLabel; }});
   });
 });
+
+// Geração de documentos sem recarregar a página.
+// Após um download concluído, os dados permanecem no formulário até o usuário limpar ou sair da funcionalidade.
+(function () {
+  const forms = document.querySelectorAll('form[data-download-reset="1"]');
+  if (!forms.length) return;
+
+  function filenameFromDisposition(disposition, fallback) {
+    if (!disposition) return fallback;
+    const utf = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf && utf[1]) {
+      try { return decodeURIComponent(utf[1].replace(/["']/g, '').trim()); } catch (_) {}
+    }
+    const plain = disposition.match(/filename="?([^";]+)"?/i);
+    return plain && plain[1] ? plain[1].trim() : fallback;
+  }
+
+  function resetSubmitButton(form) {
+    const submit = form.querySelector('button[type="submit"], input[type="submit"]');
+    if (!submit) return;
+    submit.disabled = false;
+    if (submit.dataset.originalText) {
+      if (submit.tagName === 'BUTTON') submit.textContent = submit.dataset.originalText;
+      else submit.value = submit.dataset.originalText;
+    }
+    delete submit.dataset.processing;
+  }
+
+  function messageFromHtml(html) {
+    try {
+      const parsed = new DOMParser().parseFromString(html, 'text/html');
+      const alertBox = parsed.querySelector('.alert, .flash');
+      return alertBox ? (alertBox.textContent || '').trim() : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function prepareBlankForm(form) {
+    if (form.dataset.hasServerForm === '1') return;
+    form.reset();
+    form.dispatchEvent(new CustomEvent('edge:form-reset'));
+  }
+
+  forms.forEach((form) => {
+    prepareBlankForm(form);
+
+    form.addEventListener('submit', async (event) => {
+      if (form.dataset.downloadBusy === '1') {
+        event.preventDefault();
+        return;
+      }
+      if (!form.checkValidity()) return;
+
+      event.preventDefault();
+      form.dataset.downloadBusy = '1';
+
+      try {
+        const response = await fetch(form.action || window.location.href, {
+          method: (form.method || 'POST').toUpperCase(),
+          body: new FormData(form),
+          credentials: 'same-origin',
+          headers: csrfHeader()
+        });
+
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+        const isAttachment = /attachment/i.test(disposition) ||
+          contentType.includes('application/vnd.openxmlformats-officedocument') ||
+          contentType.includes('application/pdf') ||
+          contentType.includes('application/zip');
+
+        if (!response.ok || !isAttachment) {
+          const html = await response.text();
+          const message = messageFromHtml(html) || 'Não foi possível gerar o arquivo. Confira os campos e tente novamente.';
+          alert(message);
+          return;
+        }
+
+        const blob = await response.blob();
+        const ext = contentType.includes('pdf') ? '.pdf' : contentType.includes('zip') ? '.zip' : '.docx';
+        const filename = filenameFromDisposition(disposition, `arquivo${ext}`);
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+
+        // Mantém os dados preenchidos após o download para permitir nova geração/ajustes.
+      } catch (error) {
+        alert('Não foi possível concluir a geração. Tente novamente.');
+      } finally {
+        form.dataset.downloadBusy = '0';
+        resetSubmitButton(form);
+      }
+    });
+  });
+
+  window.addEventListener('pageshow', (event) => {
+    if (!event.persisted) return;
+    forms.forEach(prepareBlankForm);
+  });
+})();

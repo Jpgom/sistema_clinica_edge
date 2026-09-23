@@ -447,3 +447,381 @@ html[data-theme="dark"] code{background:#252d35!important;color:#dce7ee!importan
 @media (min-width: 721px){
   .topbar{padding-right:150px!important}
 }
+
+
+/* ==========================================================
+   EDGE — Contraste refinado v2 (claro e escuro)
+   Mantém o visual simples, com superfícies e controles legíveis.
+   ========================================================== */
+
+/* CLARO */
+html:not([data-theme="dark"]) body{
+  background:#eef3f1!important;
+  color:#17211d!important;
+}
+html:not([data-theme="dark"]) .main,
+html:not([data-theme="dark"]) .main-area,
+html:not([data-theme="dark"]) .content,
+html:not([data-theme="dark"]) .edge-integrated-main,
+html:not([data-theme="dark"]) .edge-website-shell{
+  color:#17211d!important;
+}
+html:not([data-theme="dark"]) h1,
+html:not([data-theme="dark"]) h2,
+html:not([data-theme="dark"]) h3,
+html:not([data-theme="dark"]) h4,
+html:not([data-theme="dark"]) .page-title h1,
+html:not([data-theme="dark"]) .section-head h2,
+html:not([data-theme="dark"]) .section-header h2{
+  color:#111815!important;
+}
+html:not([data-theme="dark"]) p,
+html:not([data-theme="dark"]) .muted,
+html:not([data-theme="dark"]) .helper,
+html:not([data-theme="dark"]) .lead,
+html:not([data-theme="dark"]) .topbar-note,
+html:not([data-theme="dark"]) .field-help,
+html:not([data-theme="dark"]) .row-subtitle,
+html:not([data-theme="dark"]) .table-note{
+  color:#56655f!important;
+}
+html:not([data-theme="dark"]) .content-card,
+html:not([data-theme="dark"]) .panel,
+html:not([data-theme="dark"]) .card,
+html:not([data-theme="dark"]) .mini-card,
+html:not([data-theme="dark"]) .list-panel,
+html:not([data-theme="dark"]) .table-wrap,
+html:not([data-theme="dark"]) .box,
+html:not([data-theme="dark"]) .section-card,
+html:not([data-theme="dark"]) .form-card,
+html:not([data-theme="dark"]) .simple-module-card,
+html:not([data-theme="dark"]) .simple-system-links a,
+html:not([data-theme="dark"]) .feature-card,
+html:not([data-theme="dark"]) .stat-card,
+html:not([data-theme="dark"]) .quick-card,
+html:not([data-theme="dark"]) .module-category,
+html:not([data-theme="dark"]) .flow-card,
+html:not([data-theme="dark"]) .status-card-v2,
+html:not([data-theme="dark"]) .home-action-card,
+html:not([data-theme="dark"]) .home-area-card,
+html:not([data-theme="dark"]) .edge-bento-card,
+html:not([data-theme="dark"]) .edge-bottom-panel,
+html:not([data-theme="dark"]) .modal-card,
+html:not([data-theme="dark"]) .modal-content,
+html:not([data-theme="dark"]) .progress-modal,
+html:not([data-theme="dark"]) .operation-card{
+  background:#ffffff!important;
+  border-color:#c9d5d0!important;
+  color:#17211d!important;
+  box-shadow:0 2px 8px rgba(28,45,39,.05)!important;
+}
+html:not([data-theme="dark"]) input,
+html:not([data-theme="dark"]) select,
+html:not([data-theme="dark"]) textarea,
+html:not([data-theme="dark"]) .form-control,
+html:not([data-theme="dark"]) .text-input{
+  background:#ffffff!important;
+  color:#17211d!important;
+  border-color:#bfcac5!important;
+}
+html:not([data-theme="dark"]) input::placeholder,
+html:not([data-theme="dark"]) textarea::placeholder{color:#7a8781!important}
+html:not([data-theme="dark"]) input:focus,
+html:not([data-theme="dark"]) select:focus,
+html:not([data-theme="dark"]) textarea:focus,
+html:not([data-theme="dark"]) .form-control:focus,
+html:not([data-theme="dark"]) .text-input:focus{
+  border-color:#277aa8!important;
+  outline:3px solid rgba(39,122,168,.14)!important;
+}
+html:not([data-theme="dark"]) .btn-secondary,
+html:not([data-theme="dark"]) .btn-ghost,
+html:not([data-theme="dark"]) .btn--light,
+html:not([data-theme="dark"]) .back-button{
+  background:#e8eeeb!important;
+  color:#25322c!important;
+  border-color:#bfcac5!important;
+}
+html:not([data-theme="dark"]) .btn-secondary:hover,
+html:not([data-theme="dark"]) .btn-ghost:hover,
+html:not([data-theme="dark"]) .btn--light:hover,
+html:not([data-theme="dark"]) .back-button:hover{
+  background:#dce6e1!important;
+  border-color:#aab9b2!important;
+}
+html:not([data-theme="dark"]) th{color:#3f5149!important}
+html:not([data-theme="dark"]) td{color:#1f2c26!important}
+
+/* ESCURO — contraste reforçado */
+html[data-theme="dark"]{
+  --bg:#11161a!important;
+  --surface:#1b2228!important;
+  --panel:#1b2228!important;
+  --panel-2:#212a31!important;
+  --text:#f2f5f7!important;
+  --muted:#bdc7ce!important;
+  --muted-2:#95a3ad!important;
+  --line:#3c4852!important;
+  --line-dark:#4b5964!important;
+  --border:#3c4852!important;
+  --border-strong:#52616d!important;
+}
+html[data-theme="dark"] body{
+  background:#11161a!important;
+  color:#f2f5f7!important;
+}
+html[data-theme="dark"] .main,
+html[data-theme="dark"] .main-area,
+html[data-theme="dark"] .content,
+html[data-theme="dark"] .edge-integrated-main,
+html[data-theme="dark"] .edge-website-shell,
+html[data-theme="dark"] .app-shell,
+html[data-theme="dark"] .app-layout{
+  background:#11161a!important;
+  color:#f2f5f7!important;
+}
+html[data-theme="dark"] .sidebar,
+html[data-theme="dark"] .edge-integrated-sidebar{
+  background:#161c21!important;
+  border-color:#35414a!important;
+}
+html[data-theme="dark"] .topbar,
+html[data-theme="dark"] .edge-module-topbar,
+html[data-theme="dark"] header.topbar{
+  background:#171e23!important;
+  border-color:#35414a!important;
+  color:#f2f5f7!important;
+}
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] h4,
+html[data-theme="dark"] h5,
+html[data-theme="dark"] strong,
+html[data-theme="dark"] .page-title h1,
+html[data-theme="dark"] .section-head h2,
+html[data-theme="dark"] .section-header h2{
+  color:#f7fafb!important;
+}
+html[data-theme="dark"] p,
+html[data-theme="dark"] small,
+html[data-theme="dark"] .muted,
+html[data-theme="dark"] .helper,
+html[data-theme="dark"] .lead,
+html[data-theme="dark"] .topbar-note,
+html[data-theme="dark"] .field-help,
+html[data-theme="dark"] .row-subtitle,
+html[data-theme="dark"] .table-note{
+  color:#bdc7ce!important;
+}
+html[data-theme="dark"] .content-card,
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .mini-card,
+html[data-theme="dark"] .list-panel,
+html[data-theme="dark"] .table-wrap,
+html[data-theme="dark"] .simple-module-card,
+html[data-theme="dark"] .simple-system-links a,
+html[data-theme="dark"] .feature-card,
+html[data-theme="dark"] .stat-card,
+html[data-theme="dark"] .quick-card,
+html[data-theme="dark"] .module-category,
+html[data-theme="dark"] .flow-card,
+html[data-theme="dark"] .status-card-v2,
+html[data-theme="dark"] .home-action-card,
+html[data-theme="dark"] .home-area-card,
+html[data-theme="dark"] .edge-bento-card,
+html[data-theme="dark"] .edge-bottom-panel,
+html[data-theme="dark"] .modal,
+html[data-theme="dark"] .modal-card,
+html[data-theme="dark"] .modal-content,
+html[data-theme="dark"] .progress-modal,
+html[data-theme="dark"] .operation-card,
+html[data-theme="dark"] .login-card,
+html[data-theme="dark"] .box,
+html[data-theme="dark"] .section-card,
+html[data-theme="dark"] .form-card{
+  background:#1b2228!important;
+  border-color:#3f4c56!important;
+  color:#f2f5f7!important;
+  box-shadow:0 5px 18px rgba(0,0,0,.20)!important;
+}
+html[data-theme="dark"] .info-box,
+html[data-theme="dark"] .helper-box,
+html[data-theme="dark"] .soft-note,
+html[data-theme="dark"] .error-helper,
+html[data-theme="dark"] .details-grid div{
+  background:#212a31!important;
+  border-color:#46545f!important;
+  color:#e5ebef!important;
+}
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] .form-control,
+html[data-theme="dark"] .text-input{
+  background:#151c21!important;
+  border-color:#53626d!important;
+  color:#f7f9fa!important;
+}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder{color:#8f9ca6!important}
+html[data-theme="dark"] input:focus,
+html[data-theme="dark"] select:focus,
+html[data-theme="dark"] textarea:focus,
+html[data-theme="dark"] .form-control:focus,
+html[data-theme="dark"] .text-input:focus{
+  background:#192128!important;
+  border-color:#79b9df!important;
+  outline:3px solid rgba(121,185,223,.22)!important;
+}
+html[data-theme="dark"] label,
+html[data-theme="dark"] .field label,
+html[data-theme="dark"] .field-label,
+html[data-theme="dark"] .form-label{color:#e1e7eb!important}
+html[data-theme="dark"] .btn-secondary,
+html[data-theme="dark"] .btn-ghost,
+html[data-theme="dark"] .btn--light,
+html[data-theme="dark"] .back-button{
+  background:#273139!important;
+  color:#edf2f5!important;
+  border-color:#53616c!important;
+}
+html[data-theme="dark"] .btn-secondary:hover,
+html[data-theme="dark"] .btn-ghost:hover,
+html[data-theme="dark"] .btn--light:hover,
+html[data-theme="dark"] .back-button:hover{
+  background:#323e47!important;
+  border-color:#657681!important;
+}
+html[data-theme="dark"] .btn-primary,
+html[data-theme="dark"] .btn--primary,
+html[data-theme="dark"] button[type="submit"],
+html[data-theme="dark"] input[type="submit"]{
+  background:#2f82b3!important;
+  color:#ffffff!important;
+  border-color:#57a1cb!important;
+}
+html[data-theme="dark"] table,
+html[data-theme="dark"] .file-table,
+html[data-theme="dark"] .data-table{
+  background:#1b2228!important;
+  color:#edf2f5!important;
+}
+html[data-theme="dark"] thead,
+html[data-theme="dark"] .file-table thead,
+html[data-theme="dark"] .data-table thead{
+  background:#273139!important;
+}
+html[data-theme="dark"] th{
+  color:#e0e7eb!important;
+  border-color:#46545e!important;
+}
+html[data-theme="dark"] td{
+  color:#edf2f5!important;
+  border-color:#37434c!important;
+}
+html[data-theme="dark"] tbody tr:hover td{background:#222b32!important}
+html[data-theme="dark"] a:not(.btn):not(.nav-link):not(.edge-menu-link){color:#8cc9ec}
+html[data-theme="dark"] .edge-theme-toggle{
+  background:#253038!important;
+  color:#f5f8fa!important;
+  border-color:#5a6974!important;
+}
+html[data-theme="dark"] .edge-theme-toggle:hover{background:#313d46!important}
+
+
+/* ==========================================================
+   Envio Periódicos — contraste específico v2
+   ========================================================== */
+html:not([data-theme="dark"]) .summary-strip,
+html:not([data-theme="dark"]) .summary-strip>div,
+html:not([data-theme="dark"]) .unit-card,
+html:not([data-theme="dark"]) .kpi-card,
+html:not([data-theme="dark"]) .workflow-card,
+html:not([data-theme="dark"]) .toolbar-card,
+html:not([data-theme="dark"]) .table-toolbar,
+html:not([data-theme="dark"]) .upload-box,
+html:not([data-theme="dark"]) .referral-steps,
+html:not([data-theme="dark"]) .referral-progress-icon,
+html:not([data-theme="dark"]) .referral-mini-expand{
+  background:#ffffff!important;
+  border-color:#c9d5d0!important;
+  color:#17211d!important;
+}
+html:not([data-theme="dark"]) .summary-strip span,
+html:not([data-theme="dark"]) .unit-latest,
+html:not([data-theme="dark"]) .unit-stats span,
+html:not([data-theme="dark"]) .workflow-card p,
+html:not([data-theme="dark"]) .upload-box p{
+  color:#596861!important;
+}
+html:not([data-theme="dark"]) .summary-strip strong,
+html:not([data-theme="dark"]) .unit-card h2,
+html:not([data-theme="dark"]) .unit-stats strong,
+html:not([data-theme="dark"]) .workflow-card h3{
+  color:#18221e!important;
+}
+html:not([data-theme="dark"]) .unit-card,
+html:not([data-theme="dark"]) .summary-strip,
+html:not([data-theme="dark"]) .workflow-card,
+html:not([data-theme="dark"]) .kpi-card{
+  border-color:#c4d0cb!important;
+}
+
+html[data-theme="dark"] .summary-strip,
+html[data-theme="dark"] .summary-strip>div,
+html[data-theme="dark"] .unit-card,
+html[data-theme="dark"] .kpi-card,
+html[data-theme="dark"] .workflow-card,
+html[data-theme="dark"] .toolbar-card,
+html[data-theme="dark"] .table-toolbar,
+html[data-theme="dark"] .upload-box,
+html[data-theme="dark"] .referral-shell,
+html[data-theme="dark"] .referral-steps,
+html[data-theme="dark"] .referral-progress-icon,
+html[data-theme="dark"] .referral-mini-expand{
+  background:#1b2228!important;
+  border-color:#43515b!important;
+  color:#f2f5f7!important;
+}
+html[data-theme="dark"] .summary-strip>div{border-color:#43515b!important}
+html[data-theme="dark"] .summary-strip span,
+html[data-theme="dark"] .unit-latest,
+html[data-theme="dark"] .unit-stats span,
+html[data-theme="dark"] .workflow-card p,
+html[data-theme="dark"] .upload-box p,
+html[data-theme="dark"] .breadcrumbs,
+html[data-theme="dark"] .breadcrumbs a{
+  color:#bdc7ce!important;
+}
+html[data-theme="dark"] .summary-strip strong,
+html[data-theme="dark"] .unit-card h2,
+html[data-theme="dark"] .unit-stats strong,
+html[data-theme="dark"] .workflow-card h3,
+html[data-theme="dark"] .kpi-card strong,
+html[data-theme="dark"] .kpi-card span{
+  color:#f4f7f9!important;
+}
+html[data-theme="dark"] .unit-stats{border-color:#43515b!important}
+html[data-theme="dark"] .unit-initial,
+html[data-theme="dark"] .mini-mark,
+html[data-theme="dark"] .upload-icon{
+  background:#243946!important;
+  color:#9fd4f1!important;
+  border-color:#3d5a6b!important;
+}
+html[data-theme="dark"] .arrow{color:#9fb0bb!important}
+html[data-theme="dark"] .table-toolbar{border-color:#43515b!important}
+html[data-theme="dark"] .table th{background:#273139!important;color:#e1e8ec!important}
+html[data-theme="dark"] .table td{color:#edf2f5!important;border-color:#39464f!important}
+html[data-theme="dark"] .table tbody tr:hover td{background:#222c33!important}
+html[data-theme="dark"] .entity-link{color:#eef3f6!important}
+html[data-theme="dark"] .status{border-color:#55636e!important}
+html[data-theme="dark"] .referral-progress-line{color:#bdc7ce!important}
+html[data-theme="dark"] .referral-progress-line strong,
+html[data-theme="dark"] .referral-mini-percent{color:#93cdec!important}
+html[data-theme="dark"] .referral-mini-row strong{color:#f3f7f9!important}
+html[data-theme="dark"] .referral-mini-row span{color:#b6c1c9!important}
+html[data-theme="dark"] .page-head{border-color:#3b4851!important}
+html[data-theme="dark"] .section-head{border-color:#3b4851!important}

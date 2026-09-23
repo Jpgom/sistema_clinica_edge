@@ -1,1 +1,48 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"><title>Entrar</title></head><body><div class="login-shell"><div class="login-card"><h1>EDGE</h1><p class="muted">Convocação de Exames Periódicos</p>{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endwith %}<form method="post"><div class="form-group"><label>Senha administrativa</label><input class="form-control" type="password" name="password" required autofocus></div><button class="btn btn-primary" style="width:100%">Entrar</button></form></div></div></body></html>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}?v=edge-theme-20260923"><title>Entrar</title>
+<script>
+(function(){
+  try {
+    var saved = localStorage.getItem('edge-theme');
+    var theme = saved === 'dark' || saved === 'light' ? saved : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+})();
+</script>
+</head><body><div class="login-shell"><div class="login-card"><h1>EDGE</h1><p class="muted">Convocação de Exames Periódicos</p>{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}{% endwith %}<form method="post"><div class="form-group"><label>Senha administrativa</label><input class="form-control" type="password" name="password" required autofocus></div><button class="btn btn-primary" style="width:100%">Entrar</button></form></div></div>
+<button type="button" class="edge-theme-toggle" id="edgeThemeToggle" aria-label="Alternar tema" title="Alternar tema">
+  <span class="edge-theme-icon" aria-hidden="true">☾</span>
+  <span class="edge-theme-text">Tema escuro</span>
+</button>
+<script>
+(function(){
+  function applyTheme(theme){
+    var next = theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('edge-theme', next); } catch(e) {}
+    var btn = document.getElementById('edgeThemeToggle');
+    if (btn) {
+      var icon = btn.querySelector('.edge-theme-icon');
+      var text = btn.querySelector('.edge-theme-text');
+      if (icon) icon.textContent = next === 'dark' ? '☀' : '☾';
+      if (text) text.textContent = next === 'dark' ? 'Tema claro' : 'Tema escuro';
+      btn.setAttribute('aria-label', next === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro');
+      btn.setAttribute('title', next === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro');
+    }
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', next === 'dark' ? '#15191e' : '#f4f7f6');
+  }
+  function initThemeToggle(){
+    var current = document.documentElement.getAttribute('data-theme') || 'light';
+    applyTheme(current);
+    var btn = document.getElementById('edgeThemeToggle');
+    if (btn) btn.addEventListener('click', function(){
+      applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initThemeToggle);
+  else initThemeToggle();
+})();
+</script>
+</body></html>

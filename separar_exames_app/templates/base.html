@@ -4,7 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}EDGE | Separar exames{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=edge-minimal-20260922">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=edge-theme-20260923">
+
+<script>
+(function(){
+  try {
+    var saved = localStorage.getItem('edge-theme');
+    var theme = saved === 'dark' || saved === 'light' ? saved : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+})();
+</script>
 </head>
 <body class="edge-integrated-body">
 <div class="edge-integrated-layout">
@@ -57,5 +69,40 @@
 <script>window.EDGE_BASE_PATH = {{ (request.script_root or "")|tojson }};</script>
 <script src="{{ url_for('static', filename='common.js') }}?v=edge-minimal-20260922"></script>
 {% block scripts %}{% endblock %}
+
+<button type="button" class="edge-theme-toggle" id="edgeThemeToggle" aria-label="Alternar tema" title="Alternar tema">
+  <span class="edge-theme-icon" aria-hidden="true">☾</span>
+  <span class="edge-theme-text">Tema escuro</span>
+</button>
+<script>
+(function(){
+  function applyTheme(theme){
+    var next = theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('edge-theme', next); } catch(e) {}
+    var btn = document.getElementById('edgeThemeToggle');
+    if (btn) {
+      var icon = btn.querySelector('.edge-theme-icon');
+      var text = btn.querySelector('.edge-theme-text');
+      if (icon) icon.textContent = next === 'dark' ? '☀' : '☾';
+      if (text) text.textContent = next === 'dark' ? 'Tema claro' : 'Tema escuro';
+      btn.setAttribute('aria-label', next === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro');
+      btn.setAttribute('title', next === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro');
+    }
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', next === 'dark' ? '#15191e' : '#f4f7f6');
+  }
+  function initThemeToggle(){
+    var current = document.documentElement.getAttribute('data-theme') || 'light';
+    applyTheme(current);
+    var btn = document.getElementById('edgeThemeToggle');
+    if (btn) btn.addEventListener('click', function(){
+      applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initThemeToggle);
+  else initThemeToggle();
+})();
+</script>
 </body>
 </html>

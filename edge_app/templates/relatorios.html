@@ -5,11 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#f5f7fb">
   <title>Relatórios de Periódicos</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=edge-theme-20260923">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <style>
     .relatorios-grid{display:grid;grid-template-columns:1fr;gap:18px}.relatorio-panel{border:1px solid rgba(15,23,42,.08);border-radius:18px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.06);overflow:hidden}.relatorio-panel__head{padding:18px 20px;border-bottom:1px solid rgba(15,23,42,.08);background:linear-gradient(135deg,#f8fafc,#eef6ff)}.relatorio-panel__head h2{margin:0 0 6px;font-size:1.15rem}.relatorio-panel__head p{margin:0;color:#64748b}.relatorio-panel__body{padding:20px}.note-list{margin:14px 0 0;padding-left:18px;color:#475569}.sheet-box{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px}.sheet-option{display:flex;align-items:center;gap:8px;border:1px solid #dbe3ef;border-radius:12px;padding:10px 12px;background:#f8fafc}.compare-ready{border:1px solid #bbf7d0;background:#f0fdf4;color:#14532d;border-radius:14px;padding:14px;margin:12px 0}.muted-small{font-size:.9rem;color:#64748b}.divider-title{display:flex;align-items:center;gap:12px;margin:10px 0}.divider-title:after{content:"";height:1px;background:#e2e8f0;flex:1}.quick-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.cadastro-list{margin-top:14px;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden}.cadastro-row{display:grid;grid-template-columns:1fr 180px;gap:12px;padding:10px 12px;border-top:1px solid #e2e8f0}.cadastro-row:first-child{border-top:none}.badge-ok{display:inline-flex;align-items:center;border-radius:999px;background:#dcfce7;color:#166534;font-weight:700;padding:4px 10px;font-size:.82rem}.mini-table-head{font-weight:700;background:#f8fafc}
   </style>
+
+<script>
+(function(){
+  try {
+    var saved = localStorage.getItem('edge-theme');
+    var theme = saved === 'dark' || saved === 'light' ? saved : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+})();
+</script>
 </head>
 <body>
 <div class="app-layout">
@@ -143,5 +155,40 @@
   </main>
 </div>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
+
+<button type="button" class="edge-theme-toggle" id="edgeThemeToggle" aria-label="Alternar tema" title="Alternar tema">
+  <span class="edge-theme-icon" aria-hidden="true">☾</span>
+  <span class="edge-theme-text">Tema escuro</span>
+</button>
+<script>
+(function(){
+  function applyTheme(theme){
+    var next = theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('edge-theme', next); } catch(e) {}
+    var btn = document.getElementById('edgeThemeToggle');
+    if (btn) {
+      var icon = btn.querySelector('.edge-theme-icon');
+      var text = btn.querySelector('.edge-theme-text');
+      if (icon) icon.textContent = next === 'dark' ? '☀' : '☾';
+      if (text) text.textContent = next === 'dark' ? 'Tema claro' : 'Tema escuro';
+      btn.setAttribute('aria-label', next === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro');
+      btn.setAttribute('title', next === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro');
+    }
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', next === 'dark' ? '#15191e' : '#f4f7f6');
+  }
+  function initThemeToggle(){
+    var current = document.documentElement.getAttribute('data-theme') || 'light';
+    applyTheme(current);
+    var btn = document.getElementById('edgeThemeToggle');
+    if (btn) btn.addEventListener('click', function(){
+      applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initThemeToggle);
+  else initThemeToggle();
+})();
+</script>
 </body>
 </html>

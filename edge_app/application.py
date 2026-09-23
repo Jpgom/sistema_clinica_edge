@@ -2480,6 +2480,7 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
                 "cnpj": cnpj,
                 "status": "NÃO GERADO",
                 "total_base": 0,
+                "total_export": len(export_company),
                 "total_encontrado": 0,
                 "motivo": "CNPJ não possui linhas com OK E-SOCIAL na guia selecionada.",
                 "pdf": "",
@@ -2495,6 +2496,7 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
                 "cnpj": cnpj,
                 "status": "NÃO GERADO",
                 "total_base": len(base_company),
+                "total_export": len(export_company),
                 "total_encontrado": 0,
                 "motivo": "Nenhum funcionário da planilha enviada coincide com a planilha base.",
                 "pdf": "",
@@ -2511,15 +2513,17 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
             "cnpj": cnpj,
             "status": "GERADO",
             "total_base": len(base_company),
+            "total_export": len(export_company),
             "total_encontrado": len(selected),
             "motivo": "OK",
             "pdf": pdf_name,
             "faltantes": missing,
         })
 
-    if not generated:
-        raise ValueError("Nenhum recibo pôde ser gerado. Não houve funcionários em comum entre a guia base e as planilhas enviadas.")
-
+    # Mesmo quando nenhuma empresa possui funcionários em comum, o processamento
+    # deve terminar normalmente. Nesse cenário o ZIP conterá o resumo detalhado,
+    # permitindo ao usuário conferir quais nomes da base não estavam na exportação
+    # do eSocial, em vez de receber um erro genérico.
     summary_path = os.path.join(output_folder, "RESUMO PROCESSAMENTO.txt")
     with open(summary_path, "w", encoding="utf-8") as f:
         f.write("RECIBO eSOCIAL - RESUMO DO PROCESSAMENTO\n")
@@ -2535,7 +2539,10 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
         f.write("\nEMPRESAS\n" + "-" * 78 + "\n")
         for item in summary:
             f.write(f"{item['empresa']} | {format_cnpj(item['cnpj'])} | {item['status']} | ")
-            f.write(f"base={item['total_base']} | encontrados={item['total_encontrado']} | {item['motivo']}\n")
+            f.write(
+                f"base={item['total_base']} | exportação={item.get('total_export', 0)} | "
+                f"encontrados={item['total_encontrado']} | {item['motivo']}\n"
+            )
             if item.get("faltantes"):
                 f.write("  Sem correspondência na exportação: " + "; ".join(item["faltantes"]) + "\n")
 
@@ -2545,6 +2552,9 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
         "generated": generated,
         "summary": summary,
         "summary_path": summary_path,
+        "total_generated": len(generated),
+        "total_companies": len(company_order),
+        "total_without_match": sum(1 for item in summary if item.get("status") != "GERADO"),
     }
 
 
@@ -5125,22 +5135,30 @@ def encaminhamentos_async():
 
 @app.route("/esocial/processar/async", methods=["POST"])
 def esocial_processar_async():
+    wants_json = (
+        request.headers.get("X-Requested-With", "").lower() == "xmlhttprequest"
+        or "application/json" in request.headers.get("Accept", "").lower()
+    )
+
+    def fail(message: str, status_code: int = 400):
+        if wants_json:
+            return jsonify({"ok": False, "error": message}), status_code
+        flash(message)
+        return redirect(url_for("esocial"))
+
     base_file = request.files.get("base_file")
     export_files = [f for f in request.files.getlist("rel_files") if f and f.filename]
     base_sheet = request.form.get("base_sheet", "").strip()
 
     ok, msg = validate_uploaded_file(base_file, ESOCIAL_ALLOWED_EXTENSIONS, "a planilha base")
     if not ok:
-        flash(msg)
-        return redirect(url_for("esocial"))
+        return fail(msg)
     if not base_sheet:
-        flash("Selecione a guia/mês da planilha base.")
-        return redirect(url_for("esocial"))
+        return fail("Selecione a guia/mês da planilha base.")
 
     valid_exports = [f for f in export_files if is_allowed_file(f.filename)]
     if not valid_exports:
-        flash("Selecione uma ou mais planilhas de envios do eSocial (.xls ou .xlsx).")
-        return redirect(url_for("esocial"))
+        return fail("Selecione uma ou mais planilhas de envios do eSocial (.xls ou .xlsx).")
 
     job_root = Path(tempfile.mkdtemp(prefix="job_recibo_esocial_", dir=JOBS_DIR))
     upload_dir = job_root / "uploads"
@@ -5148,14 +5166,19 @@ def esocial_processar_async():
     upload_dir.mkdir(parents=True, exist_ok=True)
     output_root.mkdir(parents=True, exist_ok=True)
 
-    base_path = upload_dir / secure_filename(base_file.filename)
-    base_file.save(base_path)
-    export_paths = _save_uploads_for_job(
-        valid_exports,
-        upload_dir / "envios_esocial",
-        ESOCIAL_ALLOWED_EXTENSIONS,
-        "as planilhas de envios do eSocial",
-    )
+    try:
+        base_path = upload_dir / secure_filename(base_file.filename)
+        base_file.save(base_path)
+        export_paths = _save_uploads_for_job(
+            valid_exports,
+            upload_dir / "envios_esocial",
+            ESOCIAL_ALLOWED_EXTENSIONS,
+            "as planilhas de envios do eSocial",
+        )
+    except Exception as exc:
+        logger.exception("Erro ao salvar uploads do Recibo eSocial")
+        shutil.rmtree(job_root, ignore_errors=True)
+        return fail(str(exc) or "Não foi possível preparar os arquivos enviados.")
 
     def task(progress):
         progress(8, "Lendo a guia selecionada e localizando OK E-SOCIAL...")
@@ -5167,14 +5190,48 @@ def esocial_processar_async():
             str(receipts_folder),
             progress=progress,
         )
-        progress(92, "Compactando os recibos em um único ZIP...")
+        if result.get("total_generated", 0) == 0:
+            progress(90, "Nenhum funcionário coincidiu entre a base e as planilhas enviadas. Preparando relatório de conferência...")
+        else:
+            progress(90, f"{result['total_generated']} recibo(s) gerado(s). Preparando o ZIP...")
         zip_path = Path(create_esocial_zip(str(receipts_folder), result["month"], result["year"]))
-        progress(100, "Recibos eSocial prontos para download.")
-        return str(zip_path), zip_path.name
+
+        total_generated = int(result.get("total_generated", len(result.get("generated", []))))
+        total_without_match = int(result.get("total_without_match", 0))
+        if total_generated == 0:
+            details = []
+            for item in result.get("summary", [])[:3]:
+                details.append(
+                    f"{item.get('empresa', 'Empresa')}: {item.get('total_base', 0)} na base, "
+                    f"{item.get('total_export', 0)} na exportação e {item.get('total_encontrado', 0)} correspondência(s)"
+                )
+            detail_text = "; ".join(details)
+            final_message = (
+                "Processamento concluído sem PDF de recibo. "
+                + (detail_text + ". " if detail_text else "")
+                + "O ZIP contém o resumo detalhado com os nomes não encontrados."
+            )
+        elif total_without_match:
+            final_message = (
+                f"Concluído: {total_generated} PDF(s) gerado(s). "
+                f"{total_without_match} empresa(s) ficaram sem correspondência; consulte o resumo no ZIP."
+            )
+        else:
+            final_message = f"Concluído: {total_generated} PDF(s) de recibo gerado(s)."
+        return str(zip_path), zip_path.name, final_message
 
     month, year = _sheet_month_year(base_sheet)
     job_label = f"Recibo eSocial - {month or base_sheet}" + (f" {year}" if year else "")
     job = job_manager.create(job_label, task)
+
+    if wants_json:
+        return jsonify({
+            "ok": True,
+            "job_id": job.id,
+            "title": job.title,
+            "status_url": url_for("job_status", job_id=job.id),
+            "download_url": url_for("job_download", job_id=job.id),
+        }), 202
     return redirect(url_for("job_page", job_id=job.id))
 
 @app.errorhandler(403)

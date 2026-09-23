@@ -208,10 +208,131 @@ if (clearAllBtn) {
 }
 
 if (uploadForm) {
-  uploadForm.addEventListener('submit', e => {
+  const progressPopup = document.getElementById('esocialProgressPopup');
+  const progressFill = document.getElementById('esocialProgressFill');
+  const progressPercent = document.getElementById('esocialProgressPercent');
+  const progressStatus = document.getElementById('esocialProgressStatus');
+  const popupMiniText = document.getElementById('esocialPopupMiniText');
+  const popupMinimize = document.getElementById('esocialPopupMinimize');
+  const popupClose = document.getElementById('esocialPopupClose');
+  const downloadBtn = document.getElementById('esocialDownloadBtn');
+  let esocialPollTimer = null;
+  let esocialPollErrors = 0;
+  let esocialDownloadTriggered = false;
+
+  function setPopupVisible(visible) {
+    if (!progressPopup) return;
+    progressPopup.classList.toggle('is-hidden', !visible);
+  }
+
+  function setPopupState(percent, message, state = 'running') {
+    const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+    if (progressFill) progressFill.style.width = `${safePercent}%`;
+    if (progressPercent) progressPercent.textContent = `${safePercent}%`;
+    if (progressStatus) progressStatus.textContent = message || 'Processando...';
+    if (popupMiniText) popupMiniText.textContent = `${safePercent}% • ${message || 'Processando...'}`;
+    if (progressPopup) {
+      progressPopup.dataset.state = state;
+    }
+  }
+
+  function resetPopupForNewJob() {
+    esocialPollErrors = 0;
+    esocialDownloadTriggered = false;
+    if (progressPopup) progressPopup.classList.remove('is-minimized');
+    if (popupMinimize) {
+      popupMinimize.textContent = '—';
+      popupMinimize.setAttribute('aria-label', 'Minimizar progresso');
+      popupMinimize.title = 'Minimizar';
+    }
+    if (downloadBtn) {
+      downloadBtn.classList.add('is-hidden');
+      downloadBtn.removeAttribute('href');
+    }
+    if (popupClose) popupClose.classList.add('is-hidden');
+    setPopupState(2, 'Enviando arquivos...', 'running');
+    setPopupVisible(true);
+  }
+
+  function enableEsocialSubmit() {
+    const submit = uploadForm.querySelector('button[type="submit"], input[type="submit"]');
+    if (!submit) return;
+    submit.disabled = false;
+    if (submit.dataset.originalText) {
+      if (submit.tagName === 'BUTTON') submit.textContent = submit.dataset.originalText;
+      else submit.value = submit.dataset.originalText;
+    }
+    delete submit.dataset.processing;
+  }
+
+  function triggerEsocialDownload(url) {
+    if (!url || esocialDownloadTriggered) return;
+    esocialDownloadTriggered = true;
+    const link = document.createElement('a');
+    link.href = url;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  async function pollEsocialJob(statusUrl, downloadUrl) {
+    if (!statusUrl) return;
+    try {
+      const response = await fetch(statusUrl, { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Não foi possível consultar o processamento.');
+
+      esocialPollErrors = 0;
+      const status = data.status || 'running';
+      setPopupState(data.progress, data.message, status);
+
+      if (status === 'finished') {
+        if (downloadBtn) {
+          downloadBtn.href = downloadUrl;
+          downloadBtn.classList.remove('is-hidden');
+        }
+        if (popupClose) popupClose.classList.remove('is-hidden');
+        enableEsocialSubmit();
+        triggerEsocialDownload(downloadUrl);
+        return;
+      }
+
+      if (status === 'failed' || status === 'not_found') {
+        if (popupClose) popupClose.classList.remove('is-hidden');
+        enableEsocialSubmit();
+        return;
+      }
+
+      esocialPollTimer = window.setTimeout(() => pollEsocialJob(statusUrl, downloadUrl), 800);
+    } catch (error) {
+      esocialPollErrors += 1;
+      if (esocialPollErrors <= 5) {
+        setPopupState(Number((progressPercent?.textContent || '0').replace('%','')) || 0, 'Conexão instável. Tentando atualizar o progresso...', 'running');
+        esocialPollTimer = window.setTimeout(() => pollEsocialJob(statusUrl, downloadUrl), 1500);
+        return;
+      }
+      setPopupState(100, error.message || 'Não foi possível acompanhar o processamento.', 'failed');
+      if (popupClose) popupClose.classList.remove('is-hidden');
+      enableEsocialSubmit();
+    }
+  }
+
+  popupMinimize?.addEventListener('click', () => {
+    const minimized = progressPopup?.classList.toggle('is-minimized');
+    popupMinimize.textContent = minimized ? '□' : '—';
+    popupMinimize.setAttribute('aria-label', minimized ? 'Restaurar progresso' : 'Minimizar progresso');
+    popupMinimize.title = minimized ? 'Restaurar' : 'Minimizar';
+  });
+
+  popupClose?.addEventListener('click', () => {
+    setPopupVisible(false);
+  });
+
+  uploadForm.addEventListener('submit', async e => {
+    e.preventDefault();
+
     if (selectedFiles.length === 0) {
-      e.preventDefault();
-      hideLoading();
       alert('Selecione pelo menos uma planilha de envios do eSocial.');
       return;
     }
@@ -219,13 +340,45 @@ if (uploadForm) {
     const optionsCount = baseSheetSelect.options.length;
     const selectedSheet = baseSheetSelect.value;
     if (optionsCount > 1 && !selectedSheet) {
-      e.preventDefault();
       alert('Selecione a guia/mês da planilha base.');
       return;
     }
 
     syncHiddenInput();
-    showLoading();
+    resetPopupForNewJob();
+
+    const submit = uploadForm.querySelector('button[type="submit"], input[type="submit"]');
+    if (submit) {
+      if (!submit.dataset.originalText) submit.dataset.originalText = submit.textContent || submit.value || 'Gerar recibos e baixar ZIP';
+      submit.disabled = true;
+      if (submit.tagName === 'BUTTON') submit.textContent = 'Enviando arquivos...';
+      else submit.value = 'Enviando arquivos...';
+    }
+
+    try {
+      const headers = {
+        ...csrfHeader(),
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+      };
+      const response = await fetch(uploadForm.action, {
+        method: 'POST',
+        body: new FormData(uploadForm),
+        headers
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || 'Não foi possível iniciar o processamento.');
+      }
+
+      setPopupState(5, 'Arquivos recebidos. Iniciando o cruzamento...', 'running');
+      pollEsocialJob(data.status_url, data.download_url);
+    } catch (error) {
+      if (esocialPollTimer) window.clearTimeout(esocialPollTimer);
+      setPopupState(100, error.message || 'Erro ao iniciar o Recibo eSocial.', 'failed');
+      if (popupClose) popupClose.classList.remove('is-hidden');
+      enableEsocialSubmit();
+    }
   });
 }
 

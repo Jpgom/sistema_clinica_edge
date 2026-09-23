@@ -107,15 +107,32 @@
         </div>
 
         <div class="actions">
-          <button type="submit" class="btn btn--primary">Gerar recibos e baixar ZIP</button>
+          <button type="submit" class="btn btn--primary" data-keep-enabled="1">Gerar recibos e baixar ZIP</button>
         </div>
       </form>
     </section>
   </main>
 </div>
 
-<div class="loading-overlay is-hidden" id="loadingOverlay" aria-hidden="true">
-  <div class="loading-card"><div class="spinner"></div><h3>Preparando Recibo eSocial</h3><p>O processamento continuará na tela de progresso.</p></div>
+<div class="esocial-progress-popup is-hidden" id="esocialProgressPopup" role="status" aria-live="polite" aria-label="Progresso do Recibo eSocial">
+  <div class="esocial-progress-popup__header">
+    <div class="esocial-progress-popup__heading">
+      <strong>Recibo eSocial</strong>
+      <small id="esocialPopupMiniText">Aguardando processamento</small>
+    </div>
+    <button type="button" class="esocial-progress-popup__minimize" id="esocialPopupMinimize" aria-label="Minimizar progresso" title="Minimizar">—</button>
+  </div>
+  <div class="esocial-progress-popup__body">
+    <div class="esocial-progress-track" aria-hidden="true"><div class="esocial-progress-fill" id="esocialProgressFill"></div></div>
+    <div class="esocial-progress-meta">
+      <strong id="esocialProgressPercent">0%</strong>
+      <span id="esocialProgressStatus">Preparando arquivos...</span>
+    </div>
+    <div class="esocial-progress-actions">
+      <a class="btn btn--primary is-hidden" id="esocialDownloadBtn" href="#">Baixar ZIP</a>
+      <button type="button" class="btn btn--light is-hidden" id="esocialPopupClose">Fechar</button>
+    </div>
+  </div>
 </div>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

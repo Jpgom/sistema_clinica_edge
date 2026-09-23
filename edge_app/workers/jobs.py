@@ -71,23 +71,30 @@ class JobManager:
 
         self.update(job_id, status="running", progress=5, message="Processamento iniciado...")
         try:
-            result_path, download_name = func(progress)
+            result = func(progress)
+            if not isinstance(result, tuple) or len(result) < 2:
+                raise RuntimeError("A rotina terminou sem informar o arquivo de saída.")
+            result_path, download_name = result[0], result[1]
+            final_message = result[2] if len(result) >= 3 and result[2] else "Arquivo pronto para download."
             if not result_path or not os.path.exists(result_path):
                 raise FileNotFoundError("O processamento terminou sem gerar arquivo de saída.")
             self.update(
                 job_id,
                 status="finished",
                 progress=100,
-                message="Arquivo pronto para download.",
+                message=str(final_message),
                 result_path=str(result_path),
                 download_name=download_name or Path(result_path).name,
             )
-        except Exception as exc:  # log detalhado fica no campo interno, mensagem ao usuário é limpa
+        except Exception as exc:  # o traceback completo continua restrito ao estado interno
+            public_message = str(exc).strip()
+            if not public_message or len(public_message) > 700:
+                public_message = "O processamento falhou. Revise os arquivos enviados e tente novamente."
             self.update(
                 job_id,
                 status="failed",
                 progress=100,
-                message="O processamento falhou. Revise os arquivos enviados e tente novamente.",
+                message=public_message,
                 error=f"{exc}\n{traceback.format_exc(limit=8)}",
             )
 

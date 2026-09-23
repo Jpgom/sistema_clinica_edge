@@ -16,6 +16,8 @@ RUN apt-get update \
         tesseract-ocr-por \
         tesseract-ocr-eng \
         poppler-utils \
+        libreoffice-writer \
+        fonts-liberation \
         libgl1 \
         libglib2.0-0 \
         curl \

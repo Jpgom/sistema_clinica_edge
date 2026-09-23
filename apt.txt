@@ -1,2 +1,4 @@
 tesseract-ocr
 tesseract-ocr-por
+libreoffice-writer
+fonts-liberation

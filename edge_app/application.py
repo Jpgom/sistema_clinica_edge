@@ -1472,109 +1472,91 @@ def _gerar_encaminhamento_docx(contexto, destino):
     template.save(str(destino))
 
 
+def _soffice_executavel():
+    """Localiza o LibreOffice usado para converter o mesmo DOCX em PDF."""
+    exe = shutil.which("soffice") or shutil.which("libreoffice")
+    if not exe:
+        raise RuntimeError(
+            "LibreOffice não está instalado no servidor. "
+            "Ele é necessário para gerar o PDF com exatamente o mesmo modelo do Word."
+        )
+    return exe
+
+
+def _converter_docx_em_lote_para_pdf(caminhos_docx, pasta_destino, tamanho_lote=40):
+    """Converte DOCX já renderizados do modelo oficial para PDF.
+
+    O PDF não é redesenhado pelo sistema. Primeiro geramos o mesmo arquivo Word
+    utilizado na opção DOCX e depois o LibreOffice apenas o exporta para PDF.
+    Dessa forma Word e PDF compartilham layout, logotipo, tabelas, espaçamentos,
+    endereço, data e demais elementos do mesmo template.
+    """
+    caminhos = [Path(c) for c in caminhos_docx]
+    if not caminhos:
+        return []
+
+    destino = Path(pasta_destino)
+    destino.mkdir(parents=True, exist_ok=True)
+    soffice = _soffice_executavel()
+    gerados = []
+
+    for inicio in range(0, len(caminhos), max(1, int(tamanho_lote))):
+        lote = caminhos[inicio:inicio + max(1, int(tamanho_lote))]
+        perfil_dir = Path(tempfile.mkdtemp(prefix="edge_lo_profile_"))
+        try:
+            cmd = [
+                soffice,
+                f"-env:UserInstallation={perfil_dir.resolve().as_uri()}",
+                "--headless",
+                "--nologo",
+                "--nofirststartwizard",
+                "--norestore",
+                "--convert-to", "pdf",
+                "--outdir", str(destino),
+                *[str(c.resolve()) for c in lote],
+            ]
+            proc = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=max(180, 15 * len(lote)),
+            )
+            if proc.returncode != 0:
+                detalhe = (proc.stderr or proc.stdout or "erro desconhecido").strip()
+                raise RuntimeError(f"Falha ao converter os encaminhamentos para PDF: {detalhe}")
+
+            faltantes = []
+            for caminho_docx in lote:
+                pdf_esperado = destino / f"{caminho_docx.stem}.pdf"
+                if not pdf_esperado.exists() or pdf_esperado.stat().st_size == 0:
+                    faltantes.append(caminho_docx.name)
+                else:
+                    gerados.append(pdf_esperado)
+            if faltantes:
+                detalhe = (proc.stderr or proc.stdout or "").strip()
+                raise RuntimeError(
+                    "O LibreOffice não gerou todos os PDFs esperados. "
+                    f"Arquivos: {', '.join(faltantes[:5])}. {detalhe}"
+                )
+        finally:
+            shutil.rmtree(perfil_dir, ignore_errors=True)
+
+    return gerados
+
+
 def _gerar_encaminhamento_pdf(contexto, destino):
-    """Gera PDF nativo, sem depender de LibreOffice no servidor."""
-    styles = getSampleStyleSheet()
-    normal = ParagraphStyle(
-        "enc_normal",
-        parent=styles["Normal"],
-        fontName="Helvetica",
-        fontSize=9,
-        leading=11,
-    )
-    header = ParagraphStyle(
-        "enc_header",
-        parent=normal,
-        fontName="Helvetica-Bold",
-        fontSize=11,
-        leading=13,
-        alignment=TA_CENTER,
-    )
-    title = ParagraphStyle(
-        "enc_title",
-        parent=header,
-        fontSize=14,
-        leading=16,
-    )
-    small = ParagraphStyle(
-        "enc_small",
-        parent=normal,
-        fontSize=8,
-        leading=10,
-    )
-    doc = SimpleDocTemplate(
-        str(destino),
-        pagesize=A4,
-        leftMargin=14 * mm,
-        rightMargin=14 * mm,
-        topMargin=12 * mm,
-        bottomMargin=12 * mm,
-    )
-    data_geracao = contexto.get("data_geracao", "")
-    exames = ["EXAME CLÍNICO"] + [contexto.get(f"comp{i}", "") for i in range(1, 10) if contexto.get(f"comp{i}", "")]
-    exames_txt = "<br/>".join(exames) if exames else "EXAME CLÍNICO"
-    empresa = contexto.get("empresa", "")
-    cnpj = contexto.get("cnpj", "")
-    funcionario = contexto.get("funcionario", "")
-    funcao = contexto.get("funcao", "")
-
-    story = [
-        Paragraph("EDGE SEGURANÇA, SAÚDE E MEDICINA DO TRABALHO", title),
-        Spacer(1, 4 * mm),
-        Paragraph("Guia de Encaminhamento", header),
-        Spacer(1, 4 * mm),
-        Paragraph("Dados Pessoais", header),
-        Spacer(1, 3 * mm),
-    ]
-    data = [
-        [Paragraph("Protocolo", normal), "", "", "", ""],
-        [Paragraph("Empresa:", normal), Paragraph(empresa, normal), "", Paragraph("CNPJ", normal), Paragraph(cnpj, normal)],
-        [Paragraph("Funcionário:", normal), Paragraph(funcionario, normal), "", Paragraph("Função", normal), Paragraph(funcao, normal)],
-        [Paragraph("Local do Exame", header), "", "", "", ""],
-        [Paragraph("Prestador", normal), Paragraph("EDGE, SEGURANÇA SAÚDE E MEDICINA DO TRABALHO", normal), "", "", ""],
-        [Paragraph("Endereço<br/>Fone", normal), Paragraph(f"{CLINIC_LOCATIONS['macapa']['endereco']}<br/>{CLINIC_LOCATIONS['macapa']['telefone']}", normal), "", "", ""],
-        [Paragraph("Horário", normal), Paragraph("8h às 11h e 14h às 16h", normal), "", "", ""],
-        [Paragraph("Tipo de Exame", header), "", "", "", ""],
-        [Paragraph("Tipo de Exame: PERIÓDICO", normal), "", "", "", ""],
-        [Paragraph("Exames Selecionados:", header), "", "", "", ""],
-        [Paragraph(exames_txt, normal), "", "", "", ""],
-    ]
-    table = Table(data, colWidths=[35*mm, 55*mm, 12*mm, 25*mm, 55*mm])
-    table.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#D9EAD3")),
-        ("BACKGROUND", (0, 3), (-1, 3), colors.HexColor("#D9EAD3")),
-        ("BACKGROUND", (0, 7), (-1, 7), colors.HexColor("#D9EAD3")),
-        ("BACKGROUND", (0, 9), (-1, 9), colors.HexColor("#D9EAD3")),
-        ("SPAN", (1, 1), (2, 1)),
-        ("SPAN", (1, 2), (2, 2)),
-        ("SPAN", (0, 3), (-1, 3)),
-        ("SPAN", (1, 4), (-1, 4)),
-        ("SPAN", (1, 5), (-1, 5)),
-        ("SPAN", (1, 6), (-1, 6)),
-        ("SPAN", (0, 7), (-1, 7)),
-        ("SPAN", (0, 8), (-1, 8)),
-        ("SPAN", (0, 9), (-1, 9)),
-        ("SPAN", (0, 10), (-1, 10)),
-        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-        ("ALIGN", (0, 3), (-1, 3), "CENTER"),
-        ("ALIGN", (0, 7), (-1, 7), "CENTER"),
-        ("ALIGN", (0, 9), (-1, 9), "CENTER"),
-    ]))
-    story.append(table)
-
-    def _draw_header_date(canvas, _doc):
-        if not data_geracao:
-            return
-        canvas.saveState()
-        canvas.setFont("Helvetica", 8)
-        canvas.setFillColor(colors.black)
-        canvas.drawRightString(A4[0] - 14 * mm, A4[1] - 8 * mm, data_geracao)
-        canvas.restoreState()
-
-    doc.build(story, onFirstPage=_draw_header_date, onLaterPages=_draw_header_date)
-
+    """Compatibilidade: gera o Word oficial e exporta esse mesmo documento para PDF."""
+    destino = Path(destino)
+    with tempfile.TemporaryDirectory(prefix="edge_enc_pdf_") as tmp:
+        docx_temp = Path(tmp) / f"{destino.stem}.docx"
+        _gerar_encaminhamento_docx(contexto, docx_temp)
+        gerados = _converter_docx_em_lote_para_pdf([docx_temp], destino.parent, tamanho_lote=1)
+        pdf_gerado = gerados[0]
+        if pdf_gerado.resolve() != destino.resolve():
+            if destino.exists():
+                destino.unlink()
+            shutil.move(str(pdf_gerado), str(destino))
 
 def gerar_encaminhamentos(file, formato_saida="docx"):
     file.seek(0)
@@ -1623,6 +1605,12 @@ def gerar_encaminhamentos(file, formato_saida="docx"):
     for cnpj_pasta, registros in registros_por_empresa.items():
         pasta_empresa = empresas_root / cnpj_pasta
         pasta_empresa.mkdir(parents=True, exist_ok=True)
+        docx_para_converter = []
+        temp_docx_dir = None
+        if formato_saida == "pdf":
+            temp_docx_dir = Path(temp_dir) / "docx_para_pdf" / cnpj_pasta
+            temp_docx_dir.mkdir(parents=True, exist_ok=True)
+
         for item in registros:
             comps = {f"comp{i+1}": item["complementares"][i] if i < len(item["complementares"]) else "" for i in range(9)}
             contexto = {
@@ -1634,11 +1622,20 @@ def gerar_encaminhamentos(file, formato_saida="docx"):
                 **comps,
             }
             base_nome = f"ENCAMINHAMENTO {contexto['funcionario'] or 'SEM NOME'}"
-            destino = _nome_arquivo_unico(pasta_empresa, base_nome, formato_saida)
             if formato_saida == "pdf":
-                _gerar_encaminhamento_pdf(contexto, destino)
+                # O nome é definido pela saída PDF; o DOCX temporário usa o mesmo nome-base.
+                destino_pdf = _nome_arquivo_unico(pasta_empresa, base_nome, "pdf")
+                docx_temp = temp_docx_dir / f"{destino_pdf.stem}.docx"
+                _gerar_encaminhamento_docx(contexto, docx_temp)
+                docx_para_converter.append(docx_temp)
             else:
+                destino = _nome_arquivo_unico(pasta_empresa, base_nome, "docx")
                 _gerar_encaminhamento_docx(contexto, destino)
+
+        if formato_saida == "pdf":
+            _converter_docx_em_lote_para_pdf(docx_para_converter, pasta_empresa)
+            shutil.rmtree(temp_docx_dir, ignore_errors=True)
+
         relatorio.append(f"{cnpj_pasta}: {len(registros)} encaminhamento(s)")
 
     # ZIP principal: dentro dele vai 1 ZIP por empresa/CNPJ, e dentro de cada ZIP fica a pasta do CNPJ com os encaminhamentos.

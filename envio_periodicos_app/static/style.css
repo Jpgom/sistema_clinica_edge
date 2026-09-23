@@ -110,3 +110,35 @@ body{font-family:Arial,"Segoe UI",sans-serif;background:var(--bg);color:var(--te
   .referral-backdrop.is-minimized .referral-shell{right:10px;bottom:10px;width:calc(100vw - 20px)}
   .referral-progress-line{align-items:flex-start}
 }
+
+/* ==========================================================
+   Refinamento visual EDGE — Envio Periódicos
+   ========================================================== */
+:root{
+  --bg:#eef3f1;--surface:#fff;--text:#1f2925;--muted:#66736d;
+  --line:#d6dfdc;--line-dark:#c6d1cd;--navy:#12679a;--navy-dark:#0d587f;--navy-soft:#eaf3f8;
+  --shadow:0 2px 8px rgba(28,45,39,.045);
+}
+body{background:var(--bg)!important;color:var(--text)!important}
+.sidebar{background:#f9fbfa!important;border-right:1px solid var(--line)!important}
+.brand{color:#111815!important}.brand small,.version{color:#75817c!important}.nav-label{color:#8b9792!important}
+.nav-link{color:#505d57!important}.nav-link:hover{background:#eef4f2!important;color:var(--navy)!important}.nav-link.active{background:var(--navy-soft)!important;color:var(--navy-dark)!important}
+.topbar{background:#fbfcfc!important;border-bottom-color:var(--line)!important}
+.content{background:transparent!important}
+.page-head{padding:2px 0 8px;border-bottom:1px solid #dbe3e0;margin-bottom:22px!important}
+.page-head h1{color:#131a17}.eyebrow{color:var(--navy)!important}
+.card,.summary-strip,.unit-card,.kpi-card,.workflow-card,.toolbar-card,.progress-modal,.referral-shell{
+  border-color:var(--line)!important;box-shadow:var(--shadow)!important;background:#fff!important;
+}
+.summary-strip>div{background:#fff}.kpi-card,.workflow-card{border-top:3px solid #dce9e4!important}
+.unit-card:hover,.workflow-card:hover{border-color:#a8bab3!important;box-shadow:0 4px 12px rgba(28,45,39,.06)!important}
+.section-head{padding-bottom:7px;border-bottom:1px solid #e1e7e5}.section-head.compact{border-bottom:0;padding-bottom:0}
+.btn-primary{background:var(--navy)!important;color:#fff!important}.btn-primary:hover{background:var(--navy-dark)!important}
+.btn-secondary,.btn-ghost{background:#edf2f0!important;border-color:#cbd6d2!important;color:#34413b!important}.btn-secondary:hover,.btn-ghost:hover{background:#e3ebe8!important;border-color:#b8c7c1!important}
+.btn-success{background:#257852!important}.btn-warning{background:#fff4d8!important;border-color:#ead596!important}.btn-danger{background:#aa3030!important}
+.form-control{background:#fcfdfd!important;border-color:#cfd9d5!important}.form-control:hover{border-color:#b6c5bf!important}.form-control:focus{background:#fff!important;border-color:#6f9fb9!important;outline:3px solid rgba(18,103,154,.09)!important}
+.upload-box{background:#f5f8f7!important;border-color:#bfcfc9!important}.table-toolbar{background:#f4f7f6!important}.table th{background:#edf2f0!important;color:#52615b!important}.table tbody tr:hover td{background:#f7faf9!important}
+.status{border:1px solid rgba(0,0,0,.035)}
+.referral-steps,.progress-numbers>div{background:#f5f8f7!important}.referral-progress-icon{background:#edf5f8!important}
+.modal-backdrop{background:rgba(25,39,34,.47)!important;backdrop-filter:blur(2px)!important}
+@media(max-width:900px){.sidebar{background:#f9fbfa!important}}

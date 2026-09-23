@@ -2043,3 +2043,71 @@ body.esocial-page{
   .esocial-page .esocial-generate-actions .btn--primary{width:100%;min-width:0}
   .esocial-page .esocial-base-active__info small{white-space:normal}
 }
+
+/* ==========================================================
+   Refinamento visual EDGE — simples, com melhor contraste
+   ========================================================== */
+:root{
+  --edge-polish-bg:#eef3f1;
+  --edge-polish-surface:#ffffff;
+  --edge-polish-soft:#f6f9f8;
+  --edge-polish-line:#d6dfdc;
+  --edge-polish-line-strong:#c6d1cd;
+  --edge-polish-text:#1f2925;
+  --edge-polish-muted:#66736d;
+  --edge-polish-primary:#12679a;
+  --edge-polish-primary-soft:#eaf3f8;
+}
+body{background:var(--edge-polish-bg)!important;color:var(--edge-polish-text)!important}
+@media (min-width:981px){
+  .app-layout{background:linear-gradient(90deg,#f8faf9 0,#f8faf9 260px,var(--edge-polish-bg) 260px,var(--edge-polish-bg) 100%)!important}
+  .sidebar,body.edge-bold-site .sidebar.edge-bold-sidebar{
+    background:#f9fbfa!important;
+    border-right:1px solid var(--edge-polish-line)!important;
+  }
+}
+.brand{color:#111815!important}.brand small{color:#75817c!important}
+.nav-group-title{color:#8b9792!important}
+.nav-card.edge-sidebar-nav .nav-link,body.edge-bold-site .nav-card.edge-sidebar-nav .nav-link{
+  color:#505d57!important;
+}
+.nav-card.edge-sidebar-nav .nav-link:hover,body.edge-bold-site .nav-card.edge-sidebar-nav .nav-link:hover{
+  background:#eef4f2!important;color:var(--edge-polish-primary)!important;
+}
+.nav-card.edge-sidebar-nav .nav-link.active,body.edge-bold-site .nav-card.edge-sidebar-nav .nav-link.active{
+  background:var(--edge-polish-primary-soft)!important;
+  color:#0e587f!important;
+}
+.main-area,.edge-website-shell{background:transparent!important}
+.content-card,.list-panel,.table-wrap,.mini-card,.simple-module-card,.simple-system-links a,
+.feature-card,.stat-card,.quick-card,.module-category,.flow-card,.status-card-v2{
+  border-color:var(--edge-polish-line)!important;
+  box-shadow:0 2px 8px rgba(28,45,39,.045)!important;
+}
+.content-card,.list-panel,.mini-card{background:#fff!important}
+.simple-home-intro{padding:2px 0 4px}
+.simple-home-intro h1,.page-title h1{color:#131a17!important}
+.simple-module-section{margin-top:30px}
+.simple-section-head{padding-bottom:8px;border-bottom:1px solid #dbe3e0}
+.simple-section-head h2{color:#202a26}
+.simple-module-card{background:#fff!important;border-top:3px solid #dce9e4!important}
+.simple-module-card:hover{border-color:#9eb6ad!important;border-top-color:var(--edge-polish-primary)!important;background:#fdfefe!important}
+.simple-module-card span{background:var(--edge-polish-primary)!important}
+.simple-system-links{border-top-color:#d6dfdc!important}
+input[type="text"],input[type="number"],input[type="date"],input[type="file"],input[type="password"],input[type="email"],select,textarea{
+  border-color:#cfd9d5!important;
+  background:#fcfdfd!important;
+}
+input:hover,select:hover,textarea:hover{border-color:#b6c5bf!important}
+input:focus,select:focus,textarea:focus{background:#fff!important;border-color:#6f9fb9!important;outline:3px solid rgba(18,103,154,.09)!important}
+.btn--primary,.btn-primary,button[type="submit"],input[type="submit"]{
+  background:var(--edge-polish-primary)!important;border-color:var(--edge-polish-primary)!important;color:#fff!important;
+}
+.btn--primary:hover,.btn-primary:hover,button[type="submit"]:hover,input[type="submit"]:hover{background:#0d587f!important;border-color:#0d587f!important}
+.btn--light,.btn-secondary,.btn-ghost{background:#edf2f0!important;border-color:#cbd6d2!important;color:#34413b!important}
+.btn--light:hover,.btn-secondary:hover,.btn-ghost:hover{background:#e3ebe8!important;border-color:#b8c7c1!important}
+.table-wrap{background:#fff!important}.file-table thead,.data-table thead,thead{background:#edf2f0!important}
+.file-table th,.data-table th,th{color:#53625c!important}.file-table tbody tr:hover td,.data-table tbody tr:hover td,tbody tr:hover td{background:#f7faf9!important}
+.info-box,.helper-box,.soft-note{background:#f3f7f6!important;border-color:#d1ded9!important}
+.alert,.flash{border:1px solid rgba(0,0,0,.035)!important}
+@media(max-width:980px){.sidebar,body.edge-bold-site .sidebar.edge-bold-sidebar{background:#f9fbfa!important}}

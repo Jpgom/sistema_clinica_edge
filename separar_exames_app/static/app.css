@@ -239,3 +239,18 @@ body.edge-integrated-body{background:var(--edge-bg)!important;color:var(--edge-t
 .card,.panel,.hero,.stat-card,.upload-card,.review-card,.archive-card,.settings-card,.model-card{box-shadow:none!important;border-radius:10px!important;border-color:var(--edge-line)!important;background:#fff!important}
 .btn{border-radius:7px!important;box-shadow:none!important;transform:none!important}.btn:hover{box-shadow:none!important;transform:none!important}
 input,select,textarea{border-radius:7px!important;box-shadow:none!important}
+
+/* ==========================================================
+   Refinamento visual EDGE — Separar Exames
+   ========================================================== */
+:root{--edge-bg:#eef3f1;--edge-surface:#fff;--edge-text:#1f2925;--edge-muted:#66736d;--edge-line:#d6dfdc;--edge-primary:#12679a;--edge-primary-soft:#eaf3f8}
+body.edge-integrated-body{background:var(--edge-bg)!important;color:var(--edge-text)!important}
+.edge-integrated-sidebar{background:#f9fbfa!important;border-right:1px solid var(--edge-line)!important}
+.edge-menu-link{color:#505d57!important}.edge-menu-link:hover,.edge-menu-link.active{background:#eef4f2!important;color:var(--edge-primary)!important}
+.edge-integrated-main{background:transparent!important}.edge-module-topbar{padding-bottom:12px!important;border-bottom:1px solid #dbe3e0!important;border-radius:0!important}
+.card,.panel,.hero,.stat-card,.upload-card,.review-card,.archive-card,.settings-card,.model-card,.step-card{
+  background:#fff!important;border-color:var(--edge-line)!important;box-shadow:0 2px 8px rgba(28,45,39,.045)!important;
+}
+.step-card{border-top:3px solid #dce9e4!important}.btn{border-color:#cbd6d2!important}.btn.btn-primary,.btn.primary{background:var(--edge-primary)!important;border-color:var(--edge-primary)!important;color:#fff!important}.btn.btn-secondary,.btn.secondary{background:#edf2f0!important;color:#34413b!important}
+input,select,textarea{background:#fcfdfd!important;border-color:#cfd9d5!important}input:hover,select:hover,textarea:hover{border-color:#b6c5bf!important}
+.simple-flow{background:#f5f8f7!important;border-color:var(--edge-line)!important}.simple-flow-item{border-color:#d9e2df!important}

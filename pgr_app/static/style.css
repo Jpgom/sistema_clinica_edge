@@ -366,3 +366,20 @@ body{background:var(--edge-bg)!important;color:var(--edge-text)!important;font-f
 .content{background:var(--edge-bg)!important}.panel,.card,.stat-card,.list-panel,.form-card,.wizard-sidebar-progress,.modal-card,.mini-section,.saved-config-box,.soft-note,.preview-box,.import-summary-box,.aet-preset-box{box-shadow:none!important;border-radius:10px!important}
 .btn,button{box-shadow:none!important;transform:none!important}.btn:hover,button:hover{box-shadow:none!important;transform:none!important}
 input,select,textarea{border-radius:7px!important;box-shadow:none!important}
+
+/* ==========================================================
+   Refinamento visual EDGE — PGR / SST
+   ========================================================== */
+:root{--edge-bg:#eef3f1;--edge-surface:#fff;--edge-text:#1f2925;--edge-muted:#66736d;--edge-line:#d6dfdc;--edge-primary:#12679a;--edge-primary-soft:#eaf3f8}
+body{background:var(--edge-bg)!important;color:var(--edge-text)!important}
+.sidebar{background:#f9fbfa!important;border-right:1px solid var(--edge-line)!important}
+.sidebar nav a{color:#505d57!important}.sidebar nav a:hover,.sidebar nav a.active{background:#eef4f2!important;color:var(--edge-primary)!important}
+.content{background:transparent!important}
+.content>header,.page-header{padding-bottom:10px!important;border-bottom:1px solid #dbe3e0!important}
+.panel,.card,.stat-card,.list-panel,.form-card,.wizard-sidebar-progress,.modal-card,.mini-section,.saved-config-box,.soft-note,.preview-box,.import-summary-box,.aet-preset-box{
+  background:#fff!important;border-color:var(--edge-line)!important;box-shadow:0 2px 8px rgba(28,45,39,.045)!important;
+}
+.btn-primary,.btn.primary,button[type="submit"]{background:var(--edge-primary)!important;border-color:var(--edge-primary)!important;color:#fff!important}
+.btn-secondary,.btn-light{background:#edf2f0!important;border-color:#cbd6d2!important;color:#34413b!important}
+input,select,textarea{background:#fcfdfd!important;border-color:#cfd9d5!important}input:hover,select:hover,textarea:hover{border-color:#b6c5bf!important}
+thead{background:#edf2f0!important}tbody tr:hover td{background:#f7faf9!important}

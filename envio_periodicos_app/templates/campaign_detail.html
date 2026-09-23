@@ -54,36 +54,72 @@
 
 
 
-<div id="referralModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="referralModalTitle">
-  <div class="progress-modal referral-modal">
-    <div class="progress-head">
-      <div><div class="eyebrow">ENCAMINHAMENTOS</div><h2 id="referralModalTitle">Gerar encaminhamentos da competência</h2></div>
-      <button class="modal-close" type="button" onclick="closeReferralModal()" aria-label="Fechar">×</button>
+<div id="referralModal" class="modal-backdrop referral-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="referralModalTitle">
+  <div id="referralShell" class="progress-modal referral-modal referral-shell">
+    <div class="progress-head referral-progress-head">
+      <div>
+        <div class="eyebrow">ENCAMINHAMENTOS</div>
+        <h2 id="referralModalTitle">Gerar encaminhamentos da competência</h2>
+      </div>
+      <div class="referral-window-actions">
+        <button id="referralMinimizeBtn" class="modal-close referral-minimize hidden" type="button" onclick="toggleReferralMinimize()" aria-label="Minimizar" title="Minimizar">−</button>
+        <button class="modal-close" type="button" onclick="closeReferralModal()" aria-label="Fechar">×</button>
+      </div>
     </div>
-    <div class="referral-steps">
-      <div><strong>1</strong><span>Baixe a planilha para encaminhamentos.</span></div>
-      <div><strong>2</strong><span>Preencha a coluna COMPLEMENTARES.</span></div>
-      <div><strong>3</strong><span>Envie a planilha preenchida aqui.</span></div>
+
+    <div id="referralMain" class="referral-main">
+      <div id="referralSetup">
+        <div class="referral-steps">
+          <div><strong>1</strong><span>Baixe a planilha para encaminhamentos.</span></div>
+          <div><strong>2</strong><span>Preencha a coluna COMPLEMENTARES.</span></div>
+          <div><strong>3</strong><span>Envie a planilha preenchida aqui.</span></div>
+        </div>
+        <form id="referralForm" method="post" enctype="multipart/form-data" action="{{ url_for('campaign_generate_referrals',campaign_id=campaign.id) }}" class="referral-form">
+          <input type="hidden" name="_ajax" value="1">
+          <div class="form-group">
+            <label>Planilha Base de Encaminhamentos preenchida</label>
+            <input id="referralFile" class="form-control" type="file" name="file" accept=".xlsx,.xls" required>
+            <div class="help">Use a planilha baixada nesta competência, depois de preencher os exames complementares.</div>
+          </div>
+          <div class="form-group">
+            <label>Formato de saída</label>
+            <select class="form-control" name="formato_saida">
+              <option value="pdf" selected>PDF</option>
+              <option value="docx">Word (.docx)</option>
+            </select>
+            <div class="help">O download será um ZIP chamado encaminhamentos.zip, com um ZIP por empresa/CNPJ.</div>
+          </div>
+          <div class="progress-actions">
+            <button type="button" class="btn btn-ghost" onclick="closeReferralModal()">Cancelar</button>
+            <button id="referralSubmitBtn" type="submit" class="btn btn-primary">Gerar encaminhamentos</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="referralProgress" class="referral-progress-view hidden" aria-live="polite">
+        <div class="referral-progress-icon"><span></span></div>
+        <div id="referralProgressState" class="progress-state">Preparando...</div>
+        <div class="progress-track"><div id="referralProgressBar" class="progress-bar" style="width:0%"></div></div>
+        <div class="referral-progress-line">
+          <strong id="referralProgressPercent">0%</strong>
+          <span id="referralProgressMessage">Aguardando o envio da planilha.</span>
+        </div>
+        <div id="referralProgressNotice" class="progress-notice">Você pode minimizar esta janela e continuar usando a página enquanto os encaminhamentos são gerados.</div>
+        <div class="progress-actions">
+          <button id="referralRetryBtn" type="button" class="btn btn-ghost hidden" onclick="resetReferralGenerator()">Tentar novamente</button>
+          <button id="referralDoneBtn" type="button" class="btn btn-primary hidden" onclick="closeReferralModal()">Concluir</button>
+        </div>
+      </div>
     </div>
-    <form method="post" enctype="multipart/form-data" action="{{ url_for('campaign_generate_referrals',campaign_id=campaign.id) }}" class="referral-form">
-      <div class="form-group">
-        <label>Planilha Base de Encaminhamentos preenchida</label>
-        <input class="form-control" type="file" name="file" accept=".xlsx,.xls" required>
-        <div class="help">Use a planilha baixada nesta competência, depois de preencher os exames complementares.</div>
+
+    <div id="referralMini" class="referral-mini">
+      <div class="referral-mini-row">
+        <div><strong id="referralMiniTitle">Gerando encaminhamentos</strong><span id="referralMiniMessage">Processando...</span></div>
+        <button type="button" class="referral-mini-expand" onclick="toggleReferralMinimize()" aria-label="Restaurar">↗</button>
       </div>
-      <div class="form-group">
-        <label>Formato de saída</label>
-        <select class="form-control" name="formato_saida">
-          <option value="pdf" selected>PDF</option>
-          <option value="docx">Word (.docx)</option>
-        </select>
-        <div class="help">O download será um ZIP chamado encaminhamentos.zip, com um ZIP por empresa/CNPJ.</div>
-      </div>
-      <div class="progress-actions">
-        <button type="button" class="btn btn-ghost" onclick="closeReferralModal()">Cancelar</button>
-        <button type="submit" class="btn btn-primary">Gerar encaminhamentos</button>
-      </div>
-    </form>
+      <div class="progress-track referral-mini-track"><div id="referralMiniBar" class="progress-bar" style="width:0%"></div></div>
+      <div id="referralMiniPercent" class="referral-mini-percent">0%</div>
+    </div>
   </div>
 </div>
 
@@ -91,8 +127,195 @@
 {% endblock %}
 {% block scripts %}<script>
 function filterCompanies(){const q=(document.getElementById('companyFilter').value||'').toLowerCase();document.querySelectorAll('#companiesTable tbody tr').forEach(r=>r.style.display=(r.dataset.search||'').includes(q)?'':'none');}
-function openReferralModal(){document.getElementById('referralModal')?.classList.remove('hidden');}
-function closeReferralModal(){document.getElementById('referralModal')?.classList.add('hidden');}
+
+let referralProcessing=false;
+let referralProgressTimer=null;
+let referralProgressValue=0;
+
+function openReferralModal(){
+  const modal=document.getElementById('referralModal');
+  if(!modal) return;
+  modal.classList.remove('hidden','is-minimized');
+  if(!referralProcessing){
+    document.getElementById('referralSetup')?.classList.remove('hidden');
+    document.getElementById('referralProgress')?.classList.add('hidden');
+    document.getElementById('referralMinimizeBtn')?.classList.add('hidden');
+  }
+}
+
+function closeReferralModal(){
+  const modal=document.getElementById('referralModal');
+  if(!modal) return;
+  if(referralProcessing){
+    if(!modal.classList.contains('is-minimized')) toggleReferralMinimize();
+    return;
+  }
+  modal.classList.add('hidden');
+  modal.classList.remove('is-minimized');
+}
+
+function toggleReferralMinimize(){
+  const modal=document.getElementById('referralModal');
+  if(!modal || !referralProcessing) return;
+  modal.classList.toggle('is-minimized');
+}
+
+function setReferralProgress(percent,state,message){
+  referralProgressValue=Math.max(0,Math.min(100,Math.round(percent)));
+  const pct=referralProgressValue+'%';
+  document.getElementById('referralProgressBar').style.width=pct;
+  document.getElementById('referralProgressPercent').textContent=pct;
+  document.getElementById('referralMiniBar').style.width=pct;
+  document.getElementById('referralMiniPercent').textContent=pct;
+  if(state) document.getElementById('referralProgressState').textContent=state;
+  if(message){
+    document.getElementById('referralProgressMessage').textContent=message;
+    document.getElementById('referralMiniMessage').textContent=message;
+  }
+}
+
+function stopReferralProgressTimer(){
+  if(referralProgressTimer){clearInterval(referralProgressTimer);referralProgressTimer=null;}
+}
+
+function startReferralProcessingPulse(){
+  stopReferralProgressTimer();
+  referralProgressTimer=setInterval(()=>{
+    if(referralProgressValue<90){
+      const step=referralProgressValue<55?3:(referralProgressValue<75?2:1);
+      const next=Math.min(90,referralProgressValue+step);
+      let msg='Gerando os encaminhamentos...';
+      if(next>=72) msg='Organizando os arquivos por empresa...';
+      if(next>=84) msg='Montando o arquivo ZIP...';
+      setReferralProgress(next,'Processando',msg);
+    }
+  },700);
+}
+
+function resetReferralGenerator(){
+  stopReferralProgressTimer();
+  referralProcessing=false;
+  referralProgressValue=0;
+  const modal=document.getElementById('referralModal');
+  modal?.classList.remove('is-minimized');
+  document.getElementById('referralSetup')?.classList.remove('hidden');
+  document.getElementById('referralProgress')?.classList.add('hidden');
+  document.getElementById('referralMinimizeBtn')?.classList.add('hidden');
+  document.getElementById('referralRetryBtn')?.classList.add('hidden');
+  document.getElementById('referralDoneBtn')?.classList.add('hidden');
+  document.getElementById('referralProgressNotice').textContent='Você pode minimizar esta janela e continuar usando a página enquanto os encaminhamentos são gerados.';
+  document.getElementById('referralMiniTitle').textContent='Gerando encaminhamentos';
+  setReferralProgress(0,'Preparando...','Aguardando o envio da planilha.');
+}
+
+function referralDownloadName(xhr){
+  const disposition=xhr.getResponseHeader('Content-Disposition')||'';
+  const utf=disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if(utf){try{return decodeURIComponent(utf[1]);}catch(e){}}
+  const basic=disposition.match(/filename="?([^";]+)"?/i);
+  return basic?basic[1]:'encaminhamentos.zip';
+}
+
+async function referralErrorMessage(blob,status){
+  try{
+    const raw=await blob.text();
+    const data=JSON.parse(raw);
+    if(data && data.message) return data.message;
+  }catch(e){}
+  return status>=500?'Ocorreu um erro ao gerar os encaminhamentos. Confira a planilha e tente novamente.':'Não foi possível gerar os encaminhamentos.';
+}
+
+function finishReferralError(message){
+  stopReferralProgressTimer();
+  referralProcessing=false;
+  document.getElementById('referralModal')?.classList.remove('is-minimized');
+  document.getElementById('referralMinimizeBtn')?.classList.add('hidden');
+  document.getElementById('referralRetryBtn')?.classList.remove('hidden');
+  document.getElementById('referralDoneBtn')?.classList.add('hidden');
+  document.getElementById('referralProgressNotice').textContent=message;
+  document.getElementById('referralMiniTitle').textContent='Falha ao gerar';
+  setReferralProgress(referralProgressValue,'Não foi possível concluir',message);
+}
+
+function finishReferralSuccess(xhr){
+  stopReferralProgressTimer();
+  const blob=xhr.response;
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=referralDownloadName(xhr);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+
+  referralProcessing=false;
+  document.getElementById('referralModal')?.classList.remove('is-minimized');
+  document.getElementById('referralMinimizeBtn')?.classList.add('hidden');
+  document.getElementById('referralRetryBtn')?.classList.add('hidden');
+  document.getElementById('referralDoneBtn')?.classList.remove('hidden');
+  document.getElementById('referralProgressNotice').textContent='Os encaminhamentos foram gerados e o download do ZIP foi iniciado. A página continua pronta para uso.';
+  document.getElementById('referralMiniTitle').textContent='Encaminhamentos prontos';
+  setReferralProgress(100,'Concluído','Download iniciado com sucesso.');
+}
+
+function startReferralGeneration(event){
+  event.preventDefault();
+  if(referralProcessing) return false;
+  const form=event.currentTarget;
+  const fileInput=document.getElementById('referralFile');
+  if(!fileInput || !fileInput.files || !fileInput.files.length){
+    alert('Selecione a Planilha Base de Encaminhamentos preenchida.');
+    fileInput?.focus();
+    return false;
+  }
+
+  referralProcessing=true;
+  document.getElementById('referralSetup')?.classList.add('hidden');
+  document.getElementById('referralProgress')?.classList.remove('hidden');
+  document.getElementById('referralMinimizeBtn')?.classList.remove('hidden');
+  document.getElementById('referralRetryBtn')?.classList.add('hidden');
+  document.getElementById('referralDoneBtn')?.classList.add('hidden');
+  document.getElementById('referralMiniTitle').textContent='Gerando encaminhamentos';
+  setReferralProgress(4,'Preparando','Preparando a planilha para envio...');
+
+  const data=new FormData(form);
+  data.set('_ajax','1');
+  const xhr=new XMLHttpRequest();
+  xhr.open('POST',form.action,true);
+  xhr.responseType='blob';
+  xhr.setRequestHeader('X-Requested-With','XMLHttpRequest');
+
+  xhr.upload.onprogress=(e)=>{
+    if(e.lengthComputable){
+      const uploadPct=Math.max(5,Math.min(22,5+(e.loaded/e.total)*17));
+      setReferralProgress(uploadPct,'Enviando planilha','Enviando a planilha preenchida...');
+      if(e.loaded>=e.total){
+        setReferralProgress(25,'Planilha recebida','Iniciando a geração dos encaminhamentos...');
+        startReferralProcessingPulse();
+      }
+    }
+  };
+  xhr.upload.onload=()=>{
+    if(referralProgressValue<25) setReferralProgress(25,'Planilha recebida','Iniciando a geração dos encaminhamentos...');
+    startReferralProcessingPulse();
+  };
+  xhr.onload=async()=>{
+    if(xhr.status>=200 && xhr.status<300){
+      finishReferralSuccess(xhr);
+    }else{
+      const msg=await referralErrorMessage(xhr.response,xhr.status);
+      finishReferralError(msg);
+    }
+  };
+  xhr.onerror=()=>finishReferralError('Falha de conexão durante a geração. Tente novamente.');
+  xhr.onabort=()=>finishReferralError('A geração foi interrompida.');
+  xhr.send(data);
+  return false;
+}
+
+document.getElementById('referralForm')?.addEventListener('submit',startReferralGeneration);
+
 function confirmPermanentCampaignDelete(form){
   const field=form.querySelector('[name="confirm_delete"]');
   if(!field || field.value.trim().toUpperCase()!=='EXCLUIR'){

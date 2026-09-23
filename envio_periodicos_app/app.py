@@ -67,7 +67,7 @@ fernet = Fernet(FERNET_KEY.encode())
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET
 app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("ENVIO_PERIODICOS_MAX_UPLOAD_MB", "120")) * 1024 * 1024
-APP_VERSION = "V5.2"
+APP_VERSION = "V5.3"
 
 
 def safe_int(value, default=0):
@@ -2315,40 +2315,48 @@ def referral_base_export(campaign_id):
 
 @app.post("/campaigns/<int:campaign_id>/gerar-encaminhamentos")
 def campaign_generate_referrals(campaign_id):
-    """Gera encaminhamentos diretamente dentro da competência do Envio periódicos.
+    """Gera encaminhamentos dentro da competência sem obrigar navegação de página.
 
-    Usa a mesma rotina da função Encaminhamentos do site principal para manter
-    o padrão de saída: encaminhamentos.zip, com um ZIP por empresa/CNPJ e
-    arquivos internos em PDF ou Word.
+    Quando chamado pelo popup via AJAX, erros são devolvidos em JSON e o ZIP é
+    enviado como blob. O fluxo tradicional continua disponível como fallback.
     """
     get_campaign_or_404(campaign_id)
+    is_ajax = (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or request.form.get("_ajax") == "1"
+    )
     f = request.files.get("file")
     formato_saida = (request.form.get("formato_saida") or "pdf").strip().lower()
     if formato_saida not in {"pdf", "docx"}:
         formato_saida = "pdf"
+
+    def _fail(message, status=400):
+        if is_ajax:
+            return jsonify({"ok": False, "message": message}), status
+        flash(message, "danger")
+        return redirect(url_for("campaign_detail", campaign_id=campaign_id))
+
     if not f or not f.filename:
-        flash("Selecione a Planilha para encaminhamentos preenchida.", "danger")
-        return redirect(url_for("campaign_detail", campaign_id=campaign_id))
+        return _fail("Selecione a Planilha Base de Encaminhamentos preenchida.")
     if not f.filename.lower().endswith((".xlsx", ".xls")):
-        flash("Envie uma planilha .xlsx ou .xls para gerar os encaminhamentos.", "danger")
-        return redirect(url_for("campaign_detail", campaign_id=campaign_id))
+        return _fail("Envie uma planilha .xlsx ou .xls para gerar os encaminhamentos.")
     try:
-        # Reaproveita exatamente a rotina já validada no site principal.
         from edge_app.application import gerar_encaminhamentos
         zip_path = gerar_encaminhamentos(f, formato_saida=formato_saida)
-        return send_file(
+        response = send_file(
             zip_path,
             as_attachment=True,
             download_name="encaminhamentos.zip",
             mimetype="application/zip",
         )
-    except Exception as exc:
+        response.headers["X-EDGE-Referral-Status"] = "ok"
+        return response
+    except Exception:
         app.logger.exception("Erro ao gerar encaminhamentos pela competência %s", campaign_id)
-        flash(
+        return _fail(
             "Não foi possível gerar os encaminhamentos. Confira se a planilha possui as colunas EMPRESA, CNPJ, NOME, CARGO e COMPLEMENTARES.",
-            "danger",
+            500,
         )
-        return redirect(url_for("campaign_detail", campaign_id=campaign_id))
 
 
 @app.route("/campaigns/<int:campaign_id>/export.xlsx")

@@ -21,6 +21,7 @@ aso_manual_gerar = app_module.aso_manual_gerar
 laudo_pcd_adicionar_empresa_rapido = app_module.laudo_pcd_adicionar_empresa_rapido
 laudo_pcd_adicionar_cargo_rapido = app_module.laudo_pcd_adicionar_cargo_rapido
 esocial_abas_base = app_module.esocial_abas_base
+esocial_remover_base = app_module.esocial_remover_base
 esocial_processar = app_module.esocial_processar
 relatorios_async = app_module.relatorios_async
 encaminhamentos_async = app_module.encaminhamentos_async

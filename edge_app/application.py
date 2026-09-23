@@ -103,6 +103,8 @@ EXAMES_A_PRAZO_MAX_ZIP_UNCOMPRESSED_BYTES = int(os.environ.get("EXAMES_A_PRAZO_M
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.environ.get("RENDER_DISK_PATH") or os.environ.get("DATA_DIR") or BASE_DIR
 os.makedirs(DATA_DIR, exist_ok=True)
+ESOCIAL_BASE_CACHE_DIR = os.path.join(DATA_DIR, "esocial_base_sessions")
+os.makedirs(ESOCIAL_BASE_CACHE_DIR, exist_ok=True)
 RELATORIOS_EMPRESAS_CNPJ_PATH = os.path.join(DATA_DIR, "relatorios_empresas_cnpj.json")
 RELATORIOS_EMPRESAS_CNPJ_EXTENSIONS = {".xls", ".xlsx"}
 FISICO_DB_PATH = os.path.join(DATA_DIR, "fisico_mental.db")
@@ -1455,6 +1457,15 @@ def _nome_arquivo_unico(pasta, nome_base, extensao):
     return destino
 
 
+def _data_geracao_encaminhamento():
+    """Data local de Belém/Macapá no formato exibido no encaminhamento."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("America/Belem")).strftime("%d/%m/%Y")
+    except Exception:
+        return datetime.now().strftime("%d/%m/%Y")
+
+
 def _gerar_encaminhamento_docx(contexto, destino):
     template = DocxTemplate(TEMPLATE_PATH)
     template.render(contexto)
@@ -1499,6 +1510,7 @@ def _gerar_encaminhamento_pdf(contexto, destino):
         topMargin=12 * mm,
         bottomMargin=12 * mm,
     )
+    data_geracao = contexto.get("data_geracao", "")
     exames = ["EXAME CLÍNICO"] + [contexto.get(f"comp{i}", "") for i in range(1, 10) if contexto.get(f"comp{i}", "")]
     exames_txt = "<br/>".join(exames) if exames else "EXAME CLÍNICO"
     empresa = contexto.get("empresa", "")
@@ -1551,7 +1563,17 @@ def _gerar_encaminhamento_pdf(contexto, destino):
         ("ALIGN", (0, 9), (-1, 9), "CENTER"),
     ]))
     story.append(table)
-    doc.build(story)
+
+    def _draw_header_date(canvas, _doc):
+        if not data_geracao:
+            return
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(colors.black)
+        canvas.drawRightString(A4[0] - 14 * mm, A4[1] - 8 * mm, data_geracao)
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=_draw_header_date, onLaterPages=_draw_header_date)
 
 
 def gerar_encaminhamentos(file, formato_saida="docx"):
@@ -1574,6 +1596,7 @@ def gerar_encaminhamentos(file, formato_saida="docx"):
 
     registros_por_empresa = {}
     relatorio = []
+    data_geracao = _data_geracao_encaminhamento()
 
     for _, row in df.iterrows():
         empresa = _valor_linha_encaminhamento(row, col_empresa)
@@ -1607,6 +1630,7 @@ def gerar_encaminhamentos(file, formato_saida="docx"):
                 "cnpj": item["cnpj"],
                 "funcionario": item["funcionario"],
                 "funcao": item["funcao"],
+                "data_geracao": data_geracao,
                 **comps,
             }
             base_nome = f"ENCAMINHAMENTO {contexto['funcionario'] or 'SEM NOME'}"
@@ -2371,9 +2395,8 @@ def build_pdf(df: pd.DataFrame, pdf_path: str, title: str):
 
 
 def build_esocial_pdf_filename(company_name: str, company_cnpj: str, pdf_month: str) -> str:
-    # O '(1)' faz parte da nomenclatura solicitada pelo usuário e é sempre mantido.
     return sanitize_filename(
-        f"{company_name} - {format_cnpj_filename(company_cnpj)} - {pdf_month} (1)"
+        f"{company_name} - {format_cnpj_filename(company_cnpj)} - {pdf_month}"
     ) + ".pdf"
 
 
@@ -4862,9 +4885,84 @@ def renumerador():
 
     return render_template("renumerador.html")
 
+def _get_esocial_base_session_state():
+    """Retorna a planilha base persistida na sessão, se ainda existir no disco."""
+    data = session.get("esocial_base")
+    if not isinstance(data, dict):
+        return None
+    token = re.sub(r"[^A-Za-z0-9_-]", "", str(data.get("token", "")))
+    stored_name = secure_filename(str(data.get("stored_name", "")))
+    if not token or not stored_name:
+        session.pop("esocial_base", None)
+        return None
+    path = Path(ESOCIAL_BASE_CACHE_DIR) / token / stored_name
+    if not path.is_file():
+        session.pop("esocial_base", None)
+        return None
+    sheets = [str(x) for x in (data.get("sheets") or []) if str(x).strip()]
+    return {
+        "token": token,
+        "path": path,
+        "filename": str(data.get("filename") or stored_name),
+        "stored_name": stored_name,
+        "sheets": sheets,
+        "size": int(data.get("size") or path.stat().st_size),
+    }
+
+
+def _clear_esocial_base_session():
+    data = session.pop("esocial_base", None)
+    if isinstance(data, dict):
+        token = re.sub(r"[^A-Za-z0-9_-]", "", str(data.get("token", "")))
+        if token:
+            shutil.rmtree(Path(ESOCIAL_BASE_CACHE_DIR) / token, ignore_errors=True)
+    session.modified = True
+
+
+def _persist_esocial_base_file(base_file):
+    ok, msg = validate_uploaded_file(base_file, ESOCIAL_ALLOWED_EXTENSIONS, "a planilha base")
+    if not ok:
+        raise ValueError(msg)
+
+    original_name = Path(base_file.filename).name
+    suffix = Path(original_name).suffix.lower()
+    token = secrets.token_urlsafe(18).replace("-", "_")
+    folder = Path(ESOCIAL_BASE_CACHE_DIR) / token
+    folder.mkdir(parents=True, exist_ok=True)
+    stored_name = f"base{suffix}"
+    path = folder / stored_name
+    try:
+        base_file.save(path)
+        sheets = list_sheets(str(path))
+        if not sheets:
+            raise ValueError("A planilha base não possui guias disponíveis.")
+    except Exception:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise
+
+    _clear_esocial_base_session()
+    session["esocial_base"] = {
+        "token": token,
+        "filename": original_name,
+        "stored_name": stored_name,
+        "sheets": sheets,
+        "size": path.stat().st_size,
+    }
+    session.modified = True
+    return _get_esocial_base_session_state()
+
+
 @app.route("/esocial", methods=["GET"])
 def esocial():
-    return render_template("esocial.html", title="Recibo eSocial")
+    base_state = _get_esocial_base_session_state()
+    base_info = None
+    if base_state:
+        base_info = {
+            "filename": base_state["filename"],
+            "sheets": base_state["sheets"],
+            "size": base_state["size"],
+        }
+    return render_template("esocial.html", title="Recibo eSocial", esocial_base=base_info)
 
 
 @app.route("/esocial/abas-base", methods=["POST"])
@@ -4872,19 +4970,25 @@ def esocial_abas_base():
     base_file = request.files.get("base_file")
     if not base_file or not base_file.filename:
         return jsonify({"ok": False, "error": "Nenhuma planilha base enviada."}), 400
-    temp_root = Path(tempfile.mkdtemp(prefix="esocial_abas_"))
     try:
-        if not is_allowed_file(base_file.filename):
-            return jsonify({"ok": False, "error": "Formato inválido. Envie a planilha base em .xls ou .xlsx."}), 400
-        base_path = temp_root / secure_filename(base_file.filename)
-        base_file.save(base_path)
-        sheets = list_sheets(str(base_path))
-        return jsonify({"ok": True, "sheets": sheets})
+        state = _persist_esocial_base_file(base_file)
+        return jsonify({
+            "ok": True,
+            "filename": state["filename"],
+            "size": state["size"],
+            "sheets": state["sheets"],
+        })
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
     except Exception:
-        logger.exception("Erro ao listar guias da planilha base do Recibo eSocial")
+        logger.exception("Erro ao salvar/ler a planilha base do Recibo eSocial")
         return jsonify({"ok": False, "error": "Não foi possível ler as guias da planilha base."}), 500
-    finally:
-        shutil.rmtree(temp_root, ignore_errors=True)
+
+
+@app.route("/esocial/base/remover", methods=["POST"])
+def esocial_remover_base():
+    _clear_esocial_base_session()
+    return jsonify({"ok": True})
 
 
 @app.route("/esocial/processar", methods=["POST"])
@@ -4892,10 +4996,15 @@ def esocial_processar():
     base_file = request.files.get("base_file")
     export_files = request.files.getlist("rel_files")
     base_sheet = request.form.get("base_sheet", "").strip()
+    stored_base = _get_esocial_base_session_state()
 
-    ok, msg = validate_uploaded_file(base_file, ESOCIAL_ALLOWED_EXTENSIONS, "a planilha base")
-    if not ok:
-        flash(msg)
+    if base_file and base_file.filename:
+        ok, msg = validate_uploaded_file(base_file, ESOCIAL_ALLOWED_EXTENSIONS, "a planilha base")
+        if not ok:
+            flash(msg)
+            return redirect(url_for("esocial"))
+    elif not stored_base:
+        flash("Selecione a planilha base.")
         return redirect(url_for("esocial"))
     if not base_sheet:
         flash("Selecione a guia/mês da planilha base.")
@@ -4913,8 +5022,12 @@ def esocial_processar():
     output_root.mkdir(parents=True, exist_ok=True)
 
     try:
-        base_path = upload_dir / secure_filename(base_file.filename)
-        base_file.save(base_path)
+        if base_file and base_file.filename:
+            base_path = upload_dir / secure_filename(base_file.filename)
+            base_file.save(base_path)
+        else:
+            base_path = upload_dir / secure_filename(stored_base["filename"])
+            shutil.copy2(stored_base["path"], base_path)
         export_paths = []
         for index, uploaded in enumerate(valid_exports, start=1):
             filename = secure_filename(Path(uploaded.filename).name)
@@ -5149,12 +5262,18 @@ def esocial_processar_async():
     base_file = request.files.get("base_file")
     export_files = [f for f in request.files.getlist("rel_files") if f and f.filename]
     base_sheet = request.form.get("base_sheet", "").strip()
+    stored_base = _get_esocial_base_session_state()
 
-    ok, msg = validate_uploaded_file(base_file, ESOCIAL_ALLOWED_EXTENSIONS, "a planilha base")
-    if not ok:
-        return fail(msg)
+    if base_file and base_file.filename:
+        ok, msg = validate_uploaded_file(base_file, ESOCIAL_ALLOWED_EXTENSIONS, "a planilha base")
+        if not ok:
+            return fail(msg)
+    elif not stored_base:
+        return fail("Selecione a planilha base.")
     if not base_sheet:
         return fail("Selecione a guia/mês da planilha base.")
+    if stored_base and not (base_file and base_file.filename) and base_sheet not in stored_base.get("sheets", []):
+        return fail("A guia selecionada não pertence à planilha base atual. Selecione novamente o mês.")
 
     valid_exports = [f for f in export_files if is_allowed_file(f.filename)]
     if not valid_exports:
@@ -5167,8 +5286,12 @@ def esocial_processar_async():
     output_root.mkdir(parents=True, exist_ok=True)
 
     try:
-        base_path = upload_dir / secure_filename(base_file.filename)
-        base_file.save(base_path)
+        if base_file and base_file.filename:
+            base_path = upload_dir / secure_filename(base_file.filename)
+            base_file.save(base_path)
+        else:
+            base_path = upload_dir / secure_filename(stored_base["filename"])
+            shutil.copy2(stored_base["path"], base_path)
         export_paths = _save_uploads_for_job(
             valid_exports,
             upload_dir / "envios_esocial",

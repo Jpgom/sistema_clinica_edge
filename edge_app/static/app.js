@@ -10,8 +10,13 @@ const loadingOverlay = document.getElementById('loadingOverlay');
 const baseFileInput = document.getElementById('baseFile');
 const baseSheetSelect = document.getElementById('baseSheetSelect');
 const esocialMonthHint = document.getElementById('esocialMonthHint');
+const baseFilePickerWrap = document.getElementById('baseFilePickerWrap');
+const baseFileActiveCard = document.getElementById('baseFileActiveCard');
+const baseFileActiveName = document.getElementById('baseFileActiveName');
+const removeBaseFileBtn = document.getElementById('removeBaseFileBtn');
 
 let selectedFiles = [];
+let baseIsActive = !!(baseFileActiveCard && !baseFileActiveCard.classList.contains('is-hidden'));
 
 function csrfHeader() {
   const meta = document.querySelector('meta[name="csrf-token"]');
@@ -37,6 +42,19 @@ function formatBytes(bytes) {
   const units = ['B', 'KB', 'MB', 'GB'];
   const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function setBaseActiveUI(active, filename = '') {
+  baseIsActive = !!active;
+  if (baseFileActiveCard) baseFileActiveCard.classList.toggle('is-hidden', !active);
+  if (baseFilePickerWrap) baseFilePickerWrap.classList.toggle('is-hidden', active);
+  if (baseFileActiveName && filename) baseFileActiveName.textContent = filename;
+  if (!active && baseFileActiveName) baseFileActiveName.textContent = '';
+  if (!active && baseFileInput) {
+    baseFileInput.value = '';
+    const preview = baseFileInput.parentElement?.querySelector('.file-preview');
+    if (preview) preview.textContent = 'Nenhum arquivo selecionado.';
+  }
 }
 
 function setSheetOptions(options) {
@@ -70,13 +88,14 @@ function updateEsocialMonthHint() {
 async function loadBaseSheets() {
   const file = baseFileInput?.files?.[0];
   if (!file) {
-    setSheetOptions([{ value: '', label: 'Carregue a planilha base primeiro' }]);
+    if (!baseIsActive) setSheetOptions([{ value: '', label: 'Carregue a planilha base primeiro' }]);
     return;
   }
 
   const formData = new FormData();
   formData.append('base_file', file);
-  setSheetOptions([{ value: '', label: 'Lendo abas da planilha...' }]);
+  setSheetOptions([{ value: '', label: 'Salvando planilha e lendo guias...' }]);
+  if (baseFileInput) baseFileInput.disabled = true;
 
   try {
     const response = await fetch('/esocial/abas-base', { method: 'POST', body: formData, headers: csrfHeader() });
@@ -84,10 +103,14 @@ async function loadBaseSheets() {
 
     if (!response.ok || !data.ok) {
       setSheetOptions([{ value: '', label: data.error || 'Não foi possível ler as abas' }]);
+      setBaseActiveUI(false);
       return;
     }
 
     const sheets = data.sheets || [];
+    setBaseActiveUI(true, data.filename || file.name);
+    if (baseFileInput) baseFileInput.value = '';
+
     if (sheets.length <= 1) {
       setSheetOptions([{ value: sheets[0] || '', label: sheets[0] || 'Planilha principal' }]);
       return;
@@ -99,6 +122,9 @@ async function loadBaseSheets() {
     ]);
   } catch {
     setSheetOptions([{ value: '', label: 'Erro ao carregar abas' }]);
+    setBaseActiveUI(false);
+  } finally {
+    if (baseFileInput) baseFileInput.disabled = false;
   }
 }
 
@@ -179,6 +205,28 @@ function addFiles(fileList, sourceLabel) {
 
 if (baseFileInput) {
   baseFileInput.addEventListener('change', loadBaseSheets);
+}
+
+if (removeBaseFileBtn) {
+  removeBaseFileBtn.addEventListener('click', async () => {
+    if (!window.confirm('Remover a planilha base atual e liberar a seleção de outra?')) return;
+    removeBaseFileBtn.disabled = true;
+    try {
+      const response = await fetch('/esocial/base/remover', {
+        method: 'POST',
+        headers: { ...csrfHeader(), 'Accept': 'application/json' }
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Não foi possível remover a planilha base.');
+      setBaseActiveUI(false);
+      setSheetOptions([{ value: '', label: 'Carregue a planilha base primeiro' }]);
+      if (esocialMonthHint) esocialMonthHint.textContent = 'O mês dos PDFs será identificado pelo nome da guia escolhida.';
+    } catch (error) {
+      alert(error.message || 'Não foi possível remover a planilha base.');
+    } finally {
+      removeBaseFileBtn.disabled = false;
+    }
+  });
 }
 
 if (baseSheetSelect) {
@@ -332,6 +380,11 @@ if (uploadForm) {
   uploadForm.addEventListener('submit', async e => {
     e.preventDefault();
 
+    if (!baseIsActive) {
+      alert('Selecione uma planilha base e aguarde o carregamento das guias.');
+      return;
+    }
+
     if (selectedFiles.length === 0) {
       alert('Selecione pelo menos uma planilha de envios do eSocial.');
       return;
@@ -387,6 +440,9 @@ window.addEventListener('pageshow', hideLoading);
 
 if (fileListBody) {
   renderFileList();
+}
+if (baseSheetSelect) {
+  updateEsocialMonthHint();
 }
 
 hideLoading();

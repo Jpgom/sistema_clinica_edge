@@ -1868,3 +1868,178 @@ body.edge-bold-site .btn--primary,body.edge-bold-site .btn-primary,body.edge-bol
   .esocial-progress-popup{right:10px;bottom:10px;width:calc(100vw - 20px)}
   .esocial-progress-popup.is-minimized{width:calc(100vw - 20px)}
 }
+
+/* ==========================================================
+   Recibo eSocial — base persistente e contraste visual
+   ========================================================== */
+body.esocial-page{
+  background:#edf3f1!important;
+}
+.esocial-page .main-area{
+  background:transparent!important;
+}
+.esocial-page .is-hidden{display:none!important}
+.esocial-page .esocial-workspace{
+  background:#f4f7f6!important;
+  border:1px solid #d5dfdc!important;
+  padding:18px!important;
+}
+.esocial-page .esocial-step-card{
+  position:relative;
+  margin-bottom:16px;
+  padding:20px;
+  background:#fff;
+  border:1px solid #cfdad6;
+  border-radius:10px;
+  box-shadow:0 2px 7px rgba(16,24,40,.035);
+}
+.esocial-page .esocial-step-card .section-head{
+  margin-bottom:16px!important;
+}
+.esocial-page .esocial-step-card .section-head>div{
+  position:relative;
+  padding-left:38px;
+}
+.esocial-page .esocial-step-number{
+  position:absolute;
+  left:0;
+  top:-2px;
+  width:28px;
+  height:28px;
+  display:grid;
+  place-items:center;
+  border-radius:7px;
+  background:var(--primary);
+  color:#fff;
+  font-size:13px;
+  font-weight:800;
+}
+.esocial-page .esocial-step-card input[type="file"],
+.esocial-page .esocial-step-card select{
+  background:#fbfcfc!important;
+  border-color:#cbd7d3!important;
+}
+.esocial-page .esocial-step-card input[type="file"]:hover,
+.esocial-page .esocial-step-card select:hover{
+  border-color:#9cb3aa!important;
+}
+.esocial-page .esocial-base-active{
+  min-height:58px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:10px 10px 10px 12px;
+  border:1px solid #a9c5b9;
+  border-radius:8px;
+  background:#f1f8f4;
+}
+.esocial-page .esocial-base-active__icon{
+  width:38px;
+  height:38px;
+  flex:0 0 38px;
+  display:grid;
+  place-items:center;
+  border-radius:7px;
+  background:#dcefe5;
+  color:#17613f;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.04em;
+}
+.esocial-page .esocial-base-active__info{
+  min-width:0;
+  flex:1;
+}
+.esocial-page .esocial-base-active__info strong{
+  display:block;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:#1f352c;
+  font-size:13px;
+}
+.esocial-page .esocial-base-active__info small{
+  display:block;
+  margin-top:2px;
+  color:#5e746b;
+  font-size:11px;
+}
+.esocial-page .esocial-base-remove{
+  width:34px;
+  height:34px;
+  flex:0 0 34px;
+  display:grid;
+  place-items:center;
+  border:1px solid #e3b7ba;
+  border-radius:7px;
+  background:#fff4f4;
+  color:#a32832;
+  font:700 21px/1 Arial,sans-serif;
+  cursor:pointer;
+}
+.esocial-page .esocial-base-remove:hover{
+  background:#fde9ea;
+  border-color:#d99197;
+}
+.esocial-page .esocial-base-remove:disabled{opacity:.55;cursor:wait}
+.esocial-page .esocial-files-toolbar .helper-box{
+  background:#eef3f1!important;
+  border-style:solid!important;
+}
+.esocial-page .selected-chip{
+  background:#e8f1f7!important;
+  color:#145b82!important;
+  border:1px solid #c9dce7!important;
+}
+.esocial-page .table-wrap{
+  border-color:#ccd7d3!important;
+}
+.esocial-page .file-table thead{
+  background:#eaf0ee!important;
+}
+.esocial-page .file-table th{
+  color:#45534d!important;
+}
+.esocial-page .btn--light{
+  background:#e9eeec!important;
+  border-color:#c8d2ce!important;
+  color:#2e3b36!important;
+}
+.esocial-page .btn--light:hover{
+  background:#dde6e2!important;
+  border-color:#aebeb8!important;
+}
+.esocial-page .btn--danger{
+  background:#fff0f1!important;
+  border-color:#efc5c8!important;
+  color:#a3242d!important;
+}
+.esocial-page .btn--danger:hover{
+  background:#fbe1e3!important;
+}
+.esocial-page .esocial-info-box{
+  margin-top:16px!important;
+  background:#edf5f8!important;
+  border-color:#c8dce6!important;
+  color:#294553!important;
+}
+.esocial-page .esocial-generate-actions{
+  justify-content:flex-end!important;
+  margin-top:16px!important;
+}
+.esocial-page .esocial-generate-actions .btn--primary{
+  min-width:250px;
+  background:#12679a!important;
+  border-color:#12679a!important;
+  box-shadow:0 2px 5px rgba(18,103,154,.15)!important;
+}
+.esocial-page .esocial-generate-actions .btn--primary:hover{
+  background:#0d557f!important;
+  border-color:#0d557f!important;
+}
+@media (max-width:640px){
+  .esocial-page .esocial-workspace{padding:10px!important}
+  .esocial-page .esocial-step-card{padding:14px}
+  .esocial-page .esocial-generate-actions .btn--primary{width:100%;min-width:0}
+  .esocial-page .esocial-base-active__info small{white-space:normal}
+}

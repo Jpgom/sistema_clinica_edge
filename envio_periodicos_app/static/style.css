@@ -825,3 +825,222 @@ html[data-theme="dark"] .referral-mini-row strong{color:#f3f7f9!important}
 html[data-theme="dark"] .referral-mini-row span{color:#b6c1c9!important}
 html[data-theme="dark"] .page-head{border-color:#3b4851!important}
 html[data-theme="dark"] .section-head{border-color:#3b4851!important}
+
+/* ==========================================================
+   EDGE UI — camada final de legibilidade e contraste
+   Revisão global: tema claro + escuro
+   ========================================================== */
+:root{
+  --ui-bg:#f3f7f5;
+  --ui-surface:#ffffff;
+  --ui-surface-2:#f7faf8;
+  --ui-surface-3:#edf3f0;
+  --ui-text:#17211d;
+  --ui-text-2:#405049;
+  --ui-muted:#5d6c65;
+  --ui-border:#c5d1cc;
+  --ui-border-strong:#aebdb7;
+  --ui-primary:#126f9f;
+  --ui-primary-hover:#0e587d;
+  --ui-primary-soft:#e6f1f7;
+  --ui-focus:rgba(18,111,159,.20);
+}
+html[data-theme="dark"]{
+  --ui-bg:#10161a;
+  --ui-surface:#1a2228;
+  --ui-surface-2:#202a31;
+  --ui-surface-3:#27333b;
+  --ui-text:#f4f7f8;
+  --ui-text-2:#d5dde2;
+  --ui-muted:#b7c2c9;
+  --ui-border:#46545e;
+  --ui-border-strong:#61717c;
+  --ui-primary:#58add7;
+  --ui-primary-hover:#75bce0;
+  --ui-primary-soft:#18384a;
+  --ui-focus:rgba(88,173,215,.28);
+}
+
+html:not([data-theme="dark"]) body{background:var(--ui-bg)!important;color:var(--ui-text)!important}
+html:not([data-theme="dark"]) .main-area,
+html:not([data-theme="dark"]) .content,
+html:not([data-theme="dark"]) .main{color:var(--ui-text)!important}
+html:not([data-theme="dark"]) h1,
+html:not([data-theme="dark"]) h2,
+html:not([data-theme="dark"]) h3,
+html:not([data-theme="dark"]) h4,
+html:not([data-theme="dark"]) h5,
+html:not([data-theme="dark"]) strong{color:var(--ui-text)!important}
+html:not([data-theme="dark"]) p,
+html:not([data-theme="dark"]) small,
+html:not([data-theme="dark"]) .muted,
+html:not([data-theme="dark"]) .helper,
+html:not([data-theme="dark"]) .field-help{color:var(--ui-muted)!important}
+
+html[data-theme="dark"] body{background:var(--ui-bg)!important;color:var(--ui-text)!important}
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] h4,
+html[data-theme="dark"] h5,
+html[data-theme="dark"] strong{color:var(--ui-text)!important}
+html[data-theme="dark"] p,
+html[data-theme="dark"] small,
+html[data-theme="dark"] .muted,
+html[data-theme="dark"] .helper,
+html[data-theme="dark"] .field-help{color:var(--ui-muted)!important}
+
+/* Controles nativos: contraste consistente, inclusive file/select/disabled */
+html:not([data-theme="dark"]) input,
+html:not([data-theme="dark"]) select,
+html:not([data-theme="dark"]) textarea{
+  background:var(--ui-surface)!important;color:var(--ui-text)!important;border-color:var(--ui-border)!important;
+}
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea{
+  background:#151d22!important;color:var(--ui-text)!important;border-color:#596873!important;
+}
+html[data-theme="dark"] option{background:#151d22!important;color:var(--ui-text)!important}
+html:not([data-theme="dark"]) option{background:#fff!important;color:var(--ui-text)!important}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder{color:#9ca9b2!important;opacity:1!important}
+html:not([data-theme="dark"]) input::placeholder,
+html:not([data-theme="dark"]) textarea::placeholder{color:#73817b!important;opacity:1!important}
+html[data-theme="dark"] input:disabled,
+html[data-theme="dark"] select:disabled,
+html[data-theme="dark"] textarea:disabled{
+  background:#20282e!important;color:#aeb9c0!important;border-color:#46545e!important;opacity:1!important;
+}
+html:not([data-theme="dark"]) input:disabled,
+html:not([data-theme="dark"]) select:disabled,
+html:not([data-theme="dark"]) textarea:disabled{
+  background:#eef2f0!important;color:#65746d!important;border-color:#c7d0cc!important;opacity:1!important;
+}
+html[data-theme="dark"] input[type="file"]::file-selector-button{
+  background:#2a3943!important;color:#f5f8fa!important;border:1px solid #61717c!important;
+}
+html:not([data-theme="dark"]) input[type="file"]::file-selector-button{
+  background:#e7f1f6!important;color:#0d5479!important;border:1px solid #bdd0db!important;
+}
+html[data-theme="dark"] input:focus,
+html[data-theme="dark"] select:focus,
+html[data-theme="dark"] textarea:focus,
+html:not([data-theme="dark"]) input:focus,
+html:not([data-theme="dark"]) select:focus,
+html:not([data-theme="dark"]) textarea:focus{
+  border-color:var(--ui-primary)!important;outline:3px solid var(--ui-focus)!important;outline-offset:0!important;
+}
+
+/* Texto de rótulos e dados pequenos */
+html[data-theme="dark"] label,
+html[data-theme="dark"] .form-label,
+html[data-theme="dark"] .field-label{color:#e4eaee!important}
+html:not([data-theme="dark"]) label,
+html:not([data-theme="dark"]) .form-label,
+html:not([data-theme="dark"]) .field-label{color:#2f3e37!important}
+
+/* Tabelas */
+html[data-theme="dark"] table{background:var(--ui-surface)!important;color:var(--ui-text)!important}
+html[data-theme="dark"] thead,
+html[data-theme="dark"] thead tr,
+html[data-theme="dark"] th{background:#27343c!important;color:#e9eef1!important;border-color:#4c5b65!important}
+html[data-theme="dark"] td{color:#eef2f4!important;border-color:#394750!important}
+html[data-theme="dark"] tbody tr:hover td{background:#222d34!important}
+html:not([data-theme="dark"]) thead,
+html:not([data-theme="dark"]) thead tr,
+html:not([data-theme="dark"]) th{background:#e9f0ed!important;color:#34463e!important;border-color:#c5d1cc!important}
+html:not([data-theme="dark"]) td{color:#223029!important;border-color:#dde5e1!important}
+html:not([data-theme="dark"]) tbody tr:hover td{background:#f5f9f7!important}
+
+/* Links e foco */
+html[data-theme="dark"] a:not(.btn):not(.nav-link):not(.edge-menu-link){color:#8fd0f2}
+html[data-theme="dark"] a:not(.btn):not(.nav-link):not(.edge-menu-link):hover{color:#b4e2fa}
+:focus-visible{outline:3px solid var(--ui-focus)!important;outline-offset:2px!important}
+
+/* ===== Envio Periódicos: contraste dos cartões, tabelas e popups ===== */
+html[data-theme="dark"] .summary-strip,
+html[data-theme="dark"] .summary-strip>div,
+html[data-theme="dark"] .unit-card,
+html[data-theme="dark"] .kpi-card,
+html[data-theme="dark"] .workflow-card,
+html[data-theme="dark"] .toolbar-card,
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .table-toolbar,
+html[data-theme="dark"] .upload-box,
+html[data-theme="dark"] .toggle-row,
+html[data-theme="dark"] .referral-shell,
+html[data-theme="dark"] .progress-modal,
+html[data-theme="dark"] .progress-numbers>div,
+html[data-theme="dark"] .progress-current,
+html[data-theme="dark"] .active-job-banner,
+html[data-theme="dark"] .info-bar,
+html[data-theme="dark"] .danger-panel{
+  background:var(--ui-surface)!important;border-color:#465660!important;color:var(--ui-text)!important;
+}
+html[data-theme="dark"] .summary-strip span,
+html[data-theme="dark"] .unit-latest,
+html[data-theme="dark"] .unit-stats span,
+html[data-theme="dark"] .kpi-card span,
+html[data-theme="dark"] .workflow-card p,
+html[data-theme="dark"] .table-note,
+html[data-theme="dark"] .row-subtitle,
+html[data-theme="dark"] .breadcrumbs,
+html[data-theme="dark"] .breadcrumbs a,
+html[data-theme="dark"] .help,
+html[data-theme="dark"] .upload-box p{color:#b8c4cb!important}
+html[data-theme="dark"] .unit-card h2,
+html[data-theme="dark"] .unit-stats strong,
+html[data-theme="dark"] .kpi-card strong,
+html[data-theme="dark"] .workflow-card h3,
+html[data-theme="dark"] .section-head h2,
+html[data-theme="dark"] .table-toolbar h2{color:#f4f7f8!important}
+html[data-theme="dark"] .unit-initial{background:#203a49!important;color:#aedaef!important}
+html[data-theme="dark"] .arrow{color:#91a5b0!important}
+html[data-theme="dark"] .form-control{background:#151d22!important;color:#f4f7f8!important;border-color:#596a75!important}
+html[data-theme="dark"] .form-control::placeholder{color:#98a6af!important}
+html[data-theme="dark"] .table th{background:#27343c!important;color:#e5ecef!important;border-color:#4c5b65!important}
+html[data-theme="dark"] .table td{color:#eff3f5!important;border-color:#3b4851!important}
+html[data-theme="dark"] .table tbody tr:hover td{background:#222d34!important}
+html[data-theme="dark"] .btn-ghost,
+html[data-theme="dark"] .btn-secondary{background:#29353d!important;color:#eef3f5!important;border-color:#596a75!important}
+html[data-theme="dark"] .btn-primary{background:#2d86b7!important;color:#fff!important;border-color:#62afd6!important}
+html[data-theme="dark"] .status{background:#2a353d!important;color:#dce4e8!important;border-color:#4e5e68!important}
+html[data-theme="dark"] .status-ok{background:#19392c!important;color:#9de0ba!important;border-color:#35654a!important}
+html[data-theme="dark"] .status-warn{background:#3a321f!important;color:#f1cf77!important;border-color:#6d5c2f!important}
+html[data-theme="dark"] .status-error{background:#3b2427!important;color:#f6a5aa!important;border-color:#70464b!important}
+
+html:not([data-theme="dark"]) .summary-strip,
+html:not([data-theme="dark"]) .summary-strip>div,
+html:not([data-theme="dark"]) .unit-card,
+html:not([data-theme="dark"]) .kpi-card,
+html:not([data-theme="dark"]) .workflow-card,
+html:not([data-theme="dark"]) .toolbar-card,
+html:not([data-theme="dark"]) .card,
+html:not([data-theme="dark"]) .table-toolbar,
+html:not([data-theme="dark"]) .upload-box{
+  background:#fff!important;border-color:#c5d1cc!important;color:#17211d!important;
+}
+html:not([data-theme="dark"]) .unit-card h2,
+html:not([data-theme="dark"]) .unit-stats strong,
+html:not([data-theme="dark"]) .kpi-card strong,
+html:not([data-theme="dark"]) .workflow-card h3{color:#17211d!important}
+html:not([data-theme="dark"]) .summary-strip span,
+html:not([data-theme="dark"]) .unit-latest,
+html:not([data-theme="dark"]) .unit-stats span,
+html:not([data-theme="dark"]) .kpi-card span,
+html:not([data-theme="dark"]) .workflow-card p{color:#596861!important}
+
+/* Envio Periódicos — navegação e textos auxiliares */
+html[data-theme="dark"] .sidebar .nav-link{color:#c9d3d9!important}
+html[data-theme="dark"] .sidebar .nav-link:hover{color:#f5f8fa!important;background:#222d34!important}
+html[data-theme="dark"] .sidebar .nav-link.active{color:#d9f0fb!important;background:#1c3d50!important}
+html[data-theme="dark"] .form-group label{color:#dce4e8!important}
+html:not([data-theme="dark"]) .form-group label{color:#405149!important}
+
+/* Envio Periódicos — estados auxiliares */
+html[data-theme="dark"] .btn-ghost-danger{background:#34262a!important;color:#f3aeb4!important;border-color:#70484e!important}
+html[data-theme="dark"] .login-card,
+html[data-theme="dark"] .operation-card{background:var(--ui-surface)!important;color:var(--ui-text)!important;border-color:#465660!important}
+html[data-theme="dark"] .btn:disabled,
+html[data-theme="dark"] button:disabled{opacity:.68!important;color:#b8c3c9!important}

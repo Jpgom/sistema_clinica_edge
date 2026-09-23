@@ -1483,13 +1483,13 @@ def _soffice_executavel():
     return exe
 
 
-def _converter_docx_em_lote_para_pdf(caminhos_docx, pasta_destino, tamanho_lote=40):
-    """Converte DOCX já renderizados do modelo oficial para PDF.
+def _converter_docx_em_lote_para_pdf(caminhos_docx, pasta_destino, tamanho_lote=160):
+    """Converte vários DOCX do modelo oficial para PDF com poucas inicializações do LibreOffice.
 
-    O PDF não é redesenhado pelo sistema. Primeiro geramos o mesmo arquivo Word
-    utilizado na opção DOCX e depois o LibreOffice apenas o exporta para PDF.
-    Dessa forma Word e PDF compartilham layout, logotipo, tabelas, espaçamentos,
-    endereço, data e demais elementos do mesmo template.
+    O custo mais alto no Render é iniciar o LibreOffice. Por isso os arquivos são
+    convertidos em lotes grandes, usando um único perfil temporário durante toda a
+    operação. O PDF continua sendo uma exportação direta do mesmo DOCX gerado na
+    opção Word, preservando o layout.
     """
     caminhos = [Path(c) for c in caminhos_docx]
     if not caminhos:
@@ -1499,16 +1499,18 @@ def _converter_docx_em_lote_para_pdf(caminhos_docx, pasta_destino, tamanho_lote=
     destino.mkdir(parents=True, exist_ok=True)
     soffice = _soffice_executavel()
     gerados = []
+    lote_max = max(1, int(tamanho_lote or 160))
+    perfil_dir = Path(tempfile.mkdtemp(prefix="edge_lo_profile_"))
 
-    for inicio in range(0, len(caminhos), max(1, int(tamanho_lote))):
-        lote = caminhos[inicio:inicio + max(1, int(tamanho_lote))]
-        perfil_dir = Path(tempfile.mkdtemp(prefix="edge_lo_profile_"))
-        try:
+    try:
+        for inicio in range(0, len(caminhos), lote_max):
+            lote = caminhos[inicio:inicio + lote_max]
             cmd = [
                 soffice,
                 f"-env:UserInstallation={perfil_dir.resolve().as_uri()}",
                 "--headless",
                 "--nologo",
+                "--nodefault",
                 "--nofirststartwizard",
                 "--norestore",
                 "--convert-to", "pdf",
@@ -1520,7 +1522,8 @@ def _converter_docx_em_lote_para_pdf(caminhos_docx, pasta_destino, tamanho_lote=
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=max(180, 15 * len(lote)),
+                timeout=max(180, 8 * len(lote)),
+                env={**os.environ, "SAL_USE_VCLPLUGIN": "svp"},
             )
             if proc.returncode != 0:
                 detalhe = (proc.stderr or proc.stdout or "erro desconhecido").strip()
@@ -1539,11 +1542,10 @@ def _converter_docx_em_lote_para_pdf(caminhos_docx, pasta_destino, tamanho_lote=
                     "O LibreOffice não gerou todos os PDFs esperados. "
                     f"Arquivos: {', '.join(faltantes[:5])}. {detalhe}"
                 )
-        finally:
-            shutil.rmtree(perfil_dir, ignore_errors=True)
+    finally:
+        shutil.rmtree(perfil_dir, ignore_errors=True)
 
     return gerados
-
 
 def _gerar_encaminhamento_pdf(contexto, destino):
     """Compatibilidade: gera o Word oficial e exporta esse mesmo documento para PDF."""
@@ -1602,14 +1604,20 @@ def gerar_encaminhamentos(file, formato_saida="docx"):
     if not registros_por_empresa:
         raise ValueError("Nenhum encaminhamento foi encontrado na planilha. Confira as colunas EMPRESA, CNPJ, NOME e COMPLEMENTARES.")
 
+    # Na saída PDF, todos os DOCX são preparados primeiro e enviados ao LibreOffice
+    # em um único lote global (ou poucos lotes grandes). Isso evita iniciar o
+    # LibreOffice uma vez para cada empresa, que era o principal gargalo no Render.
+    pdf_jobs = []
+    docx_global_dir = Path(temp_dir) / "docx_para_pdf"
+    pdf_convertidos_dir = Path(temp_dir) / "pdf_convertidos"
+    if formato_saida == "pdf":
+        docx_global_dir.mkdir(parents=True, exist_ok=True)
+        pdf_convertidos_dir.mkdir(parents=True, exist_ok=True)
+
+    sequencia_pdf = 0
     for cnpj_pasta, registros in registros_por_empresa.items():
         pasta_empresa = empresas_root / cnpj_pasta
         pasta_empresa.mkdir(parents=True, exist_ok=True)
-        docx_para_converter = []
-        temp_docx_dir = None
-        if formato_saida == "pdf":
-            temp_docx_dir = Path(temp_dir) / "docx_para_pdf" / cnpj_pasta
-            temp_docx_dir.mkdir(parents=True, exist_ok=True)
 
         for item in registros:
             comps = {f"comp{i+1}": item["complementares"][i] if i < len(item["complementares"]) else "" for i in range(9)}
@@ -1623,29 +1631,46 @@ def gerar_encaminhamentos(file, formato_saida="docx"):
             }
             base_nome = f"ENCAMINHAMENTO {contexto['funcionario'] or 'SEM NOME'}"
             if formato_saida == "pdf":
-                # O nome é definido pela saída PDF; o DOCX temporário usa o mesmo nome-base.
                 destino_pdf = _nome_arquivo_unico(pasta_empresa, base_nome, "pdf")
-                docx_temp = temp_docx_dir / f"{destino_pdf.stem}.docx"
+                sequencia_pdf += 1
+                # Nome técnico único evita colisões entre empresas com funcionários homônimos.
+                docx_temp = docx_global_dir / f"edge_enc_{sequencia_pdf:06d}.docx"
                 _gerar_encaminhamento_docx(contexto, docx_temp)
-                docx_para_converter.append(docx_temp)
+                pdf_jobs.append((docx_temp, destino_pdf))
             else:
                 destino = _nome_arquivo_unico(pasta_empresa, base_nome, "docx")
                 _gerar_encaminhamento_docx(contexto, destino)
 
-        if formato_saida == "pdf":
-            _converter_docx_em_lote_para_pdf(docx_para_converter, pasta_empresa)
-            shutil.rmtree(temp_docx_dir, ignore_errors=True)
-
         relatorio.append(f"{cnpj_pasta}: {len(registros)} encaminhamento(s)")
 
-    # ZIP principal: dentro dele vai 1 ZIP por empresa/CNPJ, e dentro de cada ZIP fica a pasta do CNPJ com os encaminhamentos.
+    if formato_saida == "pdf" and pdf_jobs:
+        inicio_conversao = datetime.now()
+        _converter_docx_em_lote_para_pdf(
+            [docx for docx, _ in pdf_jobs],
+            pdf_convertidos_dir,
+            tamanho_lote=160,
+        )
+        for docx_temp, destino_pdf in pdf_jobs:
+            pdf_temp = pdf_convertidos_dir / f"{docx_temp.stem}.pdf"
+            if not pdf_temp.exists():
+                raise RuntimeError(f"PDF convertido não encontrado: {docx_temp.name}")
+            destino_pdf.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(pdf_temp), str(destino_pdf))
+        logger.info(
+            "Encaminhamentos PDF: %s arquivo(s) convertidos em lote em %.2fs",
+            len(pdf_jobs),
+            (datetime.now() - inicio_conversao).total_seconds(),
+        )
+
+    # DOCX e PDF já são formatos compactados; comprimi-los novamente consome CPU e
+    # quase não reduz tamanho. ZIP_STORED deixa a montagem do download bem mais rápida.
     zip_principal = Path(temp_dir) / "encaminhamentos.zip"
-    with zipfile.ZipFile(zip_principal, "w", zipfile.ZIP_DEFLATED) as zip_out:
+    with zipfile.ZipFile(zip_principal, "w", compression=zipfile.ZIP_STORED) as zip_out:
         for pasta_empresa in sorted(empresas_root.iterdir(), key=lambda p: p.name):
             if not pasta_empresa.is_dir():
                 continue
             zip_empresa_path = Path(temp_dir) / f"{pasta_empresa.name}.zip"
-            with zipfile.ZipFile(zip_empresa_path, "w", zipfile.ZIP_DEFLATED) as zip_empresa:
+            with zipfile.ZipFile(zip_empresa_path, "w", compression=zipfile.ZIP_STORED) as zip_empresa:
                 for arquivo in sorted(pasta_empresa.iterdir(), key=lambda p: p.name):
                     if arquivo.is_file():
                         zip_empresa.write(arquivo, f"{pasta_empresa.name}/{arquivo.name}")

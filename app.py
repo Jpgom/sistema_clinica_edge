@@ -4,6 +4,7 @@
 - O módulo PGR/SST fica montado em `/pgr`.
 - O módulo Envio Periódicos fica montado em `/envio-periodicos`.
 - A função Separar exames fica montada em `/separar-exames`.
+- O preenchimento de recibos integra o sistema principal em `/recibos`.
 """
 from __future__ import annotations
 

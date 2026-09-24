@@ -1,6 +1,6 @@
 {% set edge_path = request.path %}
 {% set edge_clinica = edge_path.startswith(('/encaminhamento-especialista', '/encaminhamento-complementares', '/laudo-pcd', '/fisico-mental', '/atestado-medico', '/anamnese-ocupacional', '/aso-manual')) %}
-{% set edge_interno = edge_path.startswith(('/envio-periodicos', '/separar-exames', '/exames-a-prazo', '/renumerador', '/esocial', '/relatorios', '/encaminhamentos')) %}
+{% set edge_interno = edge_path.startswith(('/envio-periodicos', '/separar-exames', '/exames-a-prazo', '/renumerador', '/esocial', '/relatorios', '/encaminhamentos', '/recibos')) %}
 {% set edge_sistema = edge_path.startswith(('/status-sistema', '/usuarios', '/auditoria')) %}
 <aside class="sidebar edge-app-sidebar" id="edgeAppSidebar">
   <div class="edge-sidebar-head">
@@ -32,6 +32,7 @@
       <div class="edge-nav-links">
         <a class="nav-link" href="/envio-periodicos/">Envio periódicos</a>
         <a class="nav-link" href="/separar-exames/">Separar exames</a>
+        <a class="nav-link {% if edge_path.startswith('/recibos') %}active{% endif %}" href="{{ url_for('recibos.index') }}" {% if edge_path.startswith('/recibos') %}aria-current="page"{% endif %}>Recibos</a>
         <a class="nav-link {% if edge_path.startswith('/exames-a-prazo') %}active{% endif %}" href="{{ url_for('exames_a_prazo') }}" {% if edge_path.startswith('/exames-a-prazo') %}aria-current="page"{% endif %}>Exames a prazo</a>
         <a class="nav-link {% if edge_path.startswith('/esocial') %}active{% endif %}" href="{{ url_for('esocial') }}" {% if edge_path.startswith('/esocial') %}aria-current="page"{% endif %}>Recibo eSocial</a>
         <a class="nav-link {% if edge_path.startswith('/renumerador') %}active{% endif %}" href="{{ url_for('renumerador') }}" {% if edge_path.startswith('/renumerador') %}aria-current="page"{% endif %}>Renumerador</a>

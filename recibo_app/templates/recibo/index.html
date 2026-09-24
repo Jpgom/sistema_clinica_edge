@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>Preencher recibo | EDGE</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=edge-theme-20260923">
+  <link rel="stylesheet" href="{{ url_for('static', filename='ui-shell.css') }}?v=edge-ui-20260924">
+  <link rel="stylesheet" href="{{ url_for('recibos.static', filename='recibo.css') }}">
+  <script>
+    try { document.documentElement.dataset.theme = localStorage.getItem('edge-theme') === 'dark' ? 'dark' : 'light'; }
+    catch (_) { document.documentElement.dataset.theme = 'light'; }
+  </script>
+</head>
+<body class="receipt-page">
+<div class="app-layout">
+  {% include "_sidebar.html" %}
+
+  <main class="main-area receipt-main" id="receiptApp"
+        data-preview-url="{{ url_for('recibos.api_preview') }}"
+        data-pdf-url="{{ url_for('recibos.api_pdf') }}"
+        data-config-url="{{ url_for('recibos.api_config') }}">
+    <div class="topbar compact-topbar">
+      <div class="page-title">
+        <h1>Preencher recibo</h1>
+        <p>Digite os dados, confira o alinhamento e gere o PDF para o papel pré-impresso.</p>
+      </div>
+    </div>
+
+    {% if can_edit %}
+    <div class="receipt-workspace">
+      <section class="receipt-card receipt-editor" aria-labelledby="receiptDataTitle">
+        <div class="receipt-card-head">
+          <div>
+            <h2 id="receiptDataTitle">Dados do recibo</h2>
+            <p>O total é calculado automaticamente.</p>
+          </div>
+        </div>
+
+        <form id="receiptForm" autocomplete="off" novalidate>
+          <div class="receipt-top-fields">
+            <div class="receipt-field receipt-field-client">
+              <label for="receiptClient">Cliente</label>
+              <input id="receiptClient" name="cliente" type="text" maxlength="120" placeholder="Nome do cliente">
+            </div>
+            <div class="receipt-field receipt-field-date">
+              <label for="receiptDate">Data</label>
+              <input id="receiptDate" name="data" type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA">
+            </div>
+          </div>
+
+          <div class="receipt-items-head">
+            <h3>Itens</h3>
+            <span>Até 10 linhas</span>
+          </div>
+          <div class="receipt-column-head" aria-hidden="true">
+            <span>Qtd.</span><span>Unid.</span><span>Descrição</span><span>Preço un.</span><span>Total</span>
+          </div>
+          <div class="receipt-items" id="receiptItems">
+            {% for i in range(10) %}
+            <div class="receipt-item" data-item-index="{{ i }}" {% if i >= 1 %}hidden{% endif %}>
+              <span class="receipt-item-number" aria-hidden="true">{{ i + 1 }}</span>
+              <div class="receipt-field receipt-qty">
+                <label for="receiptQty{{ i }}">Qtd. {{ i + 1 }}</label>
+                <input id="receiptQty{{ i }}" data-field="quantidade" inputmode="decimal" type="text" maxlength="24" placeholder="0" aria-label="Quantidade do item {{ i + 1 }}">
+              </div>
+              <div class="receipt-field receipt-unit">
+                <label for="receiptUnit{{ i }}">Unid. {{ i + 1 }}</label>
+                <input id="receiptUnit{{ i }}" data-field="unidade" type="text" maxlength="8" value="UN" aria-label="Unidade do item {{ i + 1 }}">
+              </div>
+              <div class="receipt-field receipt-description">
+                <label for="receiptDescription{{ i }}">Descrição {{ i + 1 }}</label>
+                <input id="receiptDescription{{ i }}" data-field="descricao" type="text" maxlength="120" placeholder="Descrição do item" aria-label="Descrição do item {{ i + 1 }}">
+              </div>
+              <div class="receipt-field receipt-price">
+                <label for="receiptPrice{{ i }}">Preço un. {{ i + 1 }}</label>
+                <input id="receiptPrice{{ i }}" data-field="preco_unitario" inputmode="decimal" type="text" maxlength="24" placeholder="0,00" aria-label="Preço unitário do item {{ i + 1 }}">
+              </div>
+              <div class="receipt-field receipt-line-total">
+                <label for="receiptLineTotal{{ i }}">Total {{ i + 1 }}</label>
+                <output id="receiptLineTotal{{ i }}" aria-label="Total do item {{ i + 1 }}">0,00</output>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <button class="receipt-add-item" id="addReceiptItem" type="button">+ Adicionar item</button>
+
+          <div class="receipt-total-row">
+            <span>Total geral</span>
+            <strong id="receiptTotal" aria-live="polite">R$ 0,00</strong>
+          </div>
+          <div class="receipt-form-actions">
+            <button class="btn btn--primary" id="generateReceiptPdf" type="button">Gerar PDF para imprimir</button>
+            <button class="btn btn--light" id="clearReceiptForm" type="button">Limpar</button>
+          </div>
+          <div class="receipt-print-issues" id="receiptPrintIssues" role="alert" hidden>
+            <strong id="receiptPrintIssuesTitle">Confira antes de imprimir</strong>
+            <ul id="receiptPrintIssuesList"></ul>
+          </div>
+          <p class="receipt-print-note">Na impressão, selecione <strong>tamanho real / 100%</strong> e papel <strong>144 × 105,4 mm</strong>.</p>
+        </form>
+      </section>
+
+      <section class="receipt-card receipt-preview-card" aria-labelledby="receiptPreviewTitle">
+        <div class="receipt-card-head receipt-preview-head">
+          <div>
+            <h2 id="receiptPreviewTitle">Prévia do recibo</h2>
+            <p>O PDF usa as mesmas posições desta prévia.</p>
+          </div>
+          <button class="btn btn--light receipt-adjust-toggle" id="toggleCalibration" type="button" aria-expanded="false" aria-controls="calibrationPanel">Ajustar alinhamento</button>
+        </div>
+
+        <div class="receipt-preview-toolbar">
+          <span id="previewModeLabel">Prévia dos dados preenchidos</span>
+          <div class="receipt-zoom" role="group" aria-label="Zoom da prévia">
+            <button type="button" id="zoomOut" aria-label="Reduzir prévia">−</button>
+            <span id="zoomLabel">100%</span>
+            <button type="button" id="zoomIn" aria-label="Ampliar prévia">+</button>
+          </div>
+        </div>
+        <div class="receipt-preview-scroll" id="receiptPreviewScroll">
+          <div class="receipt-preview-stage" id="receiptPreviewStage" tabindex="0" aria-label="Prévia do recibo. Na calibração, use as setas para mover o campo selecionado.">
+            <img id="receiptPreviewImage" alt="Modelo do recibo com os dados posicionados" src="" hidden>
+            <div id="receiptFieldOverlay" class="receipt-field-overlay" aria-label="Campos ajustáveis na prévia"></div>
+            <div id="receiptPreviewLoading" class="receipt-preview-placeholder">Preparando prévia…</div>
+          </div>
+        </div>
+
+        <div class="receipt-feedback" id="receiptFeedback" role="status" aria-live="polite"></div>
+        <ul class="receipt-warnings" id="receiptWarnings" aria-live="polite" hidden></ul>
+
+        <section class="receipt-calibration" id="calibrationPanel" aria-labelledby="calibrationTitle" hidden>
+          <div class="receipt-calibration-head">
+            <div>
+              <h3 id="calibrationTitle">Ajustar pela prévia</h3>
+              <p>Clique em um campo no recibo ou selecione abaixo.</p>
+            </div>
+          </div>
+
+          <label class="receipt-select-label" for="calibrationField">Campo selecionado</label>
+          <select id="calibrationField"><option value="">Selecione um campo</option></select>
+
+          <fieldset class="receipt-scope" id="calibrationScope">
+            <legend>O que mover?</legend>
+            <label><input type="radio" name="receiptScope" value="cell" checked><span>Só este campo</span></label>
+            <label><input type="radio" name="receiptScope" value="line"><span>Linha inteira</span></label>
+            <label><input type="radio" name="receiptScope" value="field"><span>Mesmo campo em todas as linhas</span></label>
+            <label><input type="radio" name="receiptScope" value="general"><span>Recibo inteiro</span></label>
+          </fieldset>
+          <p class="receipt-scope-help" id="scopeHelp"></p>
+
+          <div class="receipt-move-row">
+            <div class="receipt-arrows" role="group" aria-label="Mover campo selecionado">
+              <button type="button" data-move="up" aria-label="Mover para cima">↑</button>
+              <button type="button" data-move="left" aria-label="Mover para a esquerda">←</button>
+              <button type="button" data-move="down" aria-label="Mover para baixo">↓</button>
+              <button type="button" data-move="right" aria-label="Mover para a direita">→</button>
+            </div>
+            <div class="receipt-step-control">
+              <label for="calibrationStep">Passo</label>
+              <select id="calibrationStep">
+                <option value="0.5">0,5 mm</option>
+                <option value="1">1 mm</option>
+                <option value="0.1">0,1 mm</option>
+              </select>
+              <small>Teclas de seta também movem o campo.</small>
+            </div>
+          </div>
+
+          <div class="receipt-offsets">
+            <div class="receipt-field">
+              <label for="calibrationX">Ajuste horizontal X (mm)</label>
+              <input id="calibrationX" type="text" inputmode="decimal" aria-describedby="offsetHelp">
+            </div>
+            <div class="receipt-field">
+              <label for="calibrationY">Ajuste vertical Y (mm)</label>
+              <input id="calibrationY" type="text" inputmode="decimal" aria-describedby="offsetHelp">
+            </div>
+          </div>
+          <p id="offsetHelp" class="receipt-offset-help">X positivo: direita. Y positivo: baixo.</p>
+
+          <label class="receipt-example-toggle"><input id="receiptExampleMode" type="checkbox"> Mostrar dados de exemplo na prévia para ajustar</label>
+          <p class="receipt-example-note" id="receiptExampleNote" hidden>O exemplo aparece só na prévia. Os PDFs usam os dados do formulário.</p>
+
+          <div class="receipt-calibration-actions">
+            <button class="btn btn--primary" id="saveReceiptCalibration" type="button" disabled>Salvar calibração</button>
+            <button class="btn btn--light" id="discardReceiptCalibration" type="button" disabled>Descartar ajustes</button>
+          </div>
+          <details class="receipt-advanced">
+            <summary>Opções de conferência</summary>
+            <p>Para conferir o posicionamento sem o papel pré-impresso, gere um PDF com o modelo de fundo.</p>
+            <button class="btn btn--light" id="generateReceiptProof" type="button">Gerar PDF com modelo</button>
+            <button class="receipt-reset-target" id="resetReceiptTarget" type="button">Zerar ajuste deste nível</button>
+            <p id="selectedPosition" class="receipt-position"></p>
+          </details>
+        </section>
+      </section>
+    </div>
+    {% else %}
+    <section class="receipt-card receipt-readonly" role="status">
+      <h2>Preenchimento indisponível para este perfil</h2>
+      <p>O acesso de visualização permite consultar o sistema, mas não gerar nem ajustar recibos. Solicite acesso de edição ao administrador.</p>
+    </section>
+    {% endif %}
+  </main>
+</div>
+<script id="receiptInitialConfig" type="application/json">{{ config|tojson }}</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+<script src="{{ url_for('static', filename='ui-shell.js') }}?v=edge-ui-20260924"></script>
+<script src="{{ url_for('recibos.static', filename='recibo.js') }}"></script>
+</body>
+</html>

@@ -103,6 +103,7 @@ EXAMES_A_PRAZO_MAX_ZIP_UNCOMPRESSED_BYTES = int(os.environ.get("EXAMES_A_PRAZO_M
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.environ.get("RENDER_DISK_PATH") or os.environ.get("DATA_DIR") or BASE_DIR
 os.makedirs(DATA_DIR, exist_ok=True)
+app.config["RECIBOS_DATA_DIR"] = os.path.join(DATA_DIR, "recibos")
 ESOCIAL_BASE_CACHE_DIR = os.path.join(DATA_DIR, "esocial_base_sessions")
 os.makedirs(ESOCIAL_BASE_CACHE_DIR, exist_ok=True)
 RELATORIOS_EMPRESAS_CNPJ_PATH = os.path.join(DATA_DIR, "relatorios_empresas_cnpj.json")
@@ -5396,6 +5397,11 @@ def arquivo_muito_grande(_error):
 def erro_interno(_error):
     logger.exception("Erro interno não tratado request_id=%s", getattr(request, "request_id", ""))
     return render_template("erro.html", codigo=500, titulo="Erro interno", mensagem="Ocorreu uma falha inesperada. Tente novamente. Se continuar, consulte os logs do Render."), 500
+
+from recibo_app.web import recibos as recibos_blueprint
+
+app.register_blueprint(recibos_blueprint)
+
 
 if __name__ == "__main__":
     init_fisico_db()

@@ -1,0 +1,348 @@
+{
+  "config_version": 4,
+  "papel_largura_mm": 144.018,
+  "papel_altura_mm": 105.41,
+  "offset_x_mm": 0.0,
+  "offset_y_mm": 2.0,
+  "fonte": "Arial",
+  "fonte_tamanho_pt": 8.0,
+  "cliente": {
+    "x_mm": 24.0,
+    "y_mm": 39.2
+  },
+  "data": {
+    "x_centro_mm": 126.0,
+    "y_mm": 29.1
+  },
+  "linhas_y_mm": [
+    51.0,
+    55.3,
+    60.0,
+    64.7,
+    69.4,
+    74.1,
+    78.8,
+    83.5,
+    88.2,
+    92.9
+  ],
+  "quantidade": {
+    "x_direita_mm": 23.4
+  },
+  "unidade": {
+    "x_centro_mm": 28.0
+  },
+  "descricao": {
+    "x_mm": 32.5
+  },
+  "preco_unitario": {
+    "x_direita_mm": 118.6
+  },
+  "total_item": {
+    "x_direita_mm": 139.7
+  },
+  "total_geral": {
+    "x_direita_mm": 139.7,
+    "y_mm": 99.0
+  },
+  "campo_offsets_mm": {
+    "cliente": {
+      "x": 1.0,
+      "y": -2.0
+    },
+    "data": {
+      "x": -2.0,
+      "y": -1.0
+    },
+    "quantidade": {
+      "x": -3.0,
+      "y": 1.0
+    },
+    "unidade": {
+      "x": -1.0,
+      "y": 1.0
+    },
+    "descricao": {
+      "x": 1.0,
+      "y": 1.0
+    },
+    "preco_unitario": {
+      "x": -3.0,
+      "y": 1.0
+    },
+    "total_item": {
+      "x": -5.0,
+      "y": 1.0
+    },
+    "total_geral": {
+      "x": -11.0,
+      "y": -2.0
+    }
+  },
+  "linha_offsets_mm": [
+    {
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "x": 0.0,
+      "y": 0.0
+    },
+    {
+      "x": 0.0,
+      "y": 0.0
+    }
+  ],
+  "impressao_direta_offset_x_mm": 35.0,
+  "impressao_direta_offset_y_mm": -2.0,
+  "celula_offsets_mm": [
+    {
+      "quantidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "unidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "descricao": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "preco_unitario": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "total_item": {
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "quantidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "unidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "descricao": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "preco_unitario": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "total_item": {
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "quantidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "unidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "descricao": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "preco_unitario": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "total_item": {
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "quantidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "unidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "descricao": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "preco_unitario": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "total_item": {
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "quantidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "unidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "descricao": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "preco_unitario": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "total_item": {
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "quantidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "unidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "descricao": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "preco_unitario": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "total_item": {
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "quantidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "unidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "descricao": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "preco_unitario": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "total_item": {
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "quantidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "unidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "descricao": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "preco_unitario": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "total_item": {
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "quantidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "unidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "descricao": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "preco_unitario": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "total_item": {
+        "x": 0.0,
+        "y": 0.0
+      }
+    },
+    {
+      "quantidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "unidade": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "descricao": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "preco_unitario": {
+        "x": 0.0,
+        "y": 0.0
+      },
+      "total_item": {
+        "x": 0.0,
+        "y": 0.0
+      }
+    }
+  ]
+}

@@ -18,3 +18,5 @@ pgr_app/outputs/
 separar_exames_app/dados/uploads/
 separar_exames_app/dados/jobs/
 separar_exames_app/dados/archive/
+edge_app/recibos/
+entrega/

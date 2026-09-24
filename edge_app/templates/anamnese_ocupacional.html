@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#f5f7fb">
 <title>{{ title }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=edge-theme-20260923">
+<link rel="stylesheet" href="{{ url_for('static', filename='ui-shell.css') }}?v=edge-ui-20260924">
 <meta name="csrf-token" content="{{ csrf_token() }}">
 
 <script>
@@ -22,41 +23,13 @@
 </head>
 <body>
 <div class="app-layout">
-  <aside class="sidebar">
-    <div class="brand">
-      <img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="EDGE Medicina do Trabalho">
-      <div>EDGE<small>Anamnese Ocupacional</small></div>
-    </div>
-    <div class="nav-card edge-sidebar-nav">
-      <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{{ url_for('home') }}"><span class="nav-icon">⌂</span><span class="nav-label">Início</span></a>
-      <div class="nav-group-title">Clínica</div>
-      <a class="nav-link {% if request.path.startswith('/encaminhamento-especialista') %}active{% endif %}" href="{{ url_for('encaminhamento_especialista') }}"><span class="nav-icon">☰</span><span class="nav-label">Enc. individual</span></a>
-      <a class="nav-link {% if request.path.startswith('/encaminhamento-complementares') %}active{% endif %}" href="{{ url_for('encaminhamento_complementares') }}"><span class="nav-icon">＋</span><span class="nav-label">Enc. complementares</span></a>
-      <a class="nav-link {% if request.path.startswith('/laudo-pcd') %}active{% endif %}" href="{{ url_for('laudo_pcd') }}"><span class="nav-icon">◉</span><span class="nav-label">Laudo PCD</span></a>
-      <a class="nav-link {% if request.path.startswith('/fisico-mental') %}active{% endif %}" href="{{ url_for('fisico_mental') }}"><span class="nav-icon">◆</span><span class="nav-label">Físico e Mental</span></a>
-      <a class="nav-link {% if request.path.startswith('/atestado-medico') %}active{% endif %}" href="{{ url_for('atestado_medico') }}"><span class="nav-icon">▧</span><span class="nav-label">Atestado Médico</span></a>
-      <a class="nav-link active" href="{{ url_for('anamnese_ocupacional') }}"><span class="nav-icon">✓</span><span class="nav-label">Anamnese Ocupacional</span></a>
-      <a class="nav-link {% if request.path.startswith('/aso-manual') %}active{% endif %}" href="{{ url_for('aso_manual') }}"><span class="nav-icon">▤</span><span class="nav-label">ASO manual</span></a>
-      <div class="nav-group-title">Interno</div>
-      <a class="nav-link" href="/envio-periodicos/"><span class="nav-icon">✉</span><span class="nav-label">Envio periódicos</span></a>
-      <a class="nav-link" href="/separar-exames/"><span class="nav-icon">▣</span><span class="nav-label">Separar exames</span></a>
-      <a class="nav-link" href="{{ url_for('exames_a_prazo') }}"><span class="nav-icon">▤</span><span class="nav-label">Exames a Prazo</span></a>
-      <a class="nav-link" href="{{ url_for('renumerador') }}"><span class="nav-icon">#</span><span class="nav-label">Renumerador</span></a>
-      <a class="nav-link" href="{{ url_for('esocial') }}"><span class="nav-icon">⇄</span><span class="nav-label">Recibo eSocial</span></a>
-      <a class="nav-link" href="/pgr/"><span class="nav-icon">▨</span><span class="nav-label">PGR / SST</span></a>
-      <div class="nav-group-title">Sistema</div>
-      <a class="nav-link" href="{{ url_for('status_sistema') }}"><span class="nav-icon">●</span><span class="nav-label">Status do sistema</span></a>
-      {% if is_admin %}<a class="nav-link" href="{{ url_for('usuarios') }}"><span class="nav-icon">◌</span><span class="nav-label">Usuários</span></a>{% endif %}
-      <a class="nav-link" href="{{ url_for('minha_conta') }}"><span class="nav-icon">⌁</span><span class="nav-label">Minha conta</span></a>
-      <a class="nav-link nav-link-muted" href="{{ url_for('logout') }}"><span class="nav-icon">↪</span><span class="nav-label">Sair</span></a>
-    </div>
-  </aside>
+  {% include "_sidebar.html" %}
 
   <main class="main-area">
     <div class="topbar compact-topbar">
       <div class="page-title">
         <h1>Anamnese Ocupacional</h1>
-        <p>O sistema preenche somente os campos marcados com {{ '{{' }} {{ '}}' }} no modelo. As respostas do SRQ-20 e a pontuação serão marcadas manualmente após a impressão.</p>
+        <p>Preencha os dados para gerar o documento.</p>
       </div>
     </div>
 
@@ -66,10 +39,11 @@
       {% endwith %}
 
       <form action="{{ url_for('anamnese_ocupacional_gerar') }}" method="post" id="anamneseForm" autocomplete="off" data-download-reset="1" data-has-server-form="{% if form_data %}1{% else %}0{% endif %}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <div class="section-head">
           <div>
             <h2>Dados da anamnese</h2>
-            <p>As perguntas, SIM/NÃO e pontuação permanecem em branco no documento.</p>
+            <p>As respostas e a pontuação serão preenchidas manualmente após a impressão.</p>
           </div>
         </div>
 
@@ -99,19 +73,19 @@
           </div>
         </div>
 
-        <div class="info-box" style="margin-top:18px">
-          <strong>Preenchimento manual no impresso:</strong> as 20 perguntas, as colunas SIM/NÃO e a pontuação total não serão alteradas pelo sistema.
-        </div>
-
         <div class="actions inline-actions">
           <button class="btn btn--primary" type="submit">Gerar anamnese</button>
           <button class="btn btn--light" type="button" id="clearAnamneseForm">Limpar formulário</button>
-          <a class="btn btn--light" href="{{ url_for('home') }}">Voltar ao início</a>
         </div>
       </form>
     </section>
   </main>
 </div>
+<dialog class="edge-admission-dialog" id="anamneseAdmissionNotice" aria-labelledby="anamneseNoticeTitle" aria-describedby="anamneseNoticeText">
+  <h2 id="anamneseNoticeTitle">Verifique se o exame é admissional</h2>
+  <p id="anamneseNoticeText">Não realizamos anamnese ocupacional em exames admissionais. Confirme o tipo de exame antes de continuar.</p>
+  <div class="edge-dialog-actions"><button class="edge-dialog-close" id="closeAnamneseNotice" type="button">Entendi, continuar</button></div>
+</dialog>
 <script>
 (function(){
   const form = document.getElementById('anamneseForm');
@@ -123,44 +97,27 @@
   }
   cnpjInput.addEventListener('input', e => { e.target.value = maskCnpj(e.target.value); });
   if(cnpjInput.value) cnpjInput.value = maskCnpj(cnpjInput.value);
-  clearButton.addEventListener('click', () => form.reset());
+  clearButton.addEventListener('click', () => {
+    if (window.confirm('Limpar todos os dados preenchidos?')) form.reset();
+  });
+
+  const notice = document.getElementById('anamneseAdmissionNotice');
+  const closeNotice = document.getElementById('closeAnamneseNotice');
+  function showNotice() {
+    if (!notice.open) {
+      if (typeof notice.showModal === 'function') notice.showModal();
+      else notice.setAttribute('open', '');
+    }
+    closeNotice.focus();
+  }
+  closeNotice.addEventListener('click', () => notice.close());
+  notice.addEventListener('close', () => document.getElementById('empresa')?.focus());
+  showNotice();
+  window.addEventListener('pageshow', event => { if (event.persisted) showNotice(); });
 })();
 </script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 
-<button type="button" class="edge-theme-toggle" id="edgeThemeToggle" aria-label="Alternar tema" title="Alternar tema">
-  <span class="edge-theme-icon" aria-hidden="true">☾</span>
-  <span class="edge-theme-text">Tema escuro</span>
-</button>
-<script>
-(function(){
-  function applyTheme(theme){
-    var next = theme === 'dark' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', next);
-    try { localStorage.setItem('edge-theme', next); } catch(e) {}
-    var btn = document.getElementById('edgeThemeToggle');
-    if (btn) {
-      var icon = btn.querySelector('.edge-theme-icon');
-      var text = btn.querySelector('.edge-theme-text');
-      if (icon) icon.textContent = next === 'dark' ? '☀' : '☾';
-      if (text) text.textContent = next === 'dark' ? 'Tema claro' : 'Tema escuro';
-      btn.setAttribute('aria-label', next === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro');
-      btn.setAttribute('title', next === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro');
-    }
-    var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', next === 'dark' ? '#15191e' : '#f4f7f6');
-  }
-  function initThemeToggle(){
-    var current = document.documentElement.getAttribute('data-theme') || 'light';
-    applyTheme(current);
-    var btn = document.getElementById('edgeThemeToggle');
-    if (btn) btn.addEventListener('click', function(){
-      applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
-    });
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initThemeToggle);
-  else initThemeToggle();
-})();
-</script>
+<script src="{{ url_for('static', filename='ui-shell.js') }}?v=edge-ui-20260924"></script>
 </body>
 </html>

@@ -20,7 +20,12 @@
     <label class="slider-row"><span><strong>Funcionário</strong><small>Confiança mínima para vincular a página ao colaborador.</small></span><div><input id="employeeThreshold" type="range" min="50" max="100" value="{{ config.employee_threshold }}"><b id="employeeValue">{{ config.employee_threshold }}%</b></div></label>
   </section>
   <aside class="card info-card">
-    <p class="eyebrow">OCR</p><h3>Status do Tesseract</h3><p class="mono">{{ tesseract }}</p><p>Se estiver como “Não localizado”, instale o Tesseract OCR antes de processar documentos escaneados.</p>
+    <p class="eyebrow">LEITURA DE IMAGENS</p><h3>PDFs escaneados</h3>
+    {% if tesseract == 'Não localizado' %}
+    <p>A leitura de imagens está indisponível. PDFs com texto selecionável continuam funcionando. Para processar digitalizações, avise a equipe responsável.</p>
+    {% else %}
+    <p>A leitura de PDFs escaneados está disponível.</p>
+    {% endif %}
   </aside>
 </div>
 <div class="sticky-save"><span id="saveStatus">Nenhuma alteração pendente.</span><button class="btn primary" id="saveSettings">Salvar configurações</button></div>

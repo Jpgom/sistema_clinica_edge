@@ -8,11 +8,11 @@
     <h1>Riscos</h1>
     <p class="muted">Cadastre uma vez e reutilize no PGR, PCMSO e LTCAT.</p>
   </div>
-  <div class="actions"><a class="btn" href="{{ url_for('risk_types') }}">Tipos de riscos e cores</a><a class="btn primary" href="{{ url_for('risk_groups') }}">Criar grupos de riscos</a></div>
+  <div class="actions"><a class="btn" href="{{ url_for('risk_types') }}">Tipos de riscos e cores</a><a class="btn" href="{{ url_for('risk_groups') }}">Grupos de riscos</a></div>
 </div>
 
 <details class="panel collapsible-open" open>
-  <summary class="panel-summary"><span>Novo risco</span><small>Clique para abrir ou recolher o formulário</small></summary>
+  <summary class="panel-summary"><span>Novo risco</span></summary>
   <form action="{{ url_for('create_risk') }}" method="post" class="form-card">
     {% set risk = None %}
     {% include "_form.html" %}
@@ -29,7 +29,7 @@
     <a class="btn small" href="{{ url_for('download_risk_import_template') }}">Baixar modelo Excel</a>
   </div>
   <form action="{{ url_for('import_risks') }}" method="post" enctype="multipart/form-data" class="inline-import">
-    <input type="file" name="arquivo" accept=".xlsx" required>
+    <input type="file" name="arquivo" accept=".xlsx" aria-label="Arquivo Excel com riscos" required>
     <button class="btn primary" type="submit">Importar riscos</button>
   </form>
   <p class="hint">Duplicidades pelo mesmo nome de risco serão ignoradas. Preencha os campos obrigatórios do modelo.</p>
@@ -180,7 +180,7 @@
       <h2>Riscos cadastrados</h2>
       <p>Marque os riscos que deseja alterar em massa ou edite individualmente.</p>
     </div>
-    <input class="search" id="riskSearch" placeholder="Buscar risco, tipo ou ação...">
+    <input class="search" id="riskSearch" aria-label="Buscar risco, tipo ou ação" placeholder="Buscar risco, tipo ou ação...">
   </div>
 
   {% if risks %}

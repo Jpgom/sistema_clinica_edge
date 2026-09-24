@@ -13,6 +13,7 @@
   const processBtn = document.getElementById('processBtn');
   const folderName = document.getElementById('folderName');
   const progressCard = document.getElementById('progressCard');
+  const progressTrack = document.getElementById('progressTrack');
   const resultCard = document.getElementById('resultCard');
   const activeBar = document.getElementById('activeExtractionBar');
   const activeFolder = document.getElementById('activeFolderName');
@@ -98,7 +99,7 @@
       ? `${pdfFiles.length} arquivo${pdfFiles.length > 1 ? 's' : ''} selecionado${pdfFiles.length > 1 ? 's' : ''}`
       : 'Nenhum arquivo selecionado';
     pdfList.innerHTML = pdfFiles.slice(0, 4).map((f, i) =>
-      `<div><span>${escapeHtml(f.name)}</span><button data-i="${i}" title="Remover">×</button></div>`
+      `<div><span>${escapeHtml(f.name)}</span><button type="button" data-i="${i}" aria-label="Remover ${escapeHtml(f.name)}" title="Remover ${escapeHtml(f.name)}">×</button></div>`
     ).join('') + (pdfFiles.length > 4 ? `<small>+ ${pdfFiles.length - 4} arquivo(s)</small>` : '');
     pdfList.querySelectorAll('button').forEach(b => b.onclick = () => {
       pdfFiles.splice(+b.dataset.i, 1); renderPdfs();
@@ -190,10 +191,9 @@
 
   processBtn.addEventListener('click', async () => {
     if (currentJobId) return edgeToast('Existe uma extração ativa. Clique em Limpar extração antes de iniciar um novo lote.', 'error');
-    if (!listToken) return edgeToast('Carregue a lista de funcionários.', 'error');
-    if (!pdfFiles.length) return edgeToast('Adicione pelo menos um PDF.', 'error');
-    const name = folderName.value.trim();
-    if (!name) return edgeToast('Informe o nome da pasta final.', 'error');
+    if (!listToken) { sheetFile.focus(); return edgeToast('Carregue a lista de funcionários.', 'error'); }
+    if (!pdfFiles.length) { pdfInput.focus(); return edgeToast('Adicione pelo menos um PDF.', 'error'); }
+    const name = folderName.value.trim() || 'ARQUIVOS SEPARADOS';
 
     processBtn.disabled = true;
     processBtn.textContent = 'Enviando arquivos...';
@@ -213,7 +213,7 @@
       pollJob(data.job_id, false);
     } catch (e) {
       processBtn.disabled = false;
-      processBtn.textContent = 'Iniciar processamento';
+      processBtn.textContent = 'Separar exames';
       edgeToast(e.message, 'error');
     }
   });
@@ -222,9 +222,13 @@
     progressCard.classList.remove('hidden');
     document.getElementById('progressBar').style.width = '2%';
     document.getElementById('progressPct').textContent = '0%';
+    progressTrack.setAttribute('aria-valuenow', '0');
     document.getElementById('progressTitle').textContent = 'Preparando os arquivos...';
     document.getElementById('progressDetail').textContent = 'Aguarde.';
-    if (scroll) progressCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (scroll) {
+      progressCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      progressCard.focus({ preventScroll: true });
+    }
   }
 
   async function pollJob(jobId, restored = false) {
@@ -235,6 +239,7 @@
       const pct = Math.max(2, data.progress || 0);
       document.getElementById('progressBar').style.width = `${pct}%`;
       document.getElementById('progressPct').textContent = `${Math.round(data.progress || 0)}%`;
+      progressTrack.setAttribute('aria-valuenow', String(Math.min(100, Math.max(0, Math.round(data.progress || 0)))));
       document.getElementById('progressTitle').textContent = data.message || 'Processando...';
       document.getElementById('progressDetail').textContent = data.total ? `${data.current}/${data.total} páginas` : 'Preparando leitura';
       if (data.status === 'done') return showResults(data, { restored });
@@ -247,7 +252,7 @@
       pollTimer = setTimeout(() => pollJob(jobId, restored), 750);
     } catch (e) {
       processBtn.disabled = false;
-      processBtn.textContent = 'Iniciar processamento';
+      processBtn.textContent = 'Separar exames';
       edgeToast(e.message, 'error');
     }
   }
@@ -260,6 +265,7 @@
 
     document.getElementById('progressBar').style.width = '100%';
     document.getElementById('progressPct').textContent = '100%';
+    progressTrack.setAttribute('aria-valuenow', '100');
     document.getElementById('progressTitle').textContent = 'Concluído';
     document.getElementById('progressDetail').textContent = `${s.total_pages} página(s) analisada(s)`;
     if (restored) progressCard.classList.add('hidden');
@@ -277,17 +283,26 @@
     updateArchiveInfo(data);
 
     const review = document.getElementById('reviewBtn');
+    const zip = document.getElementById('zipBtn');
     if (s.pending + s.duplicates > 0) {
       review.classList.remove('hidden');
+      review.classList.remove('ghost');
+      review.classList.add('primary');
+      zip.classList.remove('primary');
+      zip.classList.add('ghost');
       review.href = edgeUrl(data.review_url);
     } else {
       review.classList.add('hidden');
+      review.classList.remove('primary');
+      review.classList.add('ghost');
+      zip.classList.remove('ghost');
+      zip.classList.add('primary');
     }
 
     if (!OCR_AVAILABLE && Number(s.saved || 0) === 0 && Number(s.missing || 0) > 0) {
-      document.getElementById('resultSubtitle').textContent = 'OCR não localizado no Render. Os PDFs parecem estar escaneados/imagem; instale o OCR pelo Build Command bash bin/render-build.sh e processe novamente.';
+      document.getElementById('resultSubtitle').textContent = 'Nenhum exame foi encontrado. Se os PDFs forem digitalizações, a leitura de imagens está indisponível. Avise a equipe responsável antes de tentar novamente.';
     } else if (s.pending + s.duplicates > 0) {
-      document.getElementById('resultSubtitle').textContent = 'Há páginas para revisar. O que você confirmar será incluído no mesmo download.';
+      document.getElementById('resultSubtitle').textContent = 'Há páginas pendentes. Revise antes de baixar a versão final do ZIP.';
     } else if (s.missing) {
       document.getElementById('resultSubtitle').textContent = 'A revisão foi atualizada, mas ainda existem exames não encontrados.';
     } else {
@@ -308,6 +323,7 @@
     resultCard.classList.remove('hidden');
     if (!restored) {
       resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      resultCard.focus({ preventScroll: true });
       edgeToast('Processamento concluído.');
     }
   }
@@ -359,7 +375,7 @@
       progressCard.classList.add('hidden');
       activeBar?.classList.add('hidden');
       processBtn.disabled = false;
-      processBtn.textContent = 'Iniciar processamento';
+      processBtn.textContent = 'Separar exames';
       if (archiveSaveInfo) archiveSaveInfo.textContent = 'Nenhum arquivo arquivado deste lote ainda.';
       if (archiveSaveBtn) archiveSaveBtn.disabled = false;
       const url = new URL(window.location.href);

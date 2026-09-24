@@ -9,8 +9,8 @@
     <div class="review-preview"><img id="reviewImage" alt="Pré-visualização da página"></div>
     <div class="review-controls">
       <div class="review-summary"><span id="reviewSource"></span><h2 id="reviewEmployee">—</h2><p id="reviewReason"></p></div>
-      <label class="field-label">Funcionário</label><select id="reviewEmployeeSelect" class="full-select"></select>
-      <label class="field-label">Tipo de exame</label><select id="reviewExam" class="full-select">{% for e in exam_types %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select>
+      <label class="field-label" for="reviewEmployeeSelect">Funcionário</label><select id="reviewEmployeeSelect" class="full-select"></select>
+      <label class="field-label" for="reviewExam">Tipo de exame</label><select id="reviewExam" class="full-select">{% for e in exam_types %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select>
       <div class="review-actions"><button id="ignoreReview" class="btn danger ghost">Ignorar página</button><button id="saveReview" class="btn primary">Confirmar e salvar</button></div>
     </div>
   </section>

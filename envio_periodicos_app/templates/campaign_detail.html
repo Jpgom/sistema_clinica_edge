@@ -3,21 +3,16 @@
 {% block content %}
 <div class="breadcrumbs"><a href="{{ url_for('dashboard') }}">Início</a><span>/</span><a href="{{ url_for('unit_dashboard',unit_id=campaign.unit_id) }}">{{ campaign.unit_name }}</a><span>/</span><strong>{{ month_label(campaign.month,campaign.year) }}</strong></div>
 <div class="page-head campaign-head">
-  <div><div class="eyebrow">COMPETÊNCIA · {{ campaign.unit_name }}</div><h1>{{ month_label(campaign.month,campaign.year) }}</h1><p>{% if campaign.title %}{{ campaign.title }} · {% endif %}Base, encaminhamentos, envios e comparecimento no mesmo lugar.</p></div>
-  <div class="actions">
-    <a class="btn btn-primary" href="{{ url_for('referral_base_export',campaign_id=campaign.id) }}">↓ Planilha para encaminhamentos</a>
-    <button class="btn btn-secondary" type="button" onclick="openReferralModal()">Gerar encaminhamentos</button>
-    <a class="btn btn-ghost" href="{{ url_for('campaign_edit',campaign_id=campaign.id) }}">Editar competência</a>
-    <a class="btn btn-secondary" href="{{ url_for('campaign_export',campaign_id=campaign.id) }}">Exportar relatório</a>
-  </div>
+  <div><div class="eyebrow">COMPETÊNCIA · {{ campaign.unit_name }}</div><h1>{{ month_label(campaign.month,campaign.year) }}</h1>{% if campaign.title %}<p>{{ campaign.title }}</p>{% endif %}</div>
+  <details class="page-options"><summary class="btn btn-ghost">Mais opções</summary><div class="page-options-menu"><a href="{{ url_for('campaign_edit',campaign_id=campaign.id) }}">Editar competência</a><a href="{{ url_for('campaign_export',campaign_id=campaign.id) }}">Exportar relatório</a></div></details>
 </div>
 
 {% if active_jobs %}
   {% for j in active_jobs %}<div class="active-job-banner"><div><strong>{{ 'Convocação' if j.kind=='initial' else 'Lembretes' }} em processamento</strong><span>{{ j.message or 'Processamento em andamento' }}. Você pode sair desta página sem interromper o envio.</span></div><button type="button" class="btn btn-primary btn-sm" onclick="openSendProgress('{{ j.id }}')">Ver andamento</button></div>{% endfor %}
 {% elif recent_job and recent_job.status=='NEEDS_REVIEW' %}<div class="alert alert-warning"><strong>Conferência necessária no último envio.</strong> O sistema evitou reenvio automático porque houve uma interrupção durante o SMTP. <button class="link-button" type="button" onclick="openSendProgress('{{ recent_job.id }}')">Ver detalhes</button></div>{% endif %}
 
-{% set total_companies=rows|length %}{% set total_conv=namespace(v=0) %}{% set total_att=namespace(v=0) %}{% set total_pending=namespace(v=0) %}{% set total_attach=namespace(v=0) %}
-{% for r in rows %}{% set total_conv.v=total_conv.v+(r.total or 0) %}{% set total_att.v=total_att.v+(r.attended or 0) %}{% set total_pending.v=total_pending.v+(r.pending or 0) %}{% set total_attach.v=total_attach.v+(r.attachment_count or 0) %}{% endfor %}
+{% set total_companies=rows|length %}{% set total_conv=namespace(v=0) %}{% set total_att=namespace(v=0) %}{% set total_pending=namespace(v=0) %}{% set total_attach=namespace(v=0) %}{% set unsent_companies=namespace(v=0) %}
+{% for r in rows %}{% set total_conv.v=total_conv.v+(r.total or 0) %}{% set total_att.v=total_att.v+(r.attended or 0) %}{% set total_pending.v=total_pending.v+(r.pending or 0) %}{% set total_attach.v=total_attach.v+(r.attachment_count or 0) %}{% if r.total and not r.initial_sent %}{% set unsent_companies.v=unsent_companies.v+1 %}{% endif %}{% endfor %}
 <div class="kpi-grid five compact-kpis">
   <div class="kpi-card"><span>Empresas</span><strong>{{ total_companies }}</strong></div>
   <div class="kpi-card"><span>Nomes para convocar</span><strong>{{ total_conv.v }}</strong></div>
@@ -26,15 +21,15 @@
   <div class="kpi-card"><span>Encaminhamentos</span><strong>{{ total_attach.v }}</strong></div>
 </div>
 
-<div class="section-head workflow-title"><div><h2>Fluxo da competência</h2><p>Siga da esquerda para a direita. Você pode voltar a qualquer etapa quando precisar.</p></div></div>
+<div class="section-head workflow-title"><div><h2>Fluxo da competência</h2></div></div>
 <div class="workflow-grid workflow-v4">
   <section class="workflow-card workflow-primary">
-    <div class="step">1</div><div><h3>Base da competência</h3><p>Suba as planilhas. Nomes repetidos na mesma empresa entram uma única vez na convocação.</p></div>
-    <div class="workflow-actions"><form method="post" enctype="multipart/form-data" action="{{ url_for('campaign_add_sources',campaign_id=campaign.id) }}"><input class="form-control compact-input" type="file" name="files" accept=".xlsx,.zip" multiple required><button class="btn btn-secondary btn-sm">Adicionar base</button></form><div class="mini-action-row"><a class="mini-action" href="{{ url_for('referral_base_export',campaign_id=campaign.id) }}">↓ Baixar planilha para encaminhamentos</a><button class="mini-action button-link" type="button" onclick="openReferralModal()">Gerar encaminhamentos</button></div></div>
+    <div class="step">1</div><div><h3>Base da competência</h3><p>Adicione as planilhas de colaboradores.</p></div>
+    <div class="workflow-actions"><form method="post" enctype="multipart/form-data" action="{{ url_for('campaign_add_sources',campaign_id=campaign.id) }}"><label for="campaign-source-files">Planilhas XLSX ou ZIP</label><input id="campaign-source-files" class="form-control compact-input" type="file" name="files" accept=".xlsx,.zip" multiple required><button class="btn btn-secondary btn-sm">Adicionar base</button></form></div>
   </section>
-  <section class="workflow-card"><div class="step">2</div><div><h3>Encaminhamentos / complementares</h3><p>Envie o ZIP geral. O CNPJ no arquivo ou pasta identifica automaticamente a empresa.</p></div><div class="workflow-actions"><form method="post" enctype="multipart/form-data" action="{{ url_for('attachments_import_zip',campaign_id=campaign.id) }}"><input class="form-control compact-input" type="file" name="file" accept=".zip" required><button class="btn btn-secondary btn-sm">Importar encaminhamentos</button></form></div></section>
-  <section class="workflow-card"><div class="step">3</div><div><h3>Enviar convocações</h3><p>O e-mail leva somente o nome do colaborador. Empresas com o mesmo e-mail são agrupadas.</p></div><div class="workflow-actions"><button type="button" class="btn btn-success btn-sm" onclick="startSendProcess('{{ url_for('send_job_start',campaign_id=campaign.id,kind='initial') }}',{},'Enviar as convocações pendentes desta competência?')">Enviar pendentes</button></div></section>
-  <section class="workflow-card"><div class="step">4</div><div><h3>Conferir comparecimento</h3><p>Compare a planilha de controle e envie lembretes somente para quem ainda não compareceu.</p></div><div class="workflow-actions"><a class="btn btn-secondary btn-sm" href="{{ url_for('attendance',campaign_id=campaign.id) }}">Comparar controle</a>{% if attendance_imports %}<button type="button" class="btn btn-warning btn-sm" onclick="startSendProcess('{{ url_for('send_job_start',campaign_id=campaign.id,kind='reminder') }}',{},'Enviar lembretes aos faltantes?')">Enviar lembretes</button>{% endif %}</div></section>
+  <section class="workflow-card"><div class="step">2</div><div><h3>Encaminhamentos</h3><p>Baixe a planilha, gere os arquivos ou importe um ZIP pronto.</p></div><div class="workflow-actions"><div class="workflow-link-row"><a class="btn btn-secondary btn-sm" href="{{ url_for('referral_base_export',campaign_id=campaign.id) }}">Baixar planilha</a><button class="btn btn-secondary btn-sm" type="button" onclick="openReferralModal()">Gerar arquivos</button></div><form method="post" enctype="multipart/form-data" action="{{ url_for('attachments_import_zip',campaign_id=campaign.id) }}"><label for="campaign-attachments">ZIP de encaminhamentos</label><input id="campaign-attachments" class="form-control compact-input" type="file" name="file" accept=".zip" required><button class="btn btn-secondary btn-sm">Importar ZIP</button></form></div></section>
+  <section class="workflow-card {% if unsent_companies.v and not active_jobs %}is-current{% endif %}"><div class="step">3</div><div><h3>Enviar convocações</h3><p>{{ unsent_companies.v }} empresa(s) ainda sem convocação.</p></div><div class="workflow-actions"><button type="button" class="btn btn-primary btn-sm" {% if not unsent_companies.v or active_jobs %}disabled{% endif %} onclick="startSendProcess('{{ url_for('send_job_start',campaign_id=campaign.id,kind='initial') }}',{},'Enviar as convocações pendentes desta competência?')">Enviar pendentes</button></div></section>
+  <section class="workflow-card"><div class="step">4</div><div><h3>Conferir comparecimento</h3><p>Compare o controle e envie lembretes aos faltantes.</p></div><div class="workflow-actions"><a class="btn btn-secondary btn-sm" href="{{ url_for('attendance',campaign_id=campaign.id) }}">Comparar controle</a>{% if attendance_imports %}<button type="button" class="btn btn-warning btn-sm" {% if active_jobs %}disabled{% endif %} onclick="startSendProcess('{{ url_for('send_job_start',campaign_id=campaign.id,kind='reminder') }}',{},'Enviar lembretes aos faltantes?')">Enviar lembretes</button>{% endif %}</div></section>
 </div>
 
 <div class="rule-note"><strong>Regra de duplicados:</strong><span>No e-mail: 1 linha por NOME em cada empresa.</span><span>Na planilha para encaminhamentos: 1 linha por NOME + CARGO.</span></div>
@@ -42,14 +37,14 @@
 {% if errors %}<div class="alert alert-warning"><strong>{{ errors }} alerta(s) na importação.</strong> <a href="{{ url_for('campaign_errors',campaign_id=campaign.id) }}">Ver detalhes</a></div>{% endif %}
 {% if attendance_imports %}<div class="info-bar"><span>Última comparação: <strong>{{ attendance_imports[0].file_name }}</strong></span><span>{{ attendance_imports[0].matched_count }} encontrado(s)</span><span>{{ attendance_imports[0].unmatched_count }} não encontrado(s)</span><form method="post" action="{{ url_for('attendance_reset',campaign_id=campaign.id) }}" onsubmit="return confirm('Zerar todos os comparecimentos desta competência?')"><button class="link-button">Zerar comparação</button></form></div>{% endif %}
 
-<div class="section-head"><div><h2>Empresas da competência</h2><p>Abra uma empresa para gerenciar colaboradores, encaminhamentos e envios.</p></div><button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('add-company').classList.toggle('hidden')">+ Adicionar empresa</button></div>
-<div id="add-company" class="card hidden"><form method="post" action="{{ url_for('campaign_add_company',campaign_id=campaign.id) }}"><div class="inline-controls"><select class="form-control" name="company_id" required><option value="">Selecione uma empresa</option>{% for c in available_companies %}<option value="{{ c.id }}">{{ c.name }} · {{ c.cnpj|cnpj }}</option>{% endfor %}</select><button class="btn btn-primary" {% if not available_companies %}disabled{% endif %}>Adicionar</button></div></form></div>
+<div class="section-head"><div><h2>Empresas da competência</h2></div><button class="btn btn-secondary btn-sm" type="button" aria-controls="add-company" aria-expanded="false" onclick="toggleAddCompany(this)">+ Adicionar empresa</button></div>
+<div id="add-company" class="card hidden"><form method="post" action="{{ url_for('campaign_add_company',campaign_id=campaign.id) }}"><div class="inline-controls"><label class="sr-only" for="add-company-select">Empresa</label><select id="add-company-select" class="form-control" name="company_id" required><option value="">Selecione uma empresa</option>{% for c in available_companies %}<option value="{{ c.id }}">{{ c.name }} · {{ c.cnpj|cnpj }}</option>{% endfor %}</select><button class="btn btn-primary" {% if not available_companies %}disabled{% endif %}>Adicionar</button></div></form></div>
 
 <div class="card no-pad company-list-card">
-  <div class="table-toolbar"><div class="search-wrap"><input id="companyFilter" class="form-control" placeholder="Buscar por empresa, CNPJ ou e-mail" oninput="filterCompanies()"></div><div class="table-note">{{ rows|length }} empresa(s)</div></div>
+  <div class="table-toolbar"><div class="search-wrap"><label class="sr-only" for="companyFilter">Buscar empresa por nome, CNPJ ou e-mail</label><input id="companyFilter" class="form-control" type="search" placeholder="Buscar empresa, CNPJ ou e-mail" oninput="filterCompanies()"></div><div class="table-note" id="companyFilterCount" role="status" aria-live="polite">{{ rows|length }} empresa(s)</div></div>
   <div class="table-wrap"><table class="table" id="companiesTable"><thead><tr><th>Empresa</th><th>Contato</th><th>Conv.</th><th>Comp.</th><th>Pend.</th><th>Enc.</th><th>Convocação</th><th></th></tr></thead><tbody>
   {% for r in rows %}<tr data-search="{{ (r.name ~ ' ' ~ r.cnpj ~ ' ' ~ (r.email or ''))|lower }}"><td><strong>{{ r.name }}</strong><small class="row-subtitle mono">{{ r.cnpj|cnpj }}</small></td><td>{% if r.email %}<span class="email-text">{{ r.email }}</span>{% if r.same_email_count>1 %}<small class="row-subtitle">Agrupa {{ r.same_email_count }} empresas</small>{% endif %}{% else %}<span class="status status-warn">Sem e-mail</span>{% endif %}</td><td>{{ r.total or 0 }}</td><td><span class="number-ok">{{ r.attended or 0 }}</span></td><td><span class="number-warn">{{ r.pending or 0 }}</span></td><td>{% if r.attachment_count %}<span class="status status-ok">{{ r.attachment_count }} arquivo(s)</span>{% else %}<span class="muted">—</span>{% endif %}</td><td>{% if r.initial_sent %}<span class="status status-ok">Enviada</span>{% elif r.initial_review %}<span class="status status-warn">Revisar</span>{% else %}<span class="status">Pendente</span>{% endif %}</td><td class="right"><div class="actions right-actions"><a class="btn btn-sm btn-secondary" href="{{ url_for('campaign_company',campaign_id=campaign.id,company_id=r.id) }}">Abrir</a><a class="btn btn-sm btn-ghost" href="{{ url_for('email_preview',campaign_id=campaign.id,company_id=r.id,kind='initial') }}">Prévia</a></div></td></tr>{% endfor %}
-  </tbody></table></div>
+  </tbody></table></div><div id="companyFilterEmpty" class="empty-state {% if rows %}hidden{% endif %}">Nenhuma empresa encontrada.</div>
 </div>
 
 
@@ -77,13 +72,13 @@
         <form id="referralForm" method="post" enctype="multipart/form-data" action="{{ url_for('campaign_generate_referrals',campaign_id=campaign.id) }}" class="referral-form">
           <input type="hidden" name="_ajax" value="1">
           <div class="form-group">
-            <label>Planilha Base de Encaminhamentos preenchida</label>
+            <label for="referralFile">Planilha Base de Encaminhamentos preenchida</label>
             <input id="referralFile" class="form-control" type="file" name="file" accept=".xlsx,.xls" required>
             <div class="help">Use a planilha baixada nesta competência, depois de preencher os exames complementares.</div>
           </div>
           <div class="form-group">
-            <label>Formato de saída</label>
-            <select class="form-control" name="formato_saida">
+            <label for="referral-output-format">Formato de saída</label>
+            <select id="referral-output-format" class="form-control" name="formato_saida">
               <option value="pdf" selected>PDF (mesmo modelo do Word)</option>
               <option value="docx">Word (.docx)</option>
             </select>
@@ -126,7 +121,8 @@
 <details class="danger-panel"><summary>Opções avançadas</summary><div class="danger-content danger-delete-content"><div><strong>Excluir competência definitivamente</strong><p>Apaga esta competência, empresas vinculadas, colaboradores, comparecimentos, histórico de envios e encaminhamentos armazenados. O cadastro geral das empresas permanece.</p><p class="muted"><strong>Atenção:</strong> esta ação não envia os arquivos para a lixeira e não pode ser desfeita pelo sistema.</p></div><form method="post" action="{{ url_for('campaign_delete',campaign_id=campaign.id) }}" onsubmit="return confirmPermanentCampaignDelete(this)"><label class="form-label" for="confirm_delete">Digite <strong>EXCLUIR</strong> para confirmar</label><input class="form-control" id="confirm_delete" name="confirm_delete" autocomplete="off" placeholder="EXCLUIR" required><button class="btn btn-danger" type="submit">Excluir definitivamente</button></form></div></details>
 {% endblock %}
 {% block scripts %}<script>
-function filterCompanies(){const q=(document.getElementById('companyFilter').value||'').toLowerCase();document.querySelectorAll('#companiesTable tbody tr').forEach(r=>r.style.display=(r.dataset.search||'').includes(q)?'':'none');}
+function filterCompanies(){const q=(document.getElementById('companyFilter').value||'').toLowerCase().trim();let visible=0;document.querySelectorAll('#companiesTable tbody tr').forEach(r=>{const match=(r.dataset.search||'').includes(q);r.style.display=match?'':'none';if(match)visible++;});document.getElementById('companyFilterCount').textContent=visible+' empresa(s)';document.getElementById('companyFilterEmpty').classList.toggle('hidden',visible>0);}
+function toggleAddCompany(button){const panel=document.getElementById('add-company');const show=panel.classList.toggle('hidden')===false;button.setAttribute('aria-expanded',String(show));if(show)panel.querySelector('select')?.focus();}
 
 let referralProcessing=false;
 let referralProgressTimer=null;

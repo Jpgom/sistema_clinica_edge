@@ -6,16 +6,16 @@
   <section class="card model-form-card">
     <h2>Novo tipo de exame</h2>
     <p class="field-help">Cadastre aqui novos tipos, como ELETROCARDIOGRAMA, HEMOGRAMA ou outro exame que precise reconhecer por modelo.</p>
-    <label class="field-label">Nome do tipo de exame</label><input id="examTypeName" class="text-input" placeholder="Ex.: ELETROCARDIOGRAMA">
-    <label class="field-label">Apelidos para reconhecimento <small>(opcional)</small></label><input id="examTypeAliases" class="text-input" placeholder="Ex.: ECG; eletro">
+    <label class="field-label" for="examTypeName">Nome do tipo de exame</label><input id="examTypeName" class="text-input" placeholder="Ex.: ELETROCARDIOGRAMA">
+    <label class="field-label" for="examTypeAliases">Apelidos para reconhecimento <small>(opcional)</small></label><input id="examTypeAliases" class="text-input" placeholder="Ex.: ECG; eletro">
     <button id="addExamType" class="btn primary full" type="button">Cadastrar tipo de exame</button>
     <div class="mini-list" id="examTypeList"></div>
   </section>
   <section class="card model-form-card">
     <h2>Novo modelo</h2>
-    <label class="field-label">Tipo de exame</label><select id="modelExam" class="full-select">{% for e in exam_types %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select>
-    <label class="field-label">Identificação</label><input id="modelLabel" class="text-input" placeholder="Ex.: ASO modelo clínica X">
-    <label class="dropzone compact"><input id="modelFile" type="file" accept="application/pdf,.pdf" multiple hidden><div class="drop-icon">＋</div><div><strong id="modelFileLabel">Selecionar PDFs modelo</strong><span>Escolha vários PDFs do mesmo tipo de exame de uma vez</span></div></label>
+    <label class="field-label" for="modelExam">Tipo de exame</label><select id="modelExam" class="full-select">{% for e in exam_types %}<option value="{{ e }}">{{ e }}</option>{% endfor %}</select>
+    <label class="field-label" for="modelLabel">Identificação</label><input id="modelLabel" class="text-input" placeholder="Ex.: ASO modelo clínica X">
+    <label class="dropzone compact" for="modelFile"><input id="modelFile" class="visually-hidden-file" type="file" accept="application/pdf,.pdf" multiple aria-describedby="modelFileHint"><div class="drop-icon" aria-hidden="true">＋</div><div><strong id="modelFileLabel">Selecionar PDFs modelo</strong><span id="modelFileHint">Escolha vários PDFs do mesmo tipo de exame de uma vez.</span></div></label>
     <button id="addModel" class="btn primary full">Cadastrar modelo</button>
   </section>
   <section class="card table-card grow">

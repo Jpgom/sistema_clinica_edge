@@ -1,0 +1,63 @@
+{% set edge_path = request.path %}
+{% set edge_clinica = edge_path.startswith(('/encaminhamento-especialista', '/encaminhamento-complementares', '/laudo-pcd', '/fisico-mental', '/atestado-medico', '/anamnese-ocupacional', '/aso-manual')) %}
+{% set edge_interno = edge_path.startswith(('/envio-periodicos', '/separar-exames', '/exames-a-prazo', '/renumerador', '/esocial', '/relatorios', '/encaminhamentos')) %}
+{% set edge_sistema = edge_path.startswith(('/status-sistema', '/usuarios', '/auditoria')) %}
+<aside class="sidebar edge-app-sidebar" id="edgeAppSidebar">
+  <div class="edge-sidebar-head">
+    <a class="brand" href="{{ url_for('home') }}" aria-label="EDGE — Início">
+      <img class="brand-logo" src="{{ url_for('static', filename='logo_edge.png') }}" alt="">
+      <span>EDGE<small>Sistema interno</small></span>
+    </a>
+    <button class="edge-nav-toggle" id="edgeNavToggle" type="button" aria-controls="edgeMainNav" aria-expanded="false">Menu</button>
+  </div>
+
+  <nav class="nav-card edge-sidebar-nav" id="edgeMainNav" aria-label="Navegação principal">
+    <a class="nav-link {% if edge_path == '/' %}active{% endif %}" href="{{ url_for('home') }}" {% if edge_path == '/' %}aria-current="page"{% endif %}>Início</a>
+
+    <details class="edge-nav-group" {% if edge_clinica %}open{% endif %}>
+      <summary>Clínica</summary>
+      <div class="edge-nav-links">
+        <a class="nav-link {% if edge_path.startswith('/encaminhamento-especialista') %}active{% endif %}" href="{{ url_for('encaminhamento_especialista') }}" {% if edge_path.startswith('/encaminhamento-especialista') %}aria-current="page"{% endif %}>Encaminhamento individual</a>
+        <a class="nav-link {% if edge_path.startswith('/encaminhamento-complementares') %}active{% endif %}" href="{{ url_for('encaminhamento_complementares') }}" {% if edge_path.startswith('/encaminhamento-complementares') %}aria-current="page"{% endif %}>Encaminhamento complementar</a>
+        <a class="nav-link {% if edge_path.startswith('/aso-manual') %}active{% endif %}" href="{{ url_for('aso_manual') }}" {% if edge_path.startswith('/aso-manual') %}aria-current="page"{% endif %}>ASO manual</a>
+        <a class="nav-link {% if edge_path.startswith('/atestado-medico') %}active{% endif %}" href="{{ url_for('atestado_medico') }}" {% if edge_path.startswith('/atestado-medico') %}aria-current="page"{% endif %}>Atestado médico</a>
+        <a class="nav-link {% if edge_path.startswith('/fisico-mental') %}active{% endif %}" href="{{ url_for('fisico_mental') }}" {% if edge_path.startswith('/fisico-mental') %}aria-current="page"{% endif %}>Físico e Mental</a>
+        <a class="nav-link {% if edge_path.startswith('/laudo-pcd') %}active{% endif %}" href="{{ url_for('laudo_pcd') }}" {% if edge_path.startswith('/laudo-pcd') %}aria-current="page"{% endif %}>Laudo PCD</a>
+        <a class="nav-link {% if edge_path.startswith('/anamnese-ocupacional') %}active{% endif %}" href="{{ url_for('anamnese_ocupacional') }}" {% if edge_path.startswith('/anamnese-ocupacional') %}aria-current="page"{% endif %}>Anamnese ocupacional</a>
+      </div>
+    </details>
+
+    <details class="edge-nav-group" {% if edge_interno %}open{% endif %}>
+      <summary>Interno</summary>
+      <div class="edge-nav-links">
+        <a class="nav-link" href="/envio-periodicos/">Envio periódicos</a>
+        <a class="nav-link" href="/separar-exames/">Separar exames</a>
+        <a class="nav-link {% if edge_path.startswith('/exames-a-prazo') %}active{% endif %}" href="{{ url_for('exames_a_prazo') }}" {% if edge_path.startswith('/exames-a-prazo') %}aria-current="page"{% endif %}>Exames a prazo</a>
+        <a class="nav-link {% if edge_path.startswith('/esocial') %}active{% endif %}" href="{{ url_for('esocial') }}" {% if edge_path.startswith('/esocial') %}aria-current="page"{% endif %}>Recibo eSocial</a>
+        <a class="nav-link {% if edge_path.startswith('/renumerador') %}active{% endif %}" href="{{ url_for('renumerador') }}" {% if edge_path.startswith('/renumerador') %}aria-current="page"{% endif %}>Renumerador</a>
+        <a class="nav-link {% if edge_path.startswith('/relatorios') %}active{% endif %}" href="{{ url_for('relatorios') }}" {% if edge_path.startswith('/relatorios') %}aria-current="page"{% endif %}>Relatórios</a>
+        <a class="nav-link {% if edge_path.startswith('/encaminhamentos') %}active{% endif %}" href="{{ url_for('encaminhamentos') }}" {% if edge_path.startswith('/encaminhamentos') %}aria-current="page"{% endif %}>Encaminhamentos em lote</a>
+      </div>
+    </details>
+
+    <details class="edge-nav-group" {% if edge_path.startswith('/pgr') %}open{% endif %}>
+      <summary>SST</summary>
+      <div class="edge-nav-links"><a class="nav-link" href="/pgr/">PGR / SST</a></div>
+    </details>
+
+    <details class="edge-nav-group" {% if edge_sistema %}open{% endif %}>
+      <summary>Sistema</summary>
+      <div class="edge-nav-links">
+        <a class="nav-link {% if edge_path.startswith('/status-sistema') %}active{% endif %}" href="{{ url_for('status_sistema') }}" {% if edge_path.startswith('/status-sistema') %}aria-current="page"{% endif %}>Status do sistema</a>
+        {% if is_admin %}<a class="nav-link {% if edge_path.startswith('/usuarios') %}active{% endif %}" href="{{ url_for('usuarios') }}" {% if edge_path.startswith('/usuarios') %}aria-current="page"{% endif %}>Usuários</a>{% endif %}
+        {% if current_user and current_user['cargo'] in ['admin', 'supervisor'] %}<a class="nav-link {% if edge_path.startswith('/auditoria') %}active{% endif %}" href="{{ url_for('auditoria') }}" {% if edge_path.startswith('/auditoria') %}aria-current="page"{% endif %}>Auditoria</a>{% endif %}
+      </div>
+    </details>
+  </nav>
+
+  <div class="edge-sidebar-footer">
+    <a href="{{ url_for('minha_conta') }}" class="edge-account-link {% if edge_path.startswith('/minha-conta') %}active{% endif %}">Minha conta</a>
+    <button type="button" class="edge-theme-toggle" id="edgeThemeToggle" aria-label="Ativar tema escuro"><span class="edge-theme-icon" aria-hidden="true">☾</span><span class="edge-theme-text">Tema escuro</span></button>
+    <a href="{{ url_for('logout') }}" class="edge-logout-link">Sair</a>
+  </div>
+</aside>

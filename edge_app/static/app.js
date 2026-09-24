@@ -541,6 +541,7 @@ hideLoading();
 
 // Acabamento premium: normaliza navegação em ícone + label e adiciona cabeçalho limpo sem busca e sem avatar.
 (function () {
+  if (document.querySelector('.edge-app-sidebar')) return;
   const navLinks = document.querySelectorAll('.nav-link');
   navLinks.forEach((link) => {
     if (link.querySelector('.nav-icon')) return;

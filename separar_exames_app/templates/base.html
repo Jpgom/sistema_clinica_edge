@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#eef3f1">
   <title>{% block title %}EDGE | Separar exames{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=edge-theme-20260923">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=edge-flow-20260924">
 
 <script>
 (function(){
@@ -19,17 +20,29 @@
 </script>
 </head>
 <body class="edge-integrated-body">
+<a class="edge-skip-link" href="#edgeMain">Pular para o conteúdo</a>
 <div class="edge-integrated-layout">
-  <aside class="edge-integrated-sidebar">
-    <a class="edge-brand" href="/">
-      <img src="/static/logo_edge.png" alt="EDGE Medicina do Trabalho" onerror="this.style.display='none'">
-      <span><strong>EDGE</strong><small>Sistema unificado</small></span>
-    </a>
-    <nav class="edge-menu" aria-label="Menu principal EDGE">
+  <aside class="edge-integrated-sidebar" id="edgeSidebar">
+    <div class="edge-sidebar-header">
+      <a class="edge-brand" href="/" aria-label="EDGE, voltar ao início">
+        <img src="/static/logo_edge.png" alt="" onerror="this.style.display='none'">
+        <span><strong>EDGE</strong><small>Sistema interno</small></span>
+      </a>
+      <div class="edge-sidebar-controls">
+        <button type="button" class="edge-theme-toggle" id="edgeThemeToggle" aria-label="Ativar tema escuro" title="Ativar tema escuro">
+          <span class="edge-theme-icon" aria-hidden="true">☾</span>
+          <span class="edge-theme-text">Tema escuro</span>
+        </button>
+        <button type="button" class="edge-nav-toggle" id="edgeNavToggle" aria-controls="edgePrimaryNav" aria-expanded="false" aria-label="Abrir menu principal">
+          <span aria-hidden="true">☰</span><span>Menu</span>
+        </button>
+      </div>
+    </div>
+    <nav class="edge-menu" id="edgePrimaryNav" aria-label="Menu principal EDGE">
       <a class="edge-menu-link" href="/">⌂ Início</a>
       <a class="edge-menu-link" href="/status-sistema">● Status do sistema</a>
       <a class="edge-menu-link" href="/envio-periodicos/">📧 Envio periódicos</a>
-      <a class="edge-menu-link active" href="{{ request.script_root or '/separar-exames' }}/">📂 Separar exames</a>
+      <a class="edge-menu-link active" href="{{ url_for('index') }}" aria-current="page">📂 Separar exames</a>
       <a class="edge-menu-link" href="/exames-a-prazo">🧾 Exames a Prazo</a>
       <a class="edge-menu-link" href="/encaminhamento-especialista">📝 Enc. individual</a>
       <a class="edge-menu-link" href="/encaminhamento-complementares">🧪 Enc. complementares</a>
@@ -48,32 +61,24 @@
     </div>
   </aside>
 
-  <main class="edge-integrated-main">
-    <div class="edge-module-topbar">
-      <div>
-        <span class="edge-breadcrumb">EDGE / Separar exames</span>
-        <h1>Separar exames</h1>
-        <p>Separe exames em poucos passos, revise pendências e arquive por unidade, mês, empresa, tipo e recibo.</p>
-      </div>
-      <div class="edge-topbar-actions">
-        <a class="btn ghost" href="/">← Início EDGE</a>
-        <a class="btn ghost" href="{{ request.script_root or '/separar-exames' }}/arquivo">Arquivo de Exames</a>
-        <a class="btn ghost" href="{{ request.script_root or '/separar-exames' }}/modelos">Modelos</a>
-        <a class="btn ghost" href="{{ request.script_root or '/separar-exames' }}/configuracoes">Configurações</a>
-      </div>
-    </div>
+  <main class="edge-integrated-main" id="edgeMain" tabindex="-1">
+    <header class="edge-module-topbar">
+      <span class="edge-breadcrumb">EDGE / Separar exames</span>
+      <nav class="edge-topbar-actions" aria-label="Seções de Separar exames">
+        <a class="edge-module-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}" {% if request.endpoint == 'index' %}aria-current="page"{% endif %}>Processar</a>
+        <a class="edge-module-link {% if request.endpoint == 'archive_page' %}active{% endif %}" href="{{ url_for('archive_page') }}" {% if request.endpoint == 'archive_page' %}aria-current="page"{% endif %}>Arquivo de Exames</a>
+        <a class="edge-module-link {% if request.endpoint == 'models_page' %}active{% endif %}" href="{{ url_for('models_page') }}" {% if request.endpoint == 'models_page' %}aria-current="page"{% endif %}>Modelos</a>
+        <a class="edge-module-link {% if request.endpoint == 'settings_page' %}active{% endif %}" href="{{ url_for('settings_page') }}" {% if request.endpoint == 'settings_page' %}aria-current="page"{% endif %}>Configurações</a>
+      </nav>
+    </header>
     {% block content %}{% endblock %}
   </main>
 </div>
-<div id="toast" class="toast" aria-live="polite"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>window.EDGE_BASE_PATH = {{ (request.script_root or "")|tojson }};</script>
 <script src="{{ url_for('static', filename='common.js') }}?v=edge-minimal-20260922"></script>
 {% block scripts %}{% endblock %}
 
-<button type="button" class="edge-theme-toggle" id="edgeThemeToggle" aria-label="Alternar tema" title="Alternar tema">
-  <span class="edge-theme-icon" aria-hidden="true">☾</span>
-  <span class="edge-theme-text">Tema escuro</span>
-</button>
 <script>
 (function(){
   function applyTheme(theme){
@@ -99,6 +104,25 @@
     if (btn) btn.addEventListener('click', function(){
       applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
     });
+    var toggle = document.getElementById('edgeNavToggle');
+    var sidebar = document.getElementById('edgeSidebar');
+    var menu = document.getElementById('edgePrimaryNav');
+    var compact = window.matchMedia('(max-width: 980px)');
+    function setOpen(open){
+      sidebar.classList.toggle('edge-menu-open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.setAttribute('aria-label', open ? 'Fechar menu principal' : 'Abrir menu principal');
+      menu.inert = compact.matches && !open;
+    }
+    toggle.addEventListener('click', function(){ setOpen(toggle.getAttribute('aria-expanded') !== 'true'); });
+    sidebar.addEventListener('keydown', function(event){
+      if (event.key === 'Escape' && compact.matches && toggle.getAttribute('aria-expanded') === 'true') {
+        setOpen(false);
+        toggle.focus();
+      }
+    });
+    compact.addEventListener('change', function(){ setOpen(false); });
+    setOpen(false);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initThemeToggle);
   else initThemeToggle();

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}EDGE · Envio periódicos{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}?v=edge-theme-20260923">
+  <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}?v=edge-ui-20260924">
 
 <script>
 (function(){
@@ -19,6 +19,7 @@
 </script>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Pular para o conteúdo</a>
 {% set edge_back_url = url_for('dashboard') %}
 {% if request.endpoint == 'campaign_detail' and campaign is defined %}
   {% set edge_back_url = url_for('unit_dashboard', unit_id=campaign.unit_id) %}
@@ -30,12 +31,13 @@
   {% set edge_back_url = url_for('companies') %}
 {% endif %}
 <div class="app-shell">
-  <aside class="sidebar">
+  <aside class="sidebar" id="module-navigation" aria-label="Navegação do módulo">
     <a class="brand" href="{{ url_for('dashboard') }}">
       <span class="brand-mark">E</span>
       <span><strong>EDGE</strong><small>Envio periódicos</small></span>
     </a>
-    <nav class="nav">
+    <button class="sidebar-close" type="button" aria-label="Fechar menu" onclick="edgeCloseMenu(true)">×</button>
+    <nav class="nav" aria-label="Páginas do módulo">
       <a class="nav-link" href="/"><span>←</span> Sistema principal</a>
       <a class="nav-link" href="/status-sistema"><span>●</span> Status do sistema</a>
       <div class="nav-label">Operação</div>
@@ -51,15 +53,19 @@
       {% if local_auth_enabled() %}<a class="logout-link" href="{{ url_for('logout') }}">Sair</a>{% endif %}
     </div>
   </aside>
+  <button class="sidebar-backdrop" type="button" aria-label="Fechar menu" tabindex="-1" onclick="edgeCloseMenu(true)"></button>
 
   <section class="main">
     <header class="topbar">
-      <button class="mobile-menu" type="button" onclick="document.body.classList.toggle('menu-open')">☰</button>
+      <button class="mobile-menu" type="button" aria-controls="module-navigation" aria-expanded="false" aria-label="Abrir menu" onclick="edgeToggleMenu()">☰</button>
       {% if request.endpoint not in ['dashboard','login','setup'] %}<button class="btn btn-ghost btn-sm back-button" type="button" onclick="edgeSmartBack()">← Voltar</button>{% endif %}
-      <div><strong>Envio de periódicos</strong><span class="topbar-note">Convocação, encaminhamentos, comparecimento e e-mails</span></div>
-      <a class="btn btn-primary btn-sm desktop-only" href="{{ url_for('campaign_new') }}">+ Nova competência</a>
+      <div class="topbar-title"><strong>Envio de periódicos</strong></div>
+      <button type="button" class="edge-theme-toggle" id="edgeThemeToggle" aria-label="Alternar tema" title="Alternar tema">
+        <span class="edge-theme-icon" aria-hidden="true">☾</span>
+        <span class="edge-theme-text">Tema escuro</span>
+      </button>
     </header>
-    <main class="content">
+    <main class="content" id="main-content">
       {% with messages=get_flashed_messages(with_categories=true) %}
         {% for category,message in messages %}<div class="alert alert-{{ category }}">{{ message }}</div>{% endfor %}
       {% endwith %}
@@ -117,8 +123,32 @@
     location.href=window.EDGE_BACK_FALLBACK || {{ url_for('dashboard')|tojson }};
   }
 
-  document.addEventListener('click', function(e){
-    if(document.body.classList.contains('menu-open') && !e.target.closest('.sidebar') && !e.target.closest('.mobile-menu')) document.body.classList.remove('menu-open');
+  const edgeMenuButton = document.querySelector('.mobile-menu');
+  const edgeSidebar = document.getElementById('module-navigation');
+  const edgeMain = document.querySelector('.main');
+  const edgeMobileQuery = window.matchMedia('(max-width: 900px)');
+  function edgeSetMenu(open, restoreFocus=false){
+    const isMobile=edgeMobileQuery.matches;
+    const expanded=Boolean(open && isMobile);
+    document.body.classList.toggle('menu-open', expanded);
+    edgeMenuButton.setAttribute('aria-expanded', String(expanded));
+    edgeMenuButton.setAttribute('aria-label', expanded ? 'Fechar menu' : 'Abrir menu');
+    edgeSidebar.inert=isMobile && !expanded;
+    edgeMain.inert=expanded;
+    if(expanded) edgeSidebar.querySelector('.sidebar-close').focus();
+    if(restoreFocus && isMobile) edgeMenuButton.focus();
+  }
+  function edgeToggleMenu(){edgeSetMenu(!document.body.classList.contains('menu-open'));}
+  function edgeCloseMenu(restoreFocus=false){edgeSetMenu(false,restoreFocus);}
+  edgeSetMenu(false);
+  edgeMobileQuery.addEventListener('change',()=>edgeSetMenu(false));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape' && document.body.classList.contains('menu-open')) edgeCloseMenu(true);});
+  edgeSidebar.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>edgeCloseMenu()));
+  document.querySelectorAll('.table').forEach(table=>{
+    const labels=Array.from(table.querySelectorAll('thead th'),th=>th.textContent.trim());
+    table.querySelectorAll('tbody tr').forEach(row=>{
+      Array.from(row.cells).forEach((cell,index)=>cell.dataset.label=labels[index]||'');
+    });
   });
 
   // Evita duplo clique em qualquer POST tradicional e mostra que a ação está em execução.
@@ -219,11 +249,6 @@
   function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 </script>
 {% block scripts %}{% endblock %}
-
-<button type="button" class="edge-theme-toggle" id="edgeThemeToggle" aria-label="Alternar tema" title="Alternar tema">
-  <span class="edge-theme-icon" aria-hidden="true">☾</span>
-  <span class="edge-theme-text">Tema escuro</span>
-</button>
 <script>
 (function(){
   function applyTheme(theme){

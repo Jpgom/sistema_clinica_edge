@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#f5f7fb">
 <title>{{ codigo }} - {{ titulo }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=edge-theme-20260923">
+<link rel="stylesheet" href="{{ url_for('static', filename='ui-shell.css') }}?v=edge-ui-20260924">
 <meta name="csrf-token" content="{{ csrf_token() }}">
 
 <script>
@@ -36,42 +37,10 @@
       <a class="btn btn--light" href="{{ url_for('status_sistema') }}">Status do sistema</a>
       <button class="btn btn--light" type="button" onclick="history.back()">Voltar</button>
     </div>
+    <button type="button" class="edge-theme-toggle edge-auth-theme" id="edgeThemeToggle" aria-label="Ativar tema escuro"><span class="edge-theme-icon" aria-hidden="true">☾</span><span class="edge-theme-text">Tema escuro</span></button>
   </section>
 </div>
 
-<button type="button" class="edge-theme-toggle" id="edgeThemeToggle" aria-label="Alternar tema" title="Alternar tema">
-  <span class="edge-theme-icon" aria-hidden="true">☾</span>
-  <span class="edge-theme-text">Tema escuro</span>
-</button>
-<script>
-(function(){
-  function applyTheme(theme){
-    var next = theme === 'dark' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', next);
-    try { localStorage.setItem('edge-theme', next); } catch(e) {}
-    var btn = document.getElementById('edgeThemeToggle');
-    if (btn) {
-      var icon = btn.querySelector('.edge-theme-icon');
-      var text = btn.querySelector('.edge-theme-text');
-      if (icon) icon.textContent = next === 'dark' ? '☀' : '☾';
-      if (text) text.textContent = next === 'dark' ? 'Tema claro' : 'Tema escuro';
-      btn.setAttribute('aria-label', next === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro');
-      btn.setAttribute('title', next === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro');
-    }
-    var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', next === 'dark' ? '#15191e' : '#f4f7f6');
-  }
-  function initThemeToggle(){
-    var current = document.documentElement.getAttribute('data-theme') || 'light';
-    applyTheme(current);
-    var btn = document.getElementById('edgeThemeToggle');
-    if (btn) btn.addEventListener('click', function(){
-      applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
-    });
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initThemeToggle);
-  else initThemeToggle();
-})();
-</script>
+<script src="{{ url_for('static', filename='ui-shell.js') }}?v=edge-ui-20260924"></script>
 </body>
 </html>

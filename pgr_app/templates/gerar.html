@@ -14,7 +14,7 @@
   <div>
     <p class="eyebrow">Geração</p>
     <h1>Gerar laudos</h1>
-    <p class="muted">Fluxo enxuto: empresa → grupo → setores → riscos → exames → laudo.</p>
+    <p class="muted">Selecione os dados em cada etapa e escolha o documento ao final.</p>
   </div>
 </div>
 
@@ -405,51 +405,58 @@
     </div>
   </section>
 
-  <section class="panel info-panel ltcat-auto-panel" data-wizard-step="7">
+  <section class="panel sticky-generate" data-wizard-step="7">
+    <div class="report-generate-intro">
+      <h2>Gerar documento</h2>
+      <p class="muted">Escolha o arquivo desejado. A seleção desta empresa será salva ao gerar o laudo completo.</p>
+    </div>
+    <div class="report-generate-controls">
+      <div class="report-type-field">
+        <label for="reportTypeSelect"><span>Tipo de documento</span></label>
+        <select id="reportTypeSelect">
+          <option value="{{ url_for('generate_complete_pgr') }}">PGR completo</option>
+          <option value="{{ url_for('generate_complete_pcmso') }}">PCMSO completo</option>
+          <option value="{{ url_for('generate_complete_ltcat') }}" data-context="ltcat">LTCAT completo</option>
+          <option value="{{ url_for('generate_complete_aet') }}" data-ajax="true">AET completa</option>
+          <option value="{{ url_for('generate_company_zip_package') }}" data-context="ltcat" data-ajax="true">Pacote ZIP</option>
+          <option value="{{ url_for('generate_pgr_aet_psychosocial') }}" data-context="merge" data-ajax="true">PGR + AET + Psicossocial</option>
+        </select>
+      </div>
+      <button class="btn primary report-generate-button" id="reportGenerateButton" type="submit" formaction="{{ url_for('generate_complete_pgr') }}">Gerar documento</button>
+    </div>
+    <div class="ajax-download-status sticky-status" data-ajax-status aria-live="polite"></div>
+    <noscript><div class="actions report-fallback-actions"><button class="btn primary" type="submit" formaction="{{ url_for('generate_complete_pcmso') }}">PCMSO</button><button class="btn primary" type="submit" formaction="{{ url_for('generate_complete_ltcat') }}">LTCAT</button><button class="btn primary" type="submit" formaction="{{ url_for('generate_complete_aet') }}">AET</button><button class="btn primary" type="submit" formaction="{{ url_for('generate_company_zip_package') }}">Pacote ZIP</button><button class="btn primary" type="submit" formaction="{{ url_for('generate_pgr_aet_psychosocial') }}">PGR + AET + Psicossocial</button></div></noscript>
+  </section>
+
+  <section class="panel info-panel ltcat-auto-panel report-context-hidden" id="ltcatInfoPanel" data-wizard-step="7">
     <div>
-      <strong>LTCAT automática</strong>
-      <p class="muted">Ao gerar a LTCAT, todos os riscos ambientais selecionados em cada setor entram automaticamente: FÍSICO, QUÍMICO e BIOLÓGICO. Se o setor não tiver risco ambiental marcado, será gerado como AUSÊNCIA DE RISCOS.</p>
+      <strong>Riscos incluídos na LTCAT</strong>
+      <p class="muted">Os riscos físicos, químicos e biológicos marcados em cada setor serão incluídos automaticamente. Setores sem esses riscos aparecerão como ausência de riscos ambientais.</p>
     </div>
   </section>
 
-  <section class="panel step-panel merge-panel" data-wizard-step="7">
+  <section class="panel step-panel merge-panel report-context-hidden" id="mergeOptionsPanel" data-wizard-step="7">
     <div class="step-number">7</div>
     <div class="step-content">
-      <h2>Juntar PGR + AET + Relatório Psicossocial</h2>
-      <p class="muted">Use quando terminar o PGR desta empresa e quiser gerar um único Word com PGR, página de link para AET, AET gerada pelo sistema, página de link para o psicossocial e o relatório psicossocial em PDF preservado no Word.</p>
+      <h2>Arquivos para juntar</h2>
+      <p class="muted">O sistema reúne o PGR, a AET e o relatório psicossocial em um documento Word.</p>
       <div class="inline-grid">
         <label>
-          <span>AET externa em Word (.docx) - opcional</span>
+          <span>AET externa em Word (.docx) — opcional</span>
           <input type="file" name="aet_docx" accept=".docx">
-          <small>Se não enviar, o sistema gera a AET automaticamente pelos formulários preenchidos.</small>
+          <small>Sem arquivo, a AET será gerada pelos dados preenchidos.</small>
         </label>
         <label>
-          <span>Relatório Psicossocial em PDF</span>
+          <span>Relatório psicossocial em PDF</span>
           <input type="file" name="psicossocial_pdf" accept=".pdf">
         </label>
         <label>
-          <span>Mês da inclusão por extenso (opcional)</span>
+          <span>Mês da inclusão por extenso — opcional</span>
           <input name="mes_extenso" placeholder="Ex.: JUNHO">
+          <small>Sem mês informado, será usada a data de criação do laudo.</small>
         </label>
       </div>
-      <p class="muted small-note">Se o mês ficar em branco, o sistema usa a Data de criação do laudo para preencher as páginas intermediárias.</p>
     </div>
-  </section>
-
-  <section class="panel sticky-generate" data-wizard-step="7">
-    <div>
-      <strong>Gerar documentos</strong>
-      <span>Os laudos serão gerados conforme a empresa, setores, riscos e exames selecionados. A última seleção da empresa fica salva automaticamente ao gerar um laudo completo.</span>
-    </div>
-    <div class="actions">
-      <button class="btn primary" type="submit" formaction="{{ url_for('generate_complete_pgr') }}">PGR completo</button>
-      <button class="btn primary third" type="submit" formaction="{{ url_for('generate_complete_pcmso') }}">PCMSO completo</button>
-      <button class="btn primary danger-alt" type="submit" formaction="{{ url_for('generate_complete_ltcat') }}">LTCAT completo</button>
-      <button class="btn primary accent" type="submit" formaction="{{ url_for('generate_complete_aet') }}">AET completa</button>
-      <button class="btn primary success" type="submit" formaction="{{ url_for('generate_company_zip_package') }}">Pacote ZIP</button>
-      <button class="btn primary dark" type="submit" data-ajax-download="true" data-processing-text="Juntando arquivos... aguarde" formaction="{{ url_for('generate_pgr_aet_psychosocial') }}">PGR + AET + Psicossocial</button>
-    </div>
-    <div class="ajax-download-status sticky-status" data-ajax-status aria-live="polite"></div>
   </section>
 
   <details class="panel optional-tools" data-wizard-step="7">

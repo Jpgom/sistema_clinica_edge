@@ -1,0 +1,370 @@
+/* Interface de trabalho compartilhada pelas telas do portal EDGE. */
+html body .app-layout {
+  display: grid !important;
+  grid-template-columns: 224px minmax(0, 1fr) !important;
+  min-height: 100vh;
+  background: var(--ui-bg) !important;
+}
+
+html body .app-layout .sidebar.edge-app-sidebar {
+  position: sticky !important;
+  top: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 14px !important;
+  width: 224px !important;
+  height: 100vh !important;
+  padding: 17px 12px 14px !important;
+  overflow: hidden !important;
+  background: var(--ui-surface) !important;
+  border-right: 1px solid var(--ui-border) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.edge-app-sidebar .edge-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 7px 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+html body .edge-app-sidebar .brand {
+  display: flex !important;
+  align-items: center !important;
+  min-height: 40px !important;
+  gap: 9px !important;
+  padding: 0 !important;
+  color: var(--ui-text) !important;
+  text-decoration: none;
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  letter-spacing: -.02em;
+}
+
+html body .edge-app-sidebar .brand .brand-logo {
+  width: 34px !important;
+  height: 34px !important;
+  max-width: 34px !important;
+  object-fit: contain;
+  flex: none;
+}
+
+.edge-app-sidebar .brand small {
+  display: block;
+  margin-top: 1px;
+  color: var(--ui-muted) !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0;
+}
+
+.edge-app-sidebar .edge-nav-toggle { display: none; }
+
+html body .edge-app-sidebar .nav-card.edge-sidebar-nav {
+  display: block !important;
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  min-height: 0;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  scrollbar-width: thin;
+}
+
+html body .edge-app-sidebar .nav-link {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  min-height: 38px !important;
+  height: auto !important;
+  margin: 1px 0 !important;
+  padding: 8px 10px !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: var(--ui-text-2) !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  line-height: 1.25 !important;
+  text-align: left;
+  white-space: normal;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+html body .edge-app-sidebar .nav-link:hover,
+html body .edge-app-sidebar .edge-account-link:hover,
+html body .edge-app-sidebar .edge-logout-link:hover {
+  background: var(--ui-surface-3) !important;
+  color: var(--ui-primary) !important;
+}
+
+html body .edge-app-sidebar .nav-link.active {
+  background: var(--ui-primary-soft) !important;
+  color: var(--ui-primary) !important;
+  box-shadow: inset 3px 0 0 var(--ui-primary) !important;
+}
+
+.edge-app-sidebar .edge-nav-group { margin-top: 5px; }
+.edge-app-sidebar .edge-nav-group summary {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--ui-text);
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+.edge-app-sidebar .edge-nav-group summary::-webkit-details-marker { display: none; }
+.edge-app-sidebar .edge-nav-group summary::after {
+  content: "⌄";
+  margin-left: auto;
+  color: var(--ui-muted);
+  font-size: 15px;
+  font-weight: 400;
+}
+.edge-app-sidebar .edge-nav-group[open] summary::after { transform: rotate(180deg); }
+.edge-app-sidebar .edge-nav-links { padding-left: 7px; }
+
+.edge-app-sidebar .edge-sidebar-footer {
+  display: grid;
+  gap: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.edge-app-sidebar .edge-account-link,
+.edge-app-sidebar .edge-logout-link,
+html body .edge-app-sidebar .edge-theme-toggle {
+  position: static !important;
+  display: flex !important;
+  align-items: center;
+  width: 100% !important;
+  min-height: 36px !important;
+  gap: 8px;
+  padding: 7px 10px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: var(--ui-text-2) !important;
+  text-align: left;
+  text-decoration: none;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+.edge-app-sidebar .edge-account-link.active { color: var(--ui-primary) !important; }
+.edge-app-sidebar .edge-theme-icon { width: 16px; text-align: center; }
+
+html body .app-layout > .main-area {
+  width: min(100%, 1280px) !important;
+  max-width: 1280px !important;
+  min-width: 0;
+  margin: 0 auto !important;
+  padding: 27px clamp(18px, 3vw, 38px) 48px !important;
+  background: transparent !important;
+}
+
+.main-area .edge-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 13px;
+  color: var(--ui-muted);
+  font-size: 12px;
+}
+.main-area .edge-breadcrumb a { color: var(--ui-muted); text-decoration: none; }
+.main-area .edge-breadcrumb a:hover { color: var(--ui-primary); text-decoration: underline; }
+.main-area .edge-breadcrumb strong { color: var(--ui-text); font-weight: 600; }
+
+html body .main-area .topbar,
+html body .main-area .compact-topbar {
+  max-width: none !important;
+  min-height: 0 !important;
+  margin: 0 0 22px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body .main-area .page-title h1,
+html body .main-area .simple-home-intro h1 {
+  margin: 0 !important;
+  color: var(--ui-text) !important;
+  font-size: clamp(27px, 3vw, 34px) !important;
+  line-height: 1.18 !important;
+  letter-spacing: -.03em !important;
+  font-weight: 700 !important;
+}
+html body .main-area .page-title p { margin-top: 6px !important; max-width: 700px; color: var(--ui-muted) !important; font-size: 14px !important; font-weight: 400 !important; }
+html body .main-area .section-head h2,
+html body .main-area .section-header h2 { font-size: 19px !important; line-height: 1.25 !important; }
+
+html body .main-area .content-card,
+html body .main-area .list-panel,
+html body .main-area .table-wrap,
+html body .main-area .mini-card {
+  border: 1px solid var(--ui-border) !important;
+  border-radius: 11px !important;
+  background: var(--ui-surface) !important;
+  box-shadow: none !important;
+}
+html body .main-area .content-card { padding: clamp(18px, 2.5vw, 28px) !important; }
+html body .main-area .form-grid { gap: 16px !important; }
+html body .main-area .field label { font-size: 13px !important; font-weight: 600 !important; }
+html body .main-area input:not([type="checkbox"]):not([type="radio"]),
+html body .main-area select,
+html body .main-area textarea { min-height: 43px !important; border-radius: 8px !important; }
+html body .main-area .btn { min-height: 42px !important; padding: 9px 14px !important; border-radius: 8px !important; font-size: 13px !important; font-weight: 600 !important; box-shadow: none !important; transform: none !important; }
+html body .main-area .btn--primary,
+html body .main-area .btn-primary { background: var(--ui-primary) !important; border: 1px solid var(--ui-primary) !important; color: #fff !important; }
+html body .main-area .btn--light,
+html body .main-area .btn-secondary,
+html body .main-area .btn-ghost { background: var(--ui-surface) !important; border: 1px solid var(--ui-border) !important; color: var(--ui-text) !important; }
+html body .main-area .actions.inline-actions { display: flex !important; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 23px; }
+
+/* A página inicial funciona como catálogo compacto de tarefas. */
+html body .main-area.simple-home { padding-top: 30px !important; }
+html body .simple-home-intro { margin-bottom: 15px !important; }
+html body .simple-home-intro > p:last-child { margin-top: 5px !important; font-size: 13px !important; }
+html body .simple-module-section { margin-top: 24px !important; }
+html body .simple-section-head { margin-bottom: 10px !important; padding-bottom: 0 !important; border: 0 !important; }
+html body .simple-section-head h2 { font-size: 18px !important; }
+html body .simple-card-grid,
+html body .simple-card-grid--five { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 9px !important; }
+html body .simple-module-card {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  min-height: 65px !important;
+  padding: 11px 14px !important;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: 9px !important;
+  background: var(--ui-surface) !important;
+  box-shadow: none !important;
+  color: var(--ui-text) !important;
+  text-decoration: none;
+}
+html body .simple-module-card:hover { border-color: var(--ui-primary) !important; background: var(--ui-surface-2) !important; }
+html body .simple-module-card h3 { color: var(--ui-text) !important; font-size: 14px !important; font-weight: 650 !important; }
+html body .simple-module-card p { margin: 3px 0 0 !important; color: var(--ui-muted) !important; font-size: 12px !important; line-height: 1.35 !important; }
+html body .simple-module-card::after { content: "→"; align-self: center; color: var(--ui-primary); font-size: 18px; }
+html body .simple-module-card span { display: none !important; }
+html body .simple-system-links { margin-top: 25px !important; }
+
+/* Aviso obrigatório da Anamnese Ocupacional. */
+dialog.edge-admission-dialog {
+  width: min(440px, calc(100% - 32px));
+  max-width: 440px;
+  margin: auto;
+  padding: 25px;
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  box-shadow: 0 24px 70px rgba(10, 26, 35, .22);
+}
+dialog.edge-admission-dialog::backdrop { background: rgba(14, 27, 34, .55); }
+dialog.edge-admission-dialog h2 { margin: 0 0 10px; color: var(--ui-text); font-size: 21px; line-height: 1.25; }
+dialog.edge-admission-dialog p { margin: 0; color: var(--ui-text-2); font-size: 15px; line-height: 1.5; }
+dialog.edge-admission-dialog .edge-dialog-actions { display: flex; justify-content: flex-end; margin-top: 23px; }
+dialog.edge-admission-dialog .edge-dialog-close { min-height: 42px; padding: 9px 16px; border: 1px solid var(--ui-primary); border-radius: 8px; background: var(--ui-primary); color: #fff; font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+dialog.edge-admission-dialog .edge-dialog-close:hover { background: var(--ui-primary-hover); }
+
+/* Entrada, primeiro acesso e mensagens de erro usam a mesma linguagem visual. */
+html body .login-page {
+  display: grid !important;
+  place-items: center;
+  min-height: 100vh;
+  padding: 22px;
+  background: var(--ui-bg) !important;
+}
+html body .login-page .login-card {
+  width: min(100%, 440px) !important;
+  max-width: 440px !important;
+  padding: 29px !important;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: 12px !important;
+  background: var(--ui-surface) !important;
+  box-shadow: none !important;
+}
+html body .login-page .login-card.setup-card,
+html body .login-page .login-card.error-page-card {
+  width: min(100%, 520px) !important;
+  max-width: 520px !important;
+}
+html body .login-page .login-card h1 { color: var(--ui-text) !important; font-size: 26px !important; line-height: 1.2; }
+html body .login-page .login-card p,
+html body .login-page .login-card .muted { color: var(--ui-muted) !important; }
+html body .login-page .login-card .field label { color: var(--ui-text) !important; font-size: 13px !important; font-weight: 600 !important; }
+html body .login-page .login-card input { min-height: 43px; border: 1px solid var(--ui-border) !important; border-radius: 8px !important; background: var(--ui-surface-2) !important; color: var(--ui-text) !important; }
+html body .login-page .login-card input:focus { border-color: var(--ui-primary) !important; outline: 2px solid var(--ui-primary-soft); }
+html body .login-page .login-card .btn { min-height: 43px; border-radius: 8px !important; box-shadow: none !important; }
+html body .login-page .login-card .btn--primary { background: var(--ui-primary) !important; border-color: var(--ui-primary) !important; color: #fff !important; }
+html body .login-page .login-card .btn--light { background: var(--ui-surface) !important; border-color: var(--ui-border) !important; color: var(--ui-text) !important; }
+html body .login-page .edge-auth-theme {
+  position: static !important;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 7px;
+  width: auto !important;
+  margin-top: 22px;
+  padding: 6px 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--ui-muted) !important;
+  font-size: 12px !important;
+  box-shadow: none !important;
+}
+html body .login-page .edge-auth-theme .edge-theme-text { display: inline !important; }
+
+@media (max-width: 900px) {
+  html body .app-layout { grid-template-columns: minmax(0, 1fr) !important; }
+  html body .app-layout .sidebar.edge-app-sidebar {
+    position: relative !important;
+    top: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 10px 15px !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--ui-border) !important;
+  }
+  .edge-app-sidebar .edge-sidebar-head { padding: 0 !important; border: 0; }
+  html body .edge-app-sidebar .edge-nav-toggle {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 64px;
+    min-height: 40px;
+    padding: 7px 12px;
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  html body .edge-app-sidebar .nav-card.edge-sidebar-nav,
+  html body .edge-app-sidebar .edge-sidebar-footer { display: none !important; }
+  html body .edge-app-sidebar.is-open .nav-card.edge-sidebar-nav { display: block !important; max-height: min(66vh, 520px); overflow-y: auto !important; }
+  html body .edge-app-sidebar.is-open .edge-sidebar-footer { display: grid !important; }
+  html body .app-layout > .main-area { width: 100% !important; padding: 20px 15px 38px !important; }
+}
+
+@media (max-width: 640px) {
+  html body .simple-card-grid,
+  html body .simple-card-grid--five { grid-template-columns: minmax(0, 1fr) !important; }
+  html body .main-area .actions.inline-actions { display: grid !important; grid-template-columns: 1fr; }
+  html body .main-area .actions.inline-actions > * { width: 100%; justify-content: center; }
+  html body .main-area .page-title h1 { font-size: 27px !important; }
+}

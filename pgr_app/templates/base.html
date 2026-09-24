@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Automação SST{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=edge-theme-20260923">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=edge-ux-20260924">
+  <link rel="stylesheet" href="{{ url_for('static', filename='ux.css') }}?v=20260924">
 
 <script>
 (function(){
@@ -19,32 +20,46 @@
 </script>
 </head>
 <body>
-  <aside class="sidebar">
+  <header class="pgr-mobile-bar">
+    <a class="pgr-mobile-brand" href="{{ url_for('gerar') }}" aria-label="Automação SST, gerar laudos"><span class="pgr-mobile-logo">SST</span><span>Automação SST</span></a>
+    <button type="button" class="pgr-menu-toggle" id="pgrMenuToggle" aria-controls="pgrSidebar" aria-expanded="false" aria-label="Abrir menu"><span aria-hidden="true">☰</span><span>Menu</span></button>
+  </header>
+  <button type="button" class="pgr-sidebar-overlay" id="pgrSidebarOverlay" aria-label="Fechar menu" tabindex="-1"></button>
+  <aside class="sidebar" id="pgrSidebar" aria-label="Menu da Automação SST">
     <div class="brand">
       <div class="logo">SST</div>
-      <div><strong>Automação SST</strong><span>PGR, PCMSO, LTCAT e AET</span></div>
+      <div><strong>Automação SST</strong><span>Documentos e cadastros</span></div>
     </div>
-    <nav>
-      <a href="/">← Sistema EDGE</a>
-      <a href="/status-sistema">Status do sistema</a>
-      <a class="{% if request.endpoint in ['cadastro', 'edit_risk'] %}active{% endif %}" href="{{ url_for('cadastro') }}">Riscos</a>
-      <a class="{% if request.endpoint in ['risk_types', 'create_risk_type', 'edit_risk_type'] %}active{% endif %}" href="{{ url_for('risk_types') }}">Tipos de riscos</a>
-      <a class="{% if request.endpoint in ['risk_groups', 'edit_risk_group'] %}active{% endif %}" href="{{ url_for('risk_groups') }}">Grupos de riscos</a>
-      <a class="{% if request.endpoint in ['setores', 'edit_sector'] %}active{% endif %}" href="{{ url_for('setores') }}">Setores/Cargos</a>
-      <a class="{% if request.endpoint in ['empresas', 'create_company', 'edit_company'] %}active{% endif %}" href="{{ url_for('empresas') }}">Empresas</a>
-      <a class="{% if request.endpoint in ['exames', 'create_exam', 'edit_exam'] %}active{% endif %}" href="{{ url_for('exames') }}">Exames</a>
-      <a class="{% if request.endpoint == 'modelos_aet' %}active{% endif %}" href="{{ url_for('modelos_aet') }}">Modelos AET/CNAEs</a>
+    <nav class="sidebar-nav" aria-label="Navegação SST">
+      <p class="nav-section-label">Trabalho</p>
       <a class="{% if request.endpoint == 'gerar' %}active{% endif %}" href="{{ url_for('gerar') }}">Gerar laudos</a>
       <a class="{% if request.endpoint in ['importar_laudo_antigo', 'salvar_importacao_laudo_antigo', 'apply_imported_template', 'confirm_apply_imported_template'] %}active{% endif %}" href="{{ url_for('importar_laudo_antigo') }}">Importar antigos</a>
       <a class="{% if request.endpoint in ['juntar_arquivos'] %}active{% endif %}" href="{{ url_for('juntar_arquivos') }}">Juntar arquivos</a>
       <a class="{% if request.endpoint == 'recibos_esocial' %}active{% endif %}" href="{{ url_for('recibos_esocial') }}">Recibos eSocial</a>
+      <p class="nav-section-label">Cadastros</p>
+      <a class="{% if request.endpoint in ['empresas', 'create_company', 'edit_company'] %}active{% endif %}" href="{{ url_for('empresas') }}">Empresas</a>
+      <a class="{% if request.endpoint in ['setores', 'edit_sector'] %}active{% endif %}" href="{{ url_for('setores') }}">Setores e cargos</a>
+      <a class="{% if request.endpoint in ['cadastro', 'edit_risk'] %}active{% endif %}" href="{{ url_for('cadastro') }}">Riscos</a>
+      <a class="{% if request.endpoint in ['risk_types', 'create_risk_type', 'edit_risk_type'] %}active{% endif %}" href="{{ url_for('risk_types') }}">Tipos de riscos</a>
+      <a class="{% if request.endpoint in ['risk_groups', 'edit_risk_group'] %}active{% endif %}" href="{{ url_for('risk_groups') }}">Grupos de riscos</a>
+      <a class="{% if request.endpoint in ['exames', 'create_exam', 'edit_exam'] %}active{% endif %}" href="{{ url_for('exames') }}">Exames</a>
+      <a class="{% if request.endpoint == 'modelos_aet' %}active{% endif %}" href="{{ url_for('modelos_aet') }}">Modelos AET/CNAEs</a>
+      <p class="nav-section-label">Sistema</p>
+      <a href="/status-sistema">Status do sistema</a>
+      <a href="/">Voltar ao EDGE</a>
     </nav>
+    <div class="pgr-sidebar-footer">
+      <button type="button" class="edge-theme-toggle" id="edgeThemeToggle" aria-label="Alternar tema" title="Alternar tema">
+        <span class="edge-theme-icon" aria-hidden="true">☾</span>
+        <span class="edge-theme-text">Tema escuro</span>
+      </button>
+    </div>
   </aside>
 
   <main class="content">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="flash-wrap">
+        <div class="flash-wrap" role="status" aria-live="polite">
           {% for category, message in messages %}
             <div class="flash {{ category }}">{{ message }}</div>
           {% endfor %}
@@ -56,10 +71,6 @@
   <script>window.PGR_BASE_URL = "{{ request.script_root }}";</script>
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 
-<button type="button" class="edge-theme-toggle" id="edgeThemeToggle" aria-label="Alternar tema" title="Alternar tema">
-  <span class="edge-theme-icon" aria-hidden="true">☾</span>
-  <span class="edge-theme-text">Tema escuro</span>
-</button>
 <script>
 (function(){
   function applyTheme(theme){
@@ -88,6 +99,36 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initThemeToggle);
   else initThemeToggle();
+})();
+</script>
+<script>
+(function(){
+  var toggle = document.getElementById('pgrMenuToggle');
+  var sidebar = document.getElementById('pgrSidebar');
+  var overlay = document.getElementById('pgrSidebarOverlay');
+  if (!toggle || !sidebar || !overlay) return;
+  sidebar.querySelectorAll('a.active').forEach(function(link){link.setAttribute('aria-current', 'page');});
+  function setOpen(open){
+    document.body.classList.toggle('pgr-menu-open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Fechar menu' : 'Abrir menu');
+    if (open) requestAnimationFrame(function(){sidebar.querySelector('a').focus();});
+    else if (document.activeElement && sidebar.contains(document.activeElement)) toggle.focus();
+  }
+  toggle.addEventListener('click', function(){setOpen(!document.body.classList.contains('pgr-menu-open'));});
+  overlay.addEventListener('click', function(){setOpen(false);});
+  document.addEventListener('keydown', function(event){
+    if (!document.body.classList.contains('pgr-menu-open')) return;
+    if (event.key === 'Escape') { setOpen(false); return; }
+    if (event.key !== 'Tab') return;
+    var focusable = sidebar.querySelectorAll('a, button:not([disabled])');
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  });
+  sidebar.addEventListener('click', function(event){if(event.target.closest('a')) setOpen(false);});
+  window.addEventListener('resize', function(){if(window.innerWidth > 860 && document.body.classList.contains('pgr-menu-open')) setOpen(false);});
 })();
 </script>
 </body>

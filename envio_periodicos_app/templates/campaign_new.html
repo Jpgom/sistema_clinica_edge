@@ -7,11 +7,11 @@
   <div class="card">
     <form method="post" enctype="multipart/form-data">
       <div class="grid grid-3">
-        <div class="form-group"><label>Unidade</label><select class="form-control" name="unit_id" required><option value="">Selecione</option>{% for u in units %}<option value="{{ u.id }}" {% if selected_unit_id==u.id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select></div>
-        <div class="form-group"><label>Mês</label><select class="form-control" name="month" required>{% for n,name in MONTHS.items() %}<option value="{{ n }}">{{ '%02d'|format(n) }} · {{ name }}</option>{% endfor %}</select></div>
-        <div class="form-group"><label>Ano</label><input class="form-control" type="number" name="year" min="2020" max="2100" value="{{ current_year }}" required></div>
+        <div class="form-group"><label for="campaign-new-unit">Unidade</label><select class="form-control" id="campaign-new-unit" name="unit_id" required><option value="">Selecione</option>{% for u in units %}<option value="{{ u.id }}" {% if selected_unit_id==u.id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select></div>
+        <div class="form-group"><label for="campaign-new-month">Mês</label><select class="form-control" id="campaign-new-month" name="month" required>{% for n,name in MONTHS.items() %}<option value="{{ n }}">{{ '%02d'|format(n) }} · {{ name }}</option>{% endfor %}</select></div>
+        <div class="form-group"><label for="campaign-new-year">Ano</label><input class="form-control" id="campaign-new-year" type="number" name="year" min="2020" max="2100" value="{{ current_year }}" required></div>
       </div>
-      <div class="upload-box"><div class="upload-icon">⇧</div><div><strong>Arquivos dos colaboradores</strong><p>Selecione vários XLSX ou um único ZIP com as planilhas.</p></div><input class="form-control" type="file" name="files" accept=".xlsx,.zip" multiple required></div>
+      <div class="upload-box"><div class="upload-icon">⇧</div><div><label for="campaign-new-files"><strong>Arquivos dos colaboradores</strong></label><p>Selecione vários XLSX ou um único ZIP com as planilhas.</p></div><input class="form-control" id="campaign-new-files" type="file" name="files" accept=".xlsx,.zip" multiple required></div>
       <div class="form-actions"><a class="btn btn-ghost" href="{{ url_for('unit_dashboard',unit_id=selected_unit_id) if selected_unit_id else url_for('dashboard') }}">Cancelar</a><button class="btn btn-primary">Processar e criar</button></div>
     </form>
   </div>

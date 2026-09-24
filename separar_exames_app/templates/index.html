@@ -3,43 +3,22 @@
 {% block content %}
 <header class="page-head">
   <div>
-    <p class="eyebrow">EXTRATOR AUTOMÁTICO</p>
+    <p class="eyebrow">PREPARAR EXTRAÇÃO</p>
     <h1>Separar exames</h1>
-    <p class="lead">Fluxo simplificado: baixe o modelo vazio, preencha os funcionários, informe o RECIBO ou A PRAZO quando necessário e envie os PDFs para separar.</p>
+    <p class="lead">Envie a lista de funcionários e os PDFs do lote. Ao concluir, revise as pendências e baixe os exames separados.</p>
   </div>
-  <div class="head-actions">
-    <span class="status-chip {{ 'ok' if ocr_available else 'warn' }}">
-      <span class="dot"></span>{{ 'OCR disponível' if ocr_available else 'OCR não localizado' }}
-    </span>
-    <a class="btn ghost" href="{{ url_for('settings_page') }}">Configurações</a>
-  </div>
+  {% if ocr_available %}<span class="status-chip ok"><span class="dot" aria-hidden="true"></span>Leitura de PDFs escaneados disponível</span>{% endif %}
 </header>
 
 {% if not ocr_available %}
-<section class="card ocr-alert-card">
+<section class="card ocr-alert-card" role="status">
   <div>
-    <p class="eyebrow">OCR PENDENTE NO RENDER</p>
-    <h2>O sistema não conseguirá ler PDFs escaneados/imagem</h2>
-    <p>Quando o OCR aparece como não localizado, os PDFs digitalizados podem terminar com todos os exames como não encontrados. No Render, ajuste o <strong>Build Command</strong> para <code>bash bin/render-build.sh</code>, faça <strong>Clear build cache & deploy</strong> e depois volte a testar.</p>
+    <p class="eyebrow">LEITURA DE ARQUIVOS</p>
+    <h2>PDFs escaneados podem não ser reconhecidos</h2>
+    <p>A leitura de imagens está indisponível no momento. PDFs com texto selecionável podem ser processados normalmente. Se o lote tiver digitalizações, avise a equipe responsável antes de iniciar.</p>
   </div>
-  <a class="btn ghost" href="{{ url_for('api_ocr_status') }}" target="_blank">Testar OCR</a>
 </section>
 {% endif %}
-
-<section class="simple-flow card">
-  <div class="simple-flow-item">
-    <span>1</span>
-    <div><strong>Preencha a lista</strong><small>Modelo vazio com FUNCIONÁRIO, EMPRESA, EXAMES ESPERADOS e RECIBO.</small></div>
-  </div>
-  <div class="simple-flow-item">
-    <span>2</span>
-    <div><strong>Envie os PDFs</strong><small>Adicione todos os arquivos do lote de uma vez.</small></div>
-  </div>
-  <div class="simple-flow-item">
-    <span>3</span>
-    <div><strong>Revise e arquive</strong><small>Baixe o ZIP ou salve no Arquivo de Exames com filtro por recibo/A PRAZO.</small></div>
-  </div>
-</section>
 
 <section id="activeExtractionBar" class="active-extraction hidden">
   <div class="active-extraction-icon">✓</div>
@@ -47,65 +26,67 @@
     <strong>Extração atual disponível</strong>
     <span id="activeFolderName">—</span>
   </div>
-  <small>Você pode navegar pelo sistema e voltar. Os arquivos continuam aqui até clicar em <b>Limpar extração</b>.</small>
+  <small>Disponível para revisão, download e arquivamento.</small>
 </section>
 
-<section class="steps-grid">
+<section class="steps-grid" aria-label="Arquivos necessários para a extração">
   <article class="card step-card">
-    <div class="step-title"><span class="step-number">1</span><div><h2>Lista de funcionários</h2><p>Baixe o modelo vazio e preencha somente as colunas necessárias.</p></div></div>
-    <label class="dropzone compact" id="sheetDrop">
-      <input id="sheetFile" type="file" accept=".xlsx,.xlsm,.csv" hidden>
-      <div class="drop-icon">⇧</div>
-      <div><strong id="sheetLabel">Selecionar planilha</strong><span>Arraste o arquivo ou clique aqui</span></div>
+    <div class="step-title"><span class="step-number" aria-hidden="true">1</span><div><h2>Lista de funcionários</h2><p>Planilha com funcionários e exames esperados.</p></div></div>
+    <label class="dropzone compact" id="sheetDrop" for="sheetFile">
+      <input id="sheetFile" class="visually-hidden-file" type="file" accept=".xlsx,.xlsm,.csv" aria-describedby="sheetUploadHint">
+      <div class="drop-icon" aria-hidden="true">↑</div>
+      <div><strong id="sheetLabel">Selecionar planilha</strong><span id="sheetUploadHint">Clique ou arraste um arquivo XLSX, XLSM ou CSV.</span></div>
     </label>
-    <div id="sheetMeta" class="file-meta hidden">
-      <div><span>Guia</span><select id="sheetSelect"></select></div>
+    <div id="sheetMeta" class="file-meta hidden" aria-live="polite">
+      <div><label for="sheetSelect">Guia</label><select id="sheetSelect"></select></div>
       <div class="meta-stats"><strong id="employeeCount">0</strong> funcionários <span>•</span> <strong id="examCount">0</strong> exames</div>
     </div>
-    <a class="inline-link" href="{{ url_for('download_sheet_model') }}">Baixar modelo vazio de planilha</a>
-    <div class="model-hint"><b>Cabeçalho:</b> FUNCIONÁRIO · EMPRESA · EXAMES ESPERADOS · RECIBO <small>No campo RECIBO, informe o número do recibo ou escreva <strong>A PRAZO</strong>.</small></div>
+    <p class="step-help">Ainda não tem a lista? <a class="inline-link" href="{{ url_for('download_sheet_model') }}">Baixar modelo de planilha</a></p>
+    <p class="model-hint">Na coluna <strong>RECIBO</strong>, informe o número do recibo ou escreva <strong>A PRAZO</strong>.</p>
   </article>
 
   <article class="card step-card">
-    <div class="step-title"><span class="step-number">2</span><div><h2>PDFs para processar</h2><p>Envie todos os PDFs do lote. O OCR deve estar ativo para arquivos escaneados.</p></div></div>
-    <label class="dropzone compact" id="pdfDrop">
-      <input id="pdfFiles" type="file" accept="application/pdf,.pdf" multiple hidden>
-      <div class="drop-icon">＋</div>
-      <div><strong>Adicionar PDFs</strong><span id="pdfCount">Nenhum arquivo selecionado</span></div>
+    <div class="step-title"><span class="step-number" aria-hidden="true">2</span><div><h2>PDFs dos exames</h2><p>Adicione todos os documentos do lote.</p></div></div>
+    <label class="dropzone compact" id="pdfDrop" for="pdfFiles">
+      <input id="pdfFiles" class="visually-hidden-file" type="file" accept="application/pdf,.pdf" multiple aria-describedby="pdfUploadHint">
+      <div class="drop-icon" aria-hidden="true">＋</div>
+      <div><strong>Adicionar PDFs</strong><span id="pdfUploadHint">Clique ou arraste arquivos PDF.</span></div>
     </label>
-    <div id="pdfList" class="mini-file-list"></div>
-  </article>
-
-  <article class="card step-card">
-    <div class="step-title"><span class="step-number">3</span><div><h2>Pasta do ZIP</h2><p>Defina como o pacote final será identificado no download.</p></div></div>
-    <label class="field-label" for="folderName">Nome da pasta</label>
-    <div class="input-with-icon"><span>▣</span><input id="folderName" value="ARQUIVOS SEPARADOS" maxlength="90"></div>
-    <p class="field-help">Exemplo: <strong>EXAMES 02-09-2026 MANHÃ</strong></p>
-    <div class="naming-note"><span>✓</span><p>O campo <strong>RECIBO</strong> da planilha entra no nome e também nos filtros do Arquivo de Exames. Use número do recibo ou <strong>A PRAZO</strong>.</p></div>
+    <p id="pdfCount" class="upload-count" role="status" aria-live="polite">Nenhum arquivo selecionado</p>
+    <div id="pdfList" class="mini-file-list" aria-label="PDFs selecionados"></div>
   </article>
 </section>
+
+<details class="card package-options">
+  <summary>Personalizar nome do pacote <span>Opcional</span></summary>
+  <div class="package-options-body">
+    <label class="field-label" for="folderName">Nome da pasta no ZIP</label>
+    <input id="folderName" class="text-input" value="ARQUIVOS SEPARADOS" maxlength="90" autocomplete="off">
+    <p class="field-help">Se deixar em branco, usaremos “ARQUIVOS SEPARADOS”.</p>
+  </div>
+</details>
 
 <section class="action-strip">
   <div>
-    <strong>Pronto para processar?</strong>
-    <span>Confira a lista, os PDFs e a pasta final. Depois clique para separar os exames.</span>
+    <strong>Pronto para separar</strong>
+    <span>Confira a planilha e os PDFs selecionados.</span>
   </div>
-  <button class="btn primary large" id="processBtn">Iniciar processamento</button>
+  <button class="btn primary large" id="processBtn" type="button">Separar exames</button>
 </section>
 
-<section id="progressCard" class="card progress-card hidden">
+<section id="progressCard" class="card progress-card hidden" aria-labelledby="progressTitle" tabindex="-1">
   <div class="progress-head"><div><p class="eyebrow">PROCESSANDO</p><h2 id="progressTitle">Preparando os arquivos...</h2></div><strong id="progressPct">0%</strong></div>
-  <div class="progress-track"><div id="progressBar"></div></div>
+  <div class="progress-track" id="progressTrack" role="progressbar" aria-label="Progresso da separação" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressBar"></div></div>
   <div class="progress-foot"><span id="progressDetail">Aguarde.</span><span>Você pode manter esta página aberta.</span></div>
 </section>
 
-<section id="resultCard" class="hidden">
+<section id="resultCard" class="hidden" aria-labelledby="resultTitle" tabindex="-1">
   <div class="result-head">
-    <div><p class="eyebrow">RESULTADO</p><h2>Processamento concluído</h2><p id="resultSubtitle">Confira o resumo antes de baixar.</p></div>
+    <div><p class="eyebrow">RESULTADO</p><h2 id="resultTitle">Processamento concluído</h2><p id="resultSubtitle">Confira o resumo antes de baixar.</p></div>
     <div class="result-actions">
-      <button id="clearBtn" class="btn danger ghost" type="button">Limpar extração</button>
+      <a id="reviewBtn" class="btn ghost hidden" href="#">Revisar pendências</a>
+      <a id="zipBtn" class="btn primary" href="#">Baixar exames separados (ZIP)</a>
       <a id="reportBtn" class="btn ghost" href="#">Baixar relatório</a>
-      <a id="zipBtn" class="btn primary" href="#">Baixar pasta em ZIP</a>
     </div>
   </div>
   <div class="kpi-grid">
@@ -131,9 +112,10 @@
     </div>
   </article>
   <article class="card table-card">
-    <div class="table-toolbar"><div><h3>Arquivos encontrados</h3><p>Exibe apenas resultados e exceções relevantes.</p></div><a id="reviewBtn" class="btn small ghost hidden" href="#">Revisar pendências</a></div>
+    <div class="table-toolbar"><div><h3>Arquivos encontrados</h3><p>Resultados e exceções deste lote.</p></div></div>
     <div class="table-wrap"><table><thead><tr><th>Funcionário</th><th>Exame</th><th>Motivo ASO</th><th>Status</th><th>Arquivo</th></tr></thead><tbody id="resultRows"></tbody></table></div>
   </article>
+  <div class="result-footer"><button id="clearBtn" class="btn danger ghost" type="button">Limpar extração atual</button><small>Use após salvar ou baixar os arquivos necessários.</small></div>
 </section>
 {% endblock %}
-{% block scripts %}<script>window.EDGE_OCR_AVAILABLE = {{ 'true' if ocr_available else 'false' }};</script><script src="{{ url_for('static', filename='index.js') }}?v=ocr-final-20260921"></script>{% endblock %}
+{% block scripts %}<script>window.EDGE_OCR_AVAILABLE = {{ 'true' if ocr_available else 'false' }};</script><script src="{{ url_for('static', filename='index.js') }}?v=edge-flow-20260924"></script>{% endblock %}

@@ -829,7 +829,7 @@ async function handleAjaxDownload(event, form, submitter, action) {
     window.URL.revokeObjectURL(url);
 
     form.querySelectorAll('input[type="file"]').forEach((input) => { input.value = ''; });
-    setAjaxStatus(form, 'Arquivo gerado. Você já pode selecionar novos arquivos e juntar outro documento sem recarregar a página.', 'success');
+    setAjaxStatus(form, 'Arquivo gerado. Você pode continuar nesta página e gerar outro documento.', 'success');
   } catch (error) {
     setAjaxStatus(form, error.message || 'Erro ao processar arquivo.', 'error');
     alert(error.message || 'Erro ao processar arquivo.');
@@ -853,6 +853,23 @@ document.querySelectorAll('form').forEach((form) => {
 });
 
 // V26 - geração em etapas tipo wizard com barra de progresso
+(function initReportTypeSelect(){
+  const select = document.getElementById('reportTypeSelect');
+  const button = document.getElementById('reportGenerateButton');
+  if (!select || !button) return;
+  function updateAction(){
+    button.setAttribute('formaction', select.value);
+    const option = select.selectedOptions[0];
+    const context = option?.dataset.context || '';
+    button.dataset.ajaxDownload = option?.dataset.ajax === 'true' ? 'true' : 'false';
+    document.getElementById('ltcatInfoPanel')?.classList.toggle('report-context-hidden', context !== 'ltcat');
+    document.getElementById('mergeOptionsPanel')?.classList.toggle('report-context-hidden', context !== 'merge');
+  }
+  select.addEventListener('change', updateAction);
+  button.addEventListener('click', updateAction);
+  updateAction();
+})();
+
 (function initWizardSteps(){
   const form = document.getElementById('pgrSelectionForm');
   if (!form) return;
@@ -879,7 +896,7 @@ document.querySelectorAll('form').forEach((form) => {
   }
 
   function addStepControls(){
-    for (let step=1; step<=maxStep; step++) {
+    for (let step=1; step<maxStep; step++) {
       const panels = stepNodes.filter((node) => Number(node.dataset.wizardStep || '0') === step && node.classList.contains('step-panel'));
       const panel = panels[panels.length-1];
       const content = panel ? panel.querySelector('.step-content') : null;

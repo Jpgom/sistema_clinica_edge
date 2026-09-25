@@ -69,11 +69,12 @@ A V5 usa WAL, `busy_timeout` e transações de escrita nas operações críticas
 - cadastro de novas unidades;
 - competências separadas por unidade;
 - edição de competência;
-- cadastro/edição e exclusão múltipla de empresas;
+- cadastro/edição e exclusão múltipla de empresas identificadas por CPF ou CNPJ;
+- importação de empresas por Excel com coluna CPF, CNPJ, CPF/CNPJ, CNPJ/CPF ou DOCUMENTO;
 - Gmail via SMTP e senha de app;
 - empresas com o mesmo e-mail agrupadas em uma única mensagem;
-- encaminhamentos associados por CNPJ;
-- renomeação automática para `ENCAMINHAMENTO PARA EXAMES (COMPETÊNCIA) - EMPRESA - CNPJ.zip`;
+- encaminhamentos associados por CPF ou CNPJ da empresa;
+- renomeação automática para `ENCAMINHAMENTO PARA EXAMES (COMPETÊNCIA) - EMPRESA - IDENTIFICADOR.zip`;
 - upload manual de encaminhamento;
 - conferência do dia 20 e lembretes de faltantes;
 - histórico de envios simplificado.

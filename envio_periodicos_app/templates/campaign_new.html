@@ -15,6 +15,6 @@
       <div class="form-actions"><a class="btn btn-ghost" href="{{ url_for('unit_dashboard',unit_id=selected_unit_id) if selected_unit_id else url_for('dashboard') }}">Cancelar</a><button class="btn btn-primary">Processar e criar</button></div>
     </form>
   </div>
-  <aside class="card help-card"><h3>Como o sistema seleciona?</h3><ol class="clean-list"><li>Considera colaboradores <strong>ATIVOS</strong>.</li><li>Usa o mês da coluna <strong>ADMISSAO</strong>.</li><li>Na convocação, cada <strong>nome aparece uma única vez por empresa</strong>, mesmo que esteja repetido em cargos diferentes.</li><li>Na planilha para encaminhamentos, repete o nome somente quando o <strong>cargo for diferente</strong>.</li><li>Vincula cada empresa pelo CNPJ cadastrado.</li><li>Após processar, baixa automaticamente a planilha-base com <strong>COMPLEMENTARES em branco</strong>.</li></ol></aside>
+  <aside class="card help-card"><h3>Como o sistema seleciona?</h3><ol class="clean-list"><li>Considera colaboradores <strong>ATIVOS</strong>.</li><li>Usa o mês da coluna <strong>ADMISSAO</strong>.</li><li>Na convocação, cada <strong>nome aparece uma única vez por empresa</strong>, mesmo que esteja repetido em cargos diferentes.</li><li>Na planilha para encaminhamentos, repete o nome somente quando o <strong>cargo for diferente</strong>.</li><li>Vincula cada empresa pelo CPF ou CNPJ cadastrado.</li><li>Após processar, baixa automaticamente a planilha-base com <strong>COMPLEMENTARES em branco</strong>.</li></ol></aside>
 </div>
 {% endblock %}

@@ -519,6 +519,25 @@ def digits(value):
     return re.sub(r"\D", "", str(value or ""))
 
 
+def company_document_digits(value):
+    """Normaliza CPF/CNPJ, inclusive quando o Excel remove zeros à esquerda."""
+    if isinstance(value, bool):
+        return ""
+    if isinstance(value, (int, float)):
+        if isinstance(value, float) and not value.is_integer():
+            return ""
+        normalized = str(int(value))
+        if len(normalized) in (9, 10):
+            return normalized.zfill(11)
+        if len(normalized) in (12, 13):
+            return normalized.zfill(14)
+        return normalized
+    return digits(value)
+
+
+def valid_company_document(value):
+    return isinstance(value, str) and value.isdigit() and len(value) in (11, 14)
+
 
 def normalize_smtp_security(value):
     value = str(value or "starttls").strip().lower()
@@ -537,6 +556,15 @@ def format_cpf(value):
     if len(d) != 11:
         return d or "—"
     return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}"
+
+
+def format_documento(value):
+    d = digits(value)
+    return format_cpf(d) if len(d) == 11 else format_cnpj(d)
+
+
+def company_document_label(value):
+    return "CPF" if len(digits(value)) == 11 else "CNPJ"
 
 
 def normalize_text(value):
@@ -569,12 +597,12 @@ def parse_date(value):
 def clean_company_name(raw, cnpj=""):
     s = str(raw or "").strip()
     if not s:
-        return f"EMPRESA {format_cnpj(cnpj)}"
+        return f"EMPRESA {format_documento(cnpj)}"
     d = digits(cnpj)
-    for candidate in ([d, format_cnpj(d)] if d else []):
+    for candidate in ([d, format_documento(d)] if d else []):
         s = re.sub(rf"\s*[-–—/]?\s*{re.escape(candidate)}\s*$", "", s, flags=re.I)
     s = re.sub(r"\s+", " ", s).strip(" -–—/")
-    return s or f"EMPRESA {format_cnpj(cnpj)}"
+    return s or f"EMPRESA {format_documento(cnpj)}"
 
 
 def valid_email(value):
@@ -611,6 +639,7 @@ def attachment_disk_path(row):
 
 app.jinja_env.filters["cnpj"] = format_cnpj
 app.jinja_env.filters["cpf"] = format_cpf
+app.jinja_env.filters["documento"] = format_documento
 app.jinja_env.globals["MONTHS"] = MONTHS
 app.jinja_env.globals["month_label"] = month_label
 app.jinja_env.globals["APP_VERSION"] = APP_VERSION
@@ -1043,13 +1072,13 @@ def company_edit(company_id=None):
     conn = db()
     company = conn.execute("SELECT * FROM companies WHERE id=?", (company_id,)).fetchone() if company_id else None
     if request.method == "POST":
-        cnpj = digits(request.form.get("cnpj"))
+        cnpj = company_document_digits(request.form.get("cnpj"))
         name = request.form.get("name", "").strip().upper()
         email = request.form.get("email", "").strip().lower()
         email_cc = request.form.get("email_cc", "").strip().lower()
         active = 1 if request.form.get("active") else 0
         errors = []
-        if len(cnpj) != 14: errors.append("Informe um CNPJ com 14 dígitos.")
+        if not valid_company_document(cnpj): errors.append("Informe um CPF com 11 dígitos ou CNPJ com 14 dígitos.")
         if not name: errors.append("Informe o nome da empresa.")
         if email and not valid_email(email): errors.append("E-mail principal inválido.")
         invalid_cc = [e for e in re.split(r"[;,\s/]+", email_cc) if e and not valid_email(e)]
@@ -1072,7 +1101,7 @@ def company_edit(company_id=None):
                 flash("Cadastro salvo.", "success")
                 return redirect(url_for("companies"))
             except sqlite3.IntegrityError:
-                flash("Já existe uma empresa cadastrada com esse CNPJ.", "danger")
+                flash("Já existe uma empresa cadastrada com esse CPF ou CNPJ.", "danger")
     conn.close()
     return render_template("company_edit.html", company=company)
 
@@ -1110,7 +1139,7 @@ def companies_bulk_delete():
 
 
 def detect_header_and_map(ws, aliases, required_any=None):
-    for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=min(ws.max_row, 12), values_only=True), start=1):
+    for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=min(ws.max_row or 12, 12), values_only=True), start=1):
         mapped = {}
         for idx, value in enumerate(row):
             nh = norm_header(value)
@@ -1124,6 +1153,8 @@ def detect_header_and_map(ws, aliases, required_any=None):
 
 COMPANY_ALIASES = {
     "cnpj": {"CNPJ", "CNPJEMPRESA"},
+    "company_cpf": {"CPF", "CPFEMPRESA"},
+    "document": {"CNPJCPF", "CPFCNPJ", "DOCUMENTO", "DOCUMENTOEMPRESA", "IDENTIFICADOR"},
     "name": {"EMPRESA", "NOMEEMPRESA", "RAZAOSOCIAL", "RAZAOSOCIALNOMEOFICIAL"},
     "email": {"EMAIL", "EMAILPRINCIPAL", "EMAILRH", "EMAILDP"},
     "email_cc": {"EMAILCC", "CC", "EMAILCOPIA"},
@@ -1139,17 +1170,23 @@ def companies_import():
     f = request.files.get("file")
     if not f or not f.filename:
         flash("Selecione uma planilha.", "danger"); return redirect(url_for("companies"))
+    conn = wb = None
     try:
         wb = load_workbook(f, data_only=True, read_only=True)
         imported = updated = errors = 0; conn = db()
         for ws in wb.worksheets:
-            header_row, mapping = detect_header_and_map(ws, COMPANY_ALIASES, required_any=["cnpj", "name"])
-            if not header_row or "cnpj" not in mapping: continue
+            header_row, mapping = detect_header_and_map(ws, COMPANY_ALIASES, required_any=["cnpj", "company_cpf", "document", "name"])
+            document_columns = [mapping[key] for key in ("document", "cnpj", "company_cpf") if key in mapping]
+            if not header_row or not document_columns: continue
             for row in ws.iter_rows(min_row=header_row+1, values_only=True):
-                cnpj = digits(row[mapping["cnpj"]] if mapping["cnpj"] < len(row) else "")
-                if not cnpj: continue
-                if len(cnpj) != 14: errors += 1; continue
-                name = str(row[mapping["name"]] or "").strip().upper() if "name" in mapping and mapping["name"] < len(row) else f"EMPRESA {format_cnpj(cnpj)}"
+                documents = [company_document_digits(row[idx]) for idx in document_columns if idx < len(row)]
+                cnpj = next((value for value in documents if valid_company_document(value)), None)
+                if cnpj is None: cnpj = next((value for value in documents if value), "")
+                if not cnpj:
+                    if any(str(value or "").strip() for value in row): errors += 1
+                    continue
+                if not valid_company_document(cnpj): errors += 1; continue
+                name = str(row[mapping["name"]] or "").strip().upper() if "name" in mapping and mapping["name"] < len(row) else f"EMPRESA {format_documento(cnpj)}"
                 email = str(row[mapping["email"]] or "").strip().lower() if "email" in mapping and mapping["email"] < len(row) else ""
                 email_cc = str(row[mapping["email_cc"]] or "").strip().lower() if "email_cc" in mapping and mapping["email_cc"] < len(row) else ""
                 active_raw = normalize_text(row[mapping["active"]]) if "active" in mapping and mapping["active"] < len(row) else "SIM"
@@ -1159,17 +1196,20 @@ def companies_import():
                     conn.execute("UPDATE companies SET name=?,email=?,email_cc=?,active=?,updated_at=? WHERE id=?", (name,email,email_cc,active,now_iso(),existing["id"])); updated += 1
                 else:
                     conn.execute("INSERT INTO companies(cnpj,name,email,email_cc,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", (cnpj,name,email,email_cc,active,now_iso(),now_iso())); imported += 1
-        conn.commit(); conn.close()
-        flash(f"Importação concluída: {imported} nova(s), {updated} atualizada(s), {errors} linha(s) ignorada(s).", "success")
+        conn.commit()
+        flash(f"Importação concluída: {imported} nova(s), {updated} atualizada(s), {errors} linha(s) ignorada(s) por CPF/CNPJ ausente ou inválido.", "success")
     except Exception as e:
         flash(f"Não foi possível importar: {e}", "danger")
+    finally:
+        if wb is not None: wb.close()
+        if conn is not None: conn.close()
     return redirect(url_for("companies"))
 
 
 @app.route("/companies/template.xlsx")
 def company_template():
     wb=Workbook(); ws=wb.active; ws.title="EMPRESAS"
-    ws.append(["CNPJ","EMPRESA","EMAIL","EMAIL_CC","ATIVO"])
+    ws.append(["CNPJ/CPF","EMPRESA","EMAIL","EMAIL_CC","ATIVO"])
     ws.append(["00.000.000/0001-00","EMPRESA EXEMPLO LTDA","rh@empresa.com.br","financeiro@empresa.com.br","SIM"])
     style_export_header(ws)
     for i,w in enumerate([22,45,32,35,12],1): ws.column_dimensions[chr(64+i)].width=w
@@ -1180,7 +1220,7 @@ def company_template():
 # ---------------------------- COMPETÊNCIAS ----------------------------
 SOURCE_ALIASES = {
     "company": {"EMPRESA", "NOMEEMPRESA", "RAZAOSOCIAL"},
-    "cnpj": {"CNPJ", "CNPJEMPRESA"},
+    "cnpj": {"CNPJ", "CNPJEMPRESA", "CPFEMPRESA", "CNPJCPF", "CPFCNPJ", "DOCUMENTO", "DOCUMENTOEMPRESA", "IDENTIFICADOR", "IDENTIFICADOREMPRESA"},
     "name": {"NOME", "NOMEDOFUNCIONARIO", "NOMEFUNCIONARIO", "FUNCIONARIO", "COLABORADOR"},
     "sector": {"SETOR", "GES"},
     "role": {"CARGO", "FUNCAO", "FUNCAOCARGO"},
@@ -1250,12 +1290,12 @@ def import_campaign_sources(campaign_id, month, year, files, additive=True):
                 parsed_sheet=True
                 for excel_row,row in enumerate(ws.iter_rows(min_row=header_row+1,values_only=True),start=header_row+1):
                     row_count += 1
-                    cnpj=digits(row[mapping["cnpj"]] if mapping["cnpj"]<len(row) else "")
+                    cnpj=company_document_digits(row[mapping["cnpj"]] if mapping["cnpj"]<len(row) else "")
                     employee_name=str(row[mapping["name"]] or "").strip().upper() if mapping["name"]<len(row) else ""
                     source_name=str(row[mapping["company"]] or "").strip() if "company" in mapping and mapping["company"]<len(row) else ""
                     if not cnpj and not employee_name: continue
-                    if len(cnpj)!=14:
-                        conn.execute("INSERT INTO import_errors(campaign_id,source_file,row_number,company_cnpj,employee_name,error) VALUES(?,?,?,?,?,?)", (campaign_id,filename,excel_row,cnpj,employee_name,"CNPJ ausente ou inválido")); errors += 1; continue
+                    if not valid_company_document(cnpj):
+                        conn.execute("INSERT INTO import_errors(campaign_id,source_file,row_number,company_cnpj,employee_name,error) VALUES(?,?,?,?,?,?)", (campaign_id,filename,excel_row,cnpj,employee_name,"CPF/CNPJ da empresa ausente ou inválido")); errors += 1; continue
                     company=ensure_company(conn,cnpj,source_name)
                     conn.execute("INSERT OR IGNORE INTO campaign_companies(campaign_id,company_id,source_name,source_cnpj) VALUES(?,?,?,?)", (campaign_id,company["id"],source_name,cnpj))
                     if not employee_name: continue
@@ -1284,7 +1324,7 @@ def import_campaign_sources(campaign_id, month, year, files, additive=True):
                     cur=conn.execute("INSERT OR IGNORE INTO convocations(campaign_id,company_id,cpf,employee_name,sector,role,admission_date,source_file) VALUES(?,?,?,?,?,?,?,?)", (campaign_id,company["id"],cpf,employee_name,sector,role,admission.isoformat(),filename))
                     if cur.rowcount: target_count += 1
             if not parsed_sheet:
-                conn.execute("INSERT INTO import_errors(campaign_id,source_file,error) VALUES(?,?,?)", (campaign_id,filename,"Não encontrei as colunas CNPJ, nome e ADMISSAO")); errors += 1
+                conn.execute("INSERT INTO import_errors(campaign_id,source_file,error) VALUES(?,?,?)", (campaign_id,filename,"Não encontrei as colunas CPF/CNPJ da empresa, nome e ADMISSAO")); errors += 1
             conn.execute("INSERT OR IGNORE INTO campaign_source_imports(campaign_id,file_name,file_hash,import_type,imported_at) VALUES(?,?,?,?,?)", (campaign_id,filename,source_hash,'base',now_iso()))
         if additive:
             conn.execute("UPDATE campaigns SET source_file_count=source_file_count+?,source_row_count=source_row_count+?,updated_at=? WHERE id=?", (source_count,row_count,now_iso(),campaign_id))
@@ -1543,7 +1583,7 @@ def safe_filename_component(value):
 def canonical_referral_zip_name(campaign, company):
     competence = f"{MONTHS[int(campaign['month'])]} {int(campaign['year'])}"
     company_name = safe_filename_component(company['name'])
-    cnpj = format_cnpj(company['cnpj']).replace('/', '-')
+    cnpj = format_documento(company['cnpj']).replace('/', '-')
     return f"ENCAMINHAMENTO PARA EXAMES ({competence}) - {company_name} - {cnpj}.zip"
 
 
@@ -1566,12 +1606,13 @@ def store_attachment_bytes(conn,campaign_id,company_id,filename,data,source_type
         raise
 
 
-def cnpj_from_text(value):
-    for m in re.finditer(r"(?:\d[\.\-/ ]*){14}", str(value or "")):
-        d=digits(m.group(0))
-        if len(d)==14: return d
+def company_document_from_text(value):
+    for length in (14, 11):
+        for m in re.finditer(rf"(?<!\d)(?:\d[\.\-/ ]*){{{length}}}(?!\d)", str(value or "")):
+            d=digits(m.group(0))
+            if len(d)==length: return d
     d=digits(value)
-    return d if len(d)==14 else ""
+    return d if valid_company_document(d) else ""
 
 
 @app.post("/campaigns/<int:campaign_id>/attachments/import-zip")
@@ -1588,7 +1629,7 @@ def attachments_import_zip(campaign_id):
         attached=not_found=ignored=duplicates=0; handled_cnpjs=set(); folder_members={}
         for m in z.infolist():
             if m.is_dir(): continue
-            p=PurePosixPath(m.filename); cnpj=cnpj_from_text(p.name)
+            p=PurePosixPath(m.filename); cnpj=company_document_from_text(p.name)
             if p.suffix.lower()==".zip" and cnpj:
                 company=conn.execute("SELECT c.* FROM companies c JOIN campaign_companies cc ON cc.company_id=c.id WHERE cc.campaign_id=? AND c.cnpj=?",(campaign_id,cnpj)).fetchone()
                 if company:
@@ -1607,7 +1648,7 @@ def attachments_import_zip(campaign_id):
                 folder_members.setdefault(cnpj,[]).append(m); continue
             found=""
             for part in p.parts[:-1]:
-                found=cnpj_from_text(part)
+                found=company_document_from_text(part)
                 if found: break
             if found: folder_members.setdefault(found,[]).append(m)
         for cnpj,members in folder_members.items():
@@ -1633,7 +1674,7 @@ def attachments_import_zip(campaign_id):
             if existed: duplicates+=1
             else: attached+=1
         conn.commit()
-        flash(f"Encaminhamentos processados: {attached} novo(s); {duplicates} repetido(s) ignorado(s); {not_found} CNPJ(s) não encontrado(s); {ignored} item(ns) sem convocados.","success")
+        flash(f"Encaminhamentos processados: {attached} novo(s); {duplicates} repetido(s) ignorado(s); {not_found} identificador(es) não encontrado(s); {ignored} item(ns) sem convocados.","success")
     except Exception as e:
         if conn:
             try: conn.rollback()
@@ -1719,7 +1760,7 @@ def company_email_section(company,employees,kind,competence):
     name=html.escape(company["name"])
     employees=dedupe_employees_by_name(employees)
     rows_html="".join(f"<tr><td style='padding:9px 10px;border:1px solid #d8dee6'>{html.escape(e['employee_name'])}</td></tr>" for e in employees)
-    heading=f"<div style='margin:24px 0 10px;padding:10px 12px;background:#eef3f8;border-left:4px solid #16324F'><strong>EMPRESA: {name}</strong><br><span style='font-size:12px;color:#667085'>CNPJ: {format_cnpj(company['cnpj'])}</span></div>"
+    heading=f"<div style='margin:24px 0 10px;padding:10px 12px;background:#eef3f8;border-left:4px solid #16324F'><strong>EMPRESA: {name}</strong><br><span style='font-size:12px;color:#667085'>{company_document_label(company['cnpj'])}: {format_documento(company['cnpj'])}</span></div>"
     if kind=="reminder":
         intro="Os colaboradores abaixo, anteriormente convocados, ainda não constam em nosso controle de comparecimento:"
     elif employees:
@@ -1752,7 +1793,7 @@ def grouped_email_payload(campaign_id,company_ids,kind="initial"):
             for a in conn.execute("SELECT * FROM campaign_attachments WHERE campaign_id=? AND company_id=? ORDER BY id",(campaign_id,company["id"])).fetchall():
                 path=attachment_disk_path(a)
                 if path.exists():
-                    # O nome já contém competência + empresa + CNPJ, inclusive em envios agrupados.
+                    # O nome já contém competência + empresa + CPF/CNPJ, inclusive em envios agrupados.
                     attachments.append({"filename":a["original_name"],"path":path})
     conn.close()
     if not companies: return None
@@ -1772,7 +1813,7 @@ def grouped_email_payload(campaign_id,company_ids,kind="initial"):
     body=("<div style='font-family:Arial,sans-serif;color:#1f2937;line-height:1.55;font-size:14px'>"+opening+sections+f"<p>{closing}</p><p>Atenciosamente,<br><strong>{email_signature()}</strong></p></div>")
     text_parts=[re.sub(r"<[^>]+>","",opening.replace("<br>","\n"))]
     for x in companies:
-        text_parts.append(f"\nEMPRESA: {x['company']['name']}\nCNPJ: {format_cnpj(x['company']['cnpj'])}")
+        text_parts.append(f"\nEMPRESA: {x['company']['name']}\n{company_document_label(x['company']['cnpj'])}: {format_documento(x['company']['cnpj'])}")
         if x["employees"]: text_parts.extend(f"- {e['employee_name']}" for e in x["employees"])
         else: text_parts.append(f"Sem colaboradores com exames periódicos previstos para {competence}.")
     text_parts.extend(["",closing,"",setting_get("email_signature","EDGE Saúde Ocupacional")])
@@ -2083,7 +2124,7 @@ def campaign_send_all(campaign_id,kind):
 
 
 # ---------------------------- COMPARECIMENTO ----------------------------
-ATTENDANCE_ALIASES={"cnpj":{"CNPJ","CNPJEMPRESA"},"cpf":{"CPF"},"name":{"NOME","NOMEFUNCIONARIO","COLABORADOR","FUNCIONARIO"},"type":{"TIPOEXAME","EXAME","TIPODEEXAME","TIPO"},"date":{"DATA","DATAATENDIMENTO","DATAEXAME"}}
+ATTENDANCE_ALIASES={"cnpj":{"CNPJ","CNPJEMPRESA","CPFEMPRESA","CNPJCPF","CPFCNPJ","DOCUMENTO","DOCUMENTOEMPRESA","IDENTIFICADOR","IDENTIFICADOREMPRESA"},"cpf":{"CPF"},"name":{"NOME","NOMEFUNCIONARIO","COLABORADOR","FUNCIONARIO"},"type":{"TIPOEXAME","EXAME","TIPODEEXAME","TIPO"},"date":{"DATA","DATAATENDIMENTO","DATAEXAME"}}
 
 
 def process_attendance_file(campaign_id, storage, periodic_only=False):
@@ -2151,7 +2192,7 @@ def process_attendance_file(campaign_id, storage, periodic_only=False):
         sheets_used += 1
 
         for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
-            cnpj = digits(row[mapping["cnpj"]]) if "cnpj" in mapping and mapping["cnpj"] < len(row) else ""
+            cnpj = company_document_digits(row[mapping["cnpj"]]) if "cnpj" in mapping and mapping["cnpj"] < len(row) else ""
             cpf = digits(row[mapping["cpf"]]) if "cpf" in mapping and mapping["cpf"] < len(row) else ""
             name = str(row[mapping["name"]] or "").strip().upper() if "name" in mapping and mapping["name"] < len(row) else ""
             if not cpf and not name:
@@ -2166,7 +2207,7 @@ def process_attendance_file(campaign_id, storage, periodic_only=False):
             if cnpj and cpf:
                 match_id = cnpj_cpf_map.get((cnpj, cpf))
                 if match_id:
-                    method = "CNPJ+CPF"
+                    method = "EMPRESA+CPF"
 
             if not match_id and cpf:
                 ids = cpf_map.get(cpf, set())
@@ -2287,7 +2328,8 @@ def referral_base_export(campaign_id):
         wb=load_workbook(REFERRAL_BASE_TEMPLATE)
         ws=wb.active
     else:
-        wb=Workbook(); ws=wb.active; ws.title="Planilha1"; ws.append(["EMPRESA","CNPJ","NOME","CARGO","COMPLEMENTARES"]); style_export_header(ws)
+        wb=Workbook(); ws=wb.active; ws.title="Planilha1"; ws.append(["EMPRESA","CNPJ/CPF","NOME","CARGO","COMPLEMENTARES"]); style_export_header(ws)
+    ws.cell(1,2).value="CNPJ/CPF"
     # Limpa valores antigos e preserva o layout do modelo.
     max_existing=max(ws.max_row,2)
     for rr in range(2,max_existing+1):
@@ -2304,7 +2346,7 @@ def referral_base_export(campaign_id):
                 if src.number_format: dst.number_format=src.number_format
                 dst.alignment=copy(src.alignment); dst.border=copy(src.border); dst.fill=copy(src.fill); dst.font=copy(src.font); dst.protection=copy(src.protection)
         ws.cell(idx,1).value=r["company"]
-        ws.cell(idx,2).value=format_cnpj(r["cnpj"])
+        ws.cell(idx,2).value=format_documento(r["cnpj"])
         ws.cell(idx,3).value=r["employee_name"]
         ws.cell(idx,4).value=r["role"] or ""
         ws.cell(idx,5).value=""
@@ -2354,7 +2396,7 @@ def campaign_generate_referrals(campaign_id):
     except Exception:
         app.logger.exception("Erro ao gerar encaminhamentos pela competência %s", campaign_id)
         return _fail(
-            "Não foi possível gerar os encaminhamentos. Confira se a planilha possui as colunas EMPRESA, CNPJ, NOME, CARGO e COMPLEMENTARES.",
+            "Não foi possível gerar os encaminhamentos. Confira se a planilha possui as colunas EMPRESA, CNPJ/CPF, NOME, CARGO e COMPLEMENTARES.",
             500,
         )
 
@@ -2364,13 +2406,13 @@ def campaign_export(campaign_id):
     campaign=get_campaign_or_404(campaign_id); conn=db()
     company_rows=conn.execute("""SELECT c.cnpj,c.name,c.email,c.email_cc,COUNT(v.id) total,SUM(CASE WHEN v.attended=1 THEN 1 ELSE 0 END) attended,SUM(CASE WHEN v.attended=0 THEN 1 ELSE 0 END) pending,(SELECT COUNT(*) FROM campaign_attachments a WHERE a.campaign_id=cc.campaign_id AND a.company_id=c.id) attachments FROM campaign_companies cc JOIN companies c ON c.id=cc.company_id LEFT JOIN convocations v ON v.campaign_id=cc.campaign_id AND v.company_id=c.id WHERE cc.campaign_id=? GROUP BY c.id ORDER BY c.name""",(campaign_id,)).fetchall()
     convos=conn.execute("SELECT c.cnpj,c.name company,v.* FROM convocations v JOIN companies c ON c.id=v.company_id WHERE v.campaign_id=? ORDER BY c.name,v.employee_name",(campaign_id,)).fetchall(); errors=conn.execute("SELECT * FROM import_errors WHERE campaign_id=? ORDER BY source_file,row_number",(campaign_id,)).fetchall(); conn.close()
-    wb=Workbook(); ws=wb.active; ws.title="EMPRESAS"; ws.append(["UNIDADE","COMPETENCIA","CNPJ","EMPRESA","EMAIL","EMAIL_CC","QTD_CONVOCADOS","COMPARECERAM","PENDENTES","ENCAMINHAMENTOS","SITUACAO"])
+    wb=Workbook(); ws=wb.active; ws.title="EMPRESAS"; ws.append(["UNIDADE","COMPETENCIA","CNPJ/CPF","EMPRESA","EMAIL","EMAIL_CC","QTD_CONVOCADOS","COMPARECERAM","PENDENTES","ENCAMINHAMENTOS","SITUACAO"])
     for r in company_rows:
-        total=r["total"] or 0; ws.append([campaign["unit_name"],month_label(campaign["month"],campaign["year"]),format_cnpj(r["cnpj"]),r["name"],r["email"],r["email_cc"],total,r["attended"] or 0,r["pending"] or 0,r["attachments"] or 0,"COM PERIODICOS" if total else "SEM PERIODICOS"])
+        total=r["total"] or 0; ws.append([campaign["unit_name"],month_label(campaign["month"],campaign["year"]),format_documento(r["cnpj"]),r["name"],r["email"],r["email_cc"],total,r["attended"] or 0,r["pending"] or 0,r["attachments"] or 0,"COM PERIODICOS" if total else "SEM PERIODICOS"])
     style_export_header(ws)
-    ws2=wb.create_sheet("CONVOCADOS"); ws2.append(["UNIDADE","COMPETENCIA","CNPJ","EMPRESA","CPF","COLABORADOR","SETOR","CARGO","ADMISSAO","STATUS","DATA_COMPARECIMENTO","METODO_COMPARACAO"])
-    for v in convos: ws2.append([campaign["unit_name"],month_label(campaign["month"],campaign["year"]),format_cnpj(v["cnpj"]),v["company"],format_cpf(v["cpf"]),v["employee_name"],v["sector"],v["role"],v["admission_date"],"COMPARECEU" if v["attended"] else "PENDENTE",v["attendance_date"],v["match_method"]])
-    style_export_header(ws2); ws3=wb.create_sheet("ERROS"); ws3.append(["ARQUIVO","LINHA","CNPJ","COLABORADOR","ERRO"])
+    ws2=wb.create_sheet("CONVOCADOS"); ws2.append(["UNIDADE","COMPETENCIA","CNPJ/CPF","EMPRESA","CPF","COLABORADOR","SETOR","CARGO","ADMISSAO","STATUS","DATA_COMPARECIMENTO","METODO_COMPARACAO"])
+    for v in convos: ws2.append([campaign["unit_name"],month_label(campaign["month"],campaign["year"]),format_documento(v["cnpj"]),v["company"],format_cpf(v["cpf"]),v["employee_name"],v["sector"],v["role"],v["admission_date"],"COMPARECEU" if v["attended"] else "PENDENTE",v["attendance_date"],v["match_method"]])
+    style_export_header(ws2); ws3=wb.create_sheet("ERROS"); ws3.append(["ARQUIVO","LINHA","CNPJ/CPF","COLABORADOR","ERRO"])
     for e in errors: ws3.append([e["source_file"],e["row_number"],e["company_cnpj"],e["employee_name"],e["error"]])
     style_export_header(ws3); bio=io.BytesIO(); wb.save(bio); bio.seek(0); name=f"BASE_CONVOCACAO_{campaign['unit_name']}_{MONTHS[campaign['month']]}_{campaign['year']}.xlsx".replace(" ","_")
     return send_file(bio,as_attachment=True,download_name=name,mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -2378,8 +2420,8 @@ def campaign_export(campaign_id):
 
 @app.route("/campaigns/<int:campaign_id>/pending.xlsx")
 def pending_export(campaign_id):
-    campaign=get_campaign_or_404(campaign_id); conn=db(); rows=conn.execute("SELECT c.cnpj,c.name company,v.* FROM convocations v JOIN companies c ON c.id=v.company_id WHERE v.campaign_id=? AND v.attended=0 ORDER BY c.name,v.employee_name",(campaign_id,)).fetchall(); conn.close(); wb=Workbook(); ws=wb.active; ws.title="FALTANTES"; ws.append(["UNIDADE","COMPETENCIA","CNPJ","EMPRESA","CPF","COLABORADOR","CARGO","ADMISSAO"])
-    for v in rows: ws.append([campaign["unit_name"],month_label(campaign["month"],campaign["year"]),format_cnpj(v["cnpj"]),v["company"],format_cpf(v["cpf"]),v["employee_name"],v["role"],v["admission_date"]])
+    campaign=get_campaign_or_404(campaign_id); conn=db(); rows=conn.execute("SELECT c.cnpj,c.name company,v.* FROM convocations v JOIN companies c ON c.id=v.company_id WHERE v.campaign_id=? AND v.attended=0 ORDER BY c.name,v.employee_name",(campaign_id,)).fetchall(); conn.close(); wb=Workbook(); ws=wb.active; ws.title="FALTANTES"; ws.append(["UNIDADE","COMPETENCIA","CNPJ/CPF","EMPRESA","CPF","COLABORADOR","CARGO","ADMISSAO"])
+    for v in rows: ws.append([campaign["unit_name"],month_label(campaign["month"],campaign["year"]),format_documento(v["cnpj"]),v["company"],format_cpf(v["cpf"]),v["employee_name"],v["role"],v["admission_date"]])
     style_export_header(ws); bio=io.BytesIO(); wb.save(bio); bio.seek(0); return send_file(bio,as_attachment=True,download_name=f"FALTANTES_{campaign['unit_name']}_{MONTHS[campaign['month']]}_{campaign['year']}.xlsx".replace(" ","_"),mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 

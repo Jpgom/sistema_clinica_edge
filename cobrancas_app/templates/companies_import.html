@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block title %}Importar cadastro completo · EDGE Cobranças{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">CADASTRO COMPLETO EM LOTE</div>
+    <h1>Importar empresas</h1>
+    <p>Uma única planilha cadastra unidade, CNPJ/CPF, empresa, e-mails, mensalidade, regra de complementares e preços.</p>
+  </div>
+  <div class="page-actions"><a class="btn btn-ghost" href="{{ url_for('companies') }}">Voltar</a></div>
+</div>
+
+<div class="grid grid-2">
+  <div class="card upload-stage">
+    <div class="stage-number">1</div>
+    <h2>Baixe o modelo único</h2>
+    <p class="small-muted">O modelo já traz as colunas dos exames complementares ativos cadastrados no sistema.</p>
+    <a class="btn btn-secondary" href="{{ url_for('companies_import_model') }}">Baixar modelo completo</a>
+  </div>
+  <div class="card upload-stage">
+    <div class="stage-number">2</div>
+    <h2>Preencha e importe</h2>
+    <p class="small-muted">Não precisa escolher a unidade no site. A unidade vem em cada linha da própria planilha.</p>
+    <form method="post" enctype="multipart/form-data" class="import-form">
+      <input class="form-control" type="file" name="file" accept=".xlsx,.xlsm" required>
+      <button class="btn btn-primary">Importar cadastro completo</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <h2>O que entra de uma vez</h2>
+  <div class="stats-row">
+    <div><span>UNIDADE</span><strong>Por empresa</strong></div>
+    <div><span>CNPJ/CPF</span><strong>Obrigatório</strong></div>
+    <div><span>EMPRESA</span><strong>Obrigatório</strong></div>
+    <div><span>EMAIL / EMAIL_CC</span><strong>Cobrança</strong></div>
+    <div><span>VALOR_FIXO_MENSAL</span><strong>Mensalidade</strong></div>
+    <div><span>ATIVA</span><strong>SIM / NÃO</strong></div>
+    <div><span>COMPLEMENTARES</span><strong>SIM / NÃO</strong></div>
+    <div><span>PREÇOS</span><strong>Na mesma linha</strong></div>
+  </div>
+  <div class="info-note"><strong>COMPLEMENTARES = SIM</strong><span>Preencha os valores dos serviços cobrados no fechamento mensal. Célula vazia significa sem preço/sem contratação daquele serviço.</span></div>
+  <div class="info-note"><strong>COMPLEMENTARES = NÃO</strong><span>A empresa paga os complementares no ato. Deixe as colunas de preços em branco.</span></div>
+  <div class="info-note"><strong>Pessoa física</strong><span>Use o CPF diretamente na coluna CNPJ/CPF. Não existe mais campo separado de CPF do dono.</span></div>
+  <div class="info-note"><strong>E-mails múltiplos</strong><span>Você pode informar vários endereços na coluna EMAIL separados por /, ; ou vírgula. O primeiro será o destinatário principal e os demais irão para EMAIL_CC.</span></div>
+  <div class="info-note"><strong>CNPJ/CPF com ou sem máscara</strong><span>São aceitos documentos formatados ou somente com números. O sistema normaliza o documento antes de cadastrar ou atualizar.</span></div>
+  <div class="info-note"><strong>Linhas repetidas do mesmo CNPJ/CPF</strong><span>Na mesma unidade, as linhas são consolidadas em um único cadastro. Quando houver mais de um VALOR_FIXO_MENSAL informado, os valores são somados.</span></div>
+  <div class="info-note"><strong>Atualização sem duplicidade</strong><span>Se o mesmo CNPJ/CPF já existir na mesma unidade, o sistema atualiza os dados e os preços da empresa.</span></div>
+</div>
+
+{% if result and not result.ok %}
+<div class="card"><h2>Problemas encontrados</h2><p class="small-muted">Nenhum cadastro foi alterado. Corrija apenas os itens abaixo e importe novamente.</p>{% if result.details %}<div class="notice-box"><ul>{% for x in result.details %}<li>{{ x }}</li>{% endfor %}</ul></div>{% endif %}</div>
+{% endif %}
+{% if result and result.ok %}
+<div class="card">
+  <h2>Resultado da importação</h2>
+  <div class="stats-row">
+    <div><strong>{{ result.added }}</strong><span>Novas empresas</span></div>
+    <div><strong>{{ result.updated }}</strong><span>Atualizadas</span></div>
+    <div><strong>{{ result.prices_saved }}</strong><span>Preços gravados</span></div>
+    <div><strong>{{ result.skipped }}</strong><span>Linhas ignoradas</span></div>
+    {% if result.merged_rows is defined %}<div><strong>{{ result.merged_rows }}</strong><span>Linhas consolidadas</span></div>{% endif %}
+  </div>
+  <p class="small-muted">Unidades processadas: {{ result.units }} · {{ result.exam_columns }} coluna(s) de complementares reconhecida(s).</p>
+  {% if result.details %}<div class="notice-box"><strong>Observações</strong><ul>{% for x in result.details %}<li>{{ x }}</li>{% endfor %}</ul></div>{% endif %}
+  <div class="page-actions" style="margin-top:14px"><a class="btn btn-primary" href="{{ url_for('companies') }}">Ver empresas</a></div>
+</div>
+{% endif %}
+{% endblock %}

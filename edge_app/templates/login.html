@@ -35,14 +35,14 @@
         {% endfor %}
       {% endif %}
     {% endwith %}
-    <form method="post">
+    <form method="post" autocomplete="off">
       <div class="field">
         <label for="username">Usuário</label>
-        <input id="username" name="username" type="text" required autocomplete="username">
+        <input id="username" name="username" type="text" required autocomplete="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
       </div>
       <div class="field">
         <label for="password">Senha</label>
-        <input id="password" name="password" type="password" required autocomplete="current-password">
+        <input id="password" name="password" type="password" required autocomplete="new-password" data-lpignore="true" data-1p-ignore="true">
       </div>
       <div class="actions">
         <button class="btn btn--primary" type="submit">Entrar</button>
@@ -51,6 +51,12 @@
     <button type="button" class="edge-theme-toggle edge-auth-theme" id="edgeThemeToggle" aria-label="Ativar tema escuro"><span class="edge-theme-icon" aria-hidden="true">☾</span><span class="edge-theme-text">Tema escuro</span></button>
   </section>
 </div>
+<script>
+window.addEventListener('pageshow', function () {
+  var password = document.getElementById('password');
+  if (password) password.value = '';
+});
+</script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 
 <script src="{{ url_for('static', filename='ui-shell.js') }}?v=edge-ui-20260924"></script>

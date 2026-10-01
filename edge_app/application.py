@@ -524,6 +524,10 @@ def apply_security_headers(response):
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     if request.is_secure or os.environ.get("RENDER"):
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    if (request.endpoint or '') in {'login', 'setup_admin'}:
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
     return response
 
 @app.before_request
@@ -541,7 +545,7 @@ def require_login():
     if not auth_is_logged_in():
         return redirect(url_for('login', next=request.path))
     validate_csrf()
-    session.permanent = True
+    session.permanent = False
     user = auth_current_user()
     if row_get(user, 'precisa_trocar_senha', 0) and endpoint not in {'minha_conta', 'logout'}:
         flash('Por segurança, altere sua senha antes de continuar.', 'warning')
@@ -571,7 +575,7 @@ def setup_admin():
         if ok:
             user = auth_get_user_by_username(username)
             session.clear()
-            session.permanent = True
+            session.permanent = False
             session['user_id'] = int(row_get(user, 'id'))
             session['username'] = row_get(user, 'username')
             session['cargo'] = row_get(user, 'cargo')
@@ -592,7 +596,7 @@ def login():
         user = auth_get_user_by_username(username)
         if user and int(row_get(user, 'ativo', 0)) == 1 and check_password_hash(row_get(user, 'password_hash'), password):
             session.clear()
-            session.permanent = True
+            session.permanent = False
             session['user_id'] = int(row_get(user, 'id'))
             session['username'] = row_get(user, 'username')
             session['cargo'] = row_get(user, 'cargo')

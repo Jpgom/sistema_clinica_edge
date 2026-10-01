@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Simulação · EDGE Cobranças{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('competency_detail',competency_id=comp.id) }}">{{ month_label(comp.month,comp.year) }}</a><span>›</span><span>Simulação</span></div>
+<div class="page-head"><div><div class="eyebrow">CONFERÊNCIA ANTES DO ENVIO</div><h1>Simular cobranças</h1><p>Esta tela não envia mensagens. Confira o mesmo conteúdo que será usado no envio conjunto.</p></div></div>
+{% include '_competency_nav.html' %}
+<div class="simulation-callout"><strong>{{ combined_items|length }} e-mail(s) pronto(s)</strong><p>Mensalidades: {{ money(combined_fixed_total) }} · Complementares: {{ money(combined_comp_total) }} · Total: {{ money(combined_fixed_total+combined_comp_total) }}</p><p>{{ combined_blocked|length }} e-mail(s) aguardando correção. Mensalidade e complementares pendentes de cada empresa vão na mesma mensagem.</p></div>
+{% include '_combined_review_table.html' %}
+<div class="form-actions"><a class="btn btn-ghost" href="{{ url_for('competency_detail',competency_id=comp.id) }}">Voltar à competência</a><a class="btn btn-primary" href="{{ url_for('competency_review',competency_id=comp.id) }}">Ir para revisão e envio →</a></div>
+{% endblock %}

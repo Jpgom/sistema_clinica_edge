@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block title %}Preços em lote · EDGE Cobranças{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">ETAPA 2 · PREÇOS DOS COMPLEMENTARES</div>
+    <h1>Cadastrar preços em lote</h1>
+    <p>A planilha é montada automaticamente com os exames cadastrados no sistema e somente com empresas que são faturadas no mês.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-secondary" href="{{ url_for('exam_types') }}">Tipos de exames</a>
+    <a class="btn btn-ghost" href="{{ url_for('companies') }}">Voltar</a>
+  </div>
+</div>
+
+<div class="grid grid-2">
+  <div class="card">
+    <h2>1. Cadastre os tipos de exames</h2>
+    <p class="small-muted">Cada exame ativo vira uma coluna na planilha de preços.</p>
+    <a class="btn btn-secondary" href="{{ url_for('exam_types') }}">Gerenciar tipos de exames</a>
+  </div>
+  <div class="card">
+    <h2>2. Baixe a planilha de preços</h2>
+    <p class="small-muted">Ela já virá com as empresas faturadas no mês. Empresas PAGO NO ATO ficam fora dessa etapa.</p>
+    <form method="get" action="{{ url_for('prices_import_model') }}">
+      <div class="form-group">
+        <label>UNIDADE</label>
+        <select class="form-control" name="unit_id" required>
+          <option value="">Selecione...</option>
+          {% for u in units %}<option value="{{ u.id }}" {% if selected_unit==u.id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-secondary">Baixar planilha de preços</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Como preencher sem repetir valores</h2>
+  <div class="price-flow">
+    <div class="price-flow-step"><strong>A</strong><span><b>TABELAS_PRECOS</b><small>Crie PADRÃO A, PADRÃO B etc. e informe cada preço uma única vez.</small></span></div>
+    <div class="price-flow-step"><strong>B</strong><span><b>EMPRESAS</b><small>Informe apenas qual tabela cada empresa usa.</small></span></div>
+    <div class="price-flow-step"><strong>C</strong><span><b>Importar</b><small>O sistema aplica todos os preços da tabela às empresas vinculadas.</small></span></div>
+  </div>
+  <div class="info-note"><strong>Exemplo</strong><span>Se 30 empresas usam os mesmos valores, todas podem usar “PADRÃO A”. Você preenche os valores uma única vez.</span></div>
+</div>
+
+<div class="card">
+  <h2>3. Envie a planilha preenchida</h2>
+  <form method="post" enctype="multipart/form-data" class="import-form">
+    <select class="form-control" name="unit_id" required>
+      <option value="">Selecione a unidade...</option>
+      {% for u in units %}<option value="{{ u.id }}" {% if selected_unit==u.id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}
+    </select>
+    <input class="form-control" type="file" name="file" accept=".xlsx,.xlsm" required>
+    <button class="btn btn-primary">Aplicar preços às empresas</button>
+  </form>
+</div>
+
+{% if result and result.ok %}
+<div class="card">
+  <h2>Resultado · {{ result.unit_name }}</h2>
+  <div class="stats-row">
+    <div><strong>{{ result.applied }}</strong><span>Empresas processadas</span></div>
+    <div><strong>{{ result.tables_count }}</strong><span>Tabelas encontradas</span></div>
+    <div><strong>{{ result.prices_added + result.prices_updated }}</strong><span>Preços aplicados</span></div>
+    <div><strong>{{ result.skipped }}</strong><span>Linhas ignoradas</span></div>
+  </div>
+  {% if result.details %}<div class="notice-box"><strong>Observações</strong><ul>{% for x in result.details %}<li>{{ x }}</li>{% endfor %}</ul></div>{% endif %}
+  <div class="page-actions" style="margin-top:14px"><a class="btn btn-primary" href="{{ url_for('companies', unit_id=selected_unit) }}">Concluir e ver empresas</a></div>
+</div>
+{% endif %}
+{% endblock %}

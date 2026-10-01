@@ -5,15 +5,17 @@
 - O módulo Envio Periódicos fica montado em `/envio-periodicos`.
 - A função Separar exames fica montada em `/separar-exames`.
 - O preenchimento de recibos integra o sistema principal em `/recibos`.
+- O módulo Cobranças fica montado em `/cobrancas` e é exclusivo para administradores.
 """
 from __future__ import annotations
 
 import os
+import sys
 
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from werkzeug.serving import run_simple
 
-from edge_app.application import app as edge_app
+from edge_app.application import app as edge_app, auth_get_user_by_id
 
 # Configuração padrão do módulo Envio Periódicos quando está integrado ao site principal.
 # O módulo usa SQLite e arquivos internos; em produção, a pasta abaixo deve ficar em disco persistente.
@@ -22,23 +24,40 @@ if _persist_root and "ENVIO_PERIODICOS_DATA_DIR" not in os.environ:
     os.environ["ENVIO_PERIODICOS_DATA_DIR"] = os.path.join(_persist_root, "envio_periodicos")
 if _persist_root and "SEPARAR_EXAMES_DATA_DIR" not in os.environ:
     os.environ["SEPARAR_EXAMES_DATA_DIR"] = os.path.join(_persist_root, "separar_exames")
+if _persist_root and "ENVIO_COBRANCAS_DATA_DIR" not in os.environ:
+    os.environ["ENVIO_COBRANCAS_DATA_DIR"] = os.path.join(_persist_root, "cobrancas")
 os.environ.setdefault("EDGE_LOCAL_AUTH", "0")
+# No módulo integrado, o login é o do Sistema EDGE e a área é exclusiva de administradores.
+os.environ.setdefault("ENVIO_COBRANCAS_PARENT_AUTH", "1")
 
 from pgr_app.app import app as pgr_app
 from envio_periodicos_app.app import app as envio_periodicos_app
 from separar_exames_app.app import app as separar_exames_app
 
+# O módulo de cobranças nasceu como aplicação standalone e mantém imports internos
+# compatíveis com essa origem. Inserir somente a pasta do módulo no sys.path
+# permite integrá-lo sem duplicar dependências ou alterar sua base de dados.
+_cobrancas_dir = os.path.join(os.path.dirname(__file__), "cobrancas_app")
+if _cobrancas_dir not in sys.path:
+    sys.path.insert(0, _cobrancas_dir)
+from cobrancas_app.app import app as cobrancas_app
+
 # Garante que os módulos leiam o mesmo cookie de sessão/login.
-for _mounted_app in (pgr_app, envio_periodicos_app, separar_exames_app):
+for _mounted_app in (pgr_app, envio_periodicos_app, separar_exames_app, cobrancas_app):
     _mounted_app.secret_key = edge_app.secret_key
     for key in ("SESSION_COOKIE_HTTPONLY", "SESSION_COOKIE_SAMESITE", "SESSION_COOKIE_SECURE"):
         _mounted_app.config[key] = edge_app.config.get(key)
+
+# A área de cobranças valida o usuário diretamente na mesma base de autenticação
+# do sistema principal. Assim, troca de cargo ou desativação tem efeito imediato.
+cobrancas_app.config["EDGE_PARENT_USER_LOOKUP"] = auth_get_user_by_id
 
 # `app` é o objeto usado pelo Gunicorn no Render: `gunicorn app:app`.
 app = DispatcherMiddleware(edge_app, {
     "/pgr": pgr_app,
     "/envio-periodicos": envio_periodicos_app,
     "/separar-exames": separar_exames_app,
+    "/cobrancas": cobrancas_app,
 })
 
 # Alias opcional para ferramentas que procuram `application`.

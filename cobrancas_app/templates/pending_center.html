@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% macro status_badge(s) -%}
+<span class="status {{ 'status-ok' if s.kind=='ok' else ('status-warn' if s.kind=='warn' else ('status-error' if s.kind=='error' else '')) }}">{{ s.label }}</span>
+{%- endmacro %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('dashboard') }}">Início</a><span>›</span><a href="{{ url_for('unit_dashboard',unit_id=comp.unit_id) }}">{{ comp.unit_name }}</a><span>›</span><a href="{{ url_for('competency_detail',competency_id=comp.id) }}">{{ month_label(comp.month,comp.year) }}</a><span>›</span><span>Central de Pendências</span></div>
+<div class="page-head pending-head"><div><div class="eyebrow">CONFERÊNCIA OPERACIONAL</div><h1>Central de Pendências</h1><p>{{ month_label(comp.month,comp.year) }} · {{ comp.unit_name }}. Veja o que impede o envio, o que já está pronto e o que aguarda pagamento.</p></div><div class="page-actions"><a class="btn btn-secondary" href="{{ url_for('competency_detail',competency_id=comp.id) }}">Voltar à competência</a></div></div>
+
+{% if active_job %}<div class="alert alert-warning"><strong>Existe um envio em andamento.</strong> Evite alterar documentos ou cadastros até o processo terminar.</div>{% endif %}
+{% if not gmail_ready %}<div class="alert alert-error"><strong>Gmail ainda não está pronto para envio.</strong> Revise a configuração do remetente e a senha de app em <a href="{{ url_for('settings') }}">Configurações</a>.</div>{% elif test_mode_warning %}<div class="alert alert-error"><strong>Modo de teste incompleto.</strong> Informe um e-mail de teste válido em <a href="{{ url_for('settings') }}">Configurações</a>.</div>{% elif test_mode %}<div class="alert alert-warning"><strong>Modo de teste ativo.</strong> Os disparos serão redirecionados para {{ test_email or 'o e-mail de teste configurado' }}.</div>{% endif %}
+{% if not control_processed %}<div class="alert alert-warning"><strong>A planilha de controle ainda não foi processada.</strong> A Central consegue validar mensalidades, mas os complementares ficarão como “AGUARDA CONTROLE” até a apuração mensal ser feita.</div>{% endif %}
+
+<div class="kpi-grid five pending-kpis">
+  <div class="kpi-card"><span>Empresas</span><strong>{{ counts.total }}</strong></div>
+  <a class="kpi-card pending-kpi-link pending-kpi-danger" href="{{ url_for('competency_pending',competency_id=comp.id,filter='blocking') }}"><span>Com pendência</span><strong>{{ counts.blocking }}</strong><small>Precisa corrigir</small></a>
+  <a class="kpi-card pending-kpi-link pending-kpi-ready" href="{{ url_for('competency_pending',competency_id=comp.id,filter='ready') }}"><span>Prontas para envio</span><strong>{{ counts.ready }}</strong><small>Pelo menos uma cobrança pronta</small></a>
+  <a class="kpi-card pending-kpi-link pending-kpi-warn" href="{{ url_for('competency_pending',competency_id=comp.id,filter='payment') }}"><span>Aguardando pagamento</span><strong>{{ counts.payment }}</strong><small>Já enviadas</small></a>
+  <a class="kpi-card pending-kpi-link" href="{{ url_for('competency_pending',competency_id=comp.id,filter='complete') }}"><span>Concluídas</span><strong>{{ counts.complete }}</strong><small>Tudo pago</small></a>
+</div>
+
+<div class="pending-reasons-grid">
+  <div><span>Sem e-mail</span><strong>{{ counts.no_email }}</strong></div>
+  <div><span>Sem documento</span><strong>{{ counts.no_docs }}</strong></div>
+  <div><span>Sem preço</span><strong>{{ counts.unpriced }}</strong></div>
+  <div><span>Sem valor fixo</span><strong>{{ counts.no_value }}</strong></div>
+</div>
+
+<div class="card pending-filter-card">
+  <form method="get" class="pending-filter-form">
+    <div class="search-wrap"><label class="form-label">Pesquisar empresa</label><input class="form-control" name="q" value="{{ q }}" placeholder="Nome, CNPJ/CPF ou e-mail"></div>
+    <div><label class="form-label">Mostrar</label><select class="form-control" name="filter"><option value="all" {{ 'selected' if selected_filter=='all' }}>Todas</option><option value="blocking" {{ 'selected' if selected_filter=='blocking' }}>Somente pendências</option><option value="ready" {{ 'selected' if selected_filter=='ready' }}>Prontas para enviar</option><option value="payment" {{ 'selected' if selected_filter=='payment' }}>Aguardando pagamento</option><option value="complete" {{ 'selected' if selected_filter=='complete' }}>Concluídas</option></select></div>
+    <div class="pending-filter-actions"><button class="btn btn-primary">Filtrar</button><a class="btn btn-ghost" href="{{ url_for('competency_pending',competency_id=comp.id) }}">Limpar</a></div>
+  </form>
+</div>
+
+<div class="card no-pad pending-table-card"><div class="table-toolbar"><div><h2>Empresas</h2><p>{{ items|length }} resultado(s). As pendências abaixo refletem exatamente as travas usadas antes do envio.</p></div></div><div class="table-wrap"><table class="table pending-table"><thead><tr><th>Empresa</th><th>Situação geral</th><th>Mensalidade</th><th>Complementares</th><th>O que falta</th><th></th></tr></thead><tbody>
+{% for c in items %}<tr class="pending-row-{{ c.overall_state.kind }}"><td><strong>{{ c.name }}</strong><span class="row-subtitle">{{ format_document(c.cnpj) }} · {{ c.email or 'SEM E-MAIL' }}</span></td><td>{{ status_badge(c.overall_state) }}</td><td>{{ status_badge(c.fixed_state) }}<span class="row-subtitle">{{ money(c.fixed_amount) }} · {{ c.fixed_docs }} doc(s)</span></td><td>{{ status_badge(c.comp_state) }}{% if c.bill_complementaries %}<span class="row-subtitle">{{ money(c.complementary_amount) }} · {{ c.exam_count }} exame(s) · {{ c.comp_docs }} doc(s)</span>{% else %}<span class="row-subtitle">Não faturado no mês</span>{% endif %}</td><td>{% if c.blockers %}<ul class="pending-issue-list">{% for b in c.blockers %}<li>{{ b }}</li>{% endfor %}</ul>{% elif c.overall_state.code=='READY' %}<span class="pending-clean">Pronto para envio.</span>{% elif c.overall_state.code=='PAYMENT' %}<span class="small-muted">Cobrança enviada; aguarda pagamento.</span>{% elif c.overall_state.code=='COMPLETE' %}<span class="pending-clean">Cobrança concluída.</span>{% elif c.overall_state.code=='WAIT_CONTROL' %}<span class="small-muted">Processar a planilha de controle.</span>{% else %}<span class="small-muted">Nenhuma ação imediata.</span>{% endif %}</td><td class="right"><div class="row-actions" style="justify-content:flex-end">{% if c.fixed_state.code in ['NO_EMAIL','NO_VALUE','INACTIVE'] or c.comp_state.code in ['NO_EMAIL','INACTIVE','UNPRICED'] %}<a class="btn btn-sm btn-warning" href="{{ url_for('company_edit',company_id=c.company_id) }}">Corrigir cadastro</a>{% endif %}<a class="btn btn-sm btn-secondary" href="{{ url_for('competency_company',competency_id=comp.id,company_id=c.company_id) }}">Detalhes</a></div></td></tr>{% else %}<tr><td colspan="6">Nenhuma empresa encontrada com este filtro.</td></tr>{% endfor %}
+</tbody></table></div></div>
+
+<div class="notice-box pending-legend"><strong>Como interpretar</strong><div><span class="status status-error">PENDÊNCIA</span> bloqueia uma cobrança até ser corrigida. <span class="status status-ok">PRONTO PARA ENVIAR</span> significa que e-mail, valor e documentos estão completos. <span class="status status-warn">AGUARDANDO PAGAMENTO</span> significa que o e-mail já foi enviado e pode receber lembrete enquanto não for marcado como pago.</div></div>
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends 'base.html' %}{% block title %}Cobranças agrupadas · EDGE{% endblock %}{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('registrations') }}">Cadastros</a><span>›</span><span>Cobranças agrupadas</span></div>
+<div class="page-head"><div><div class="eyebrow">CONFIGURAÇÃO PERMANENTE</div><h1>Cobranças agrupadas</h1><p>Escolha quais empresas terão valores somados em um único e-mail, com os documentos da responsável.</p></div><a class="btn btn-primary" href="{{ url_for('billing_group_edit') }}">Criar grupo</a></div>
+<div class="notice-box">O agrupamento é configurado por você. Empresas com o mesmo e-mail continuam recebendo cobranças separadas até serem incluídas em um grupo. O grupo vale dentro da mesma unidade e você escolhe mensalidade, complementares ou ambas.</div>
+<div class="card no-pad"><div class="table-wrap"><table class="table"><thead><tr><th>Grupo</th><th>Responsável e destinatário</th><th>Empresas</th><th>Modalidades</th><th>Ações</th></tr></thead><tbody>
+{% for g in groups %}<tr><td><strong>{{ g.name }}</strong><span class="row-subtitle">{{ g.unit_name }}</span></td><td>{{ g.primary_name }}<span class="row-subtitle">{{ g.email or 'E-mail não cadastrado' }}</span></td><td>{{ g.member_count }}</td><td>{% if g.consolidate_fixed %}<span class="status">Mensalidade</span>{% endif %} {% if g.consolidate_complementary %}<span class="status">Complementares</span>{% endif %}</td><td><a class="btn btn-secondary btn-sm" href="{{ url_for('billing_group_edit',group_id=g.id) }}">Editar grupo</a></td></tr>
+{% else %}<tr><td colspan="5"><div class="empty-state"><h2>Sem grupos configurados</h2><p>Exemplo: empresa A e empresa B → um e-mail para A, anexos de A e valor total A + B. Crie um grupo e confira a prévia antes do envio.</p></div></td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

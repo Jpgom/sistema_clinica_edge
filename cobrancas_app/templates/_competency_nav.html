@@ -1,0 +1,7 @@
+<div class="process-nav">
+<a class="process-step {{ 'active' if request.endpoint=='competency_detail' }}" href="{{ url_for('competency_detail',competency_id=comp.id) }}"><span>0</span><div><strong>Resumo</strong><small>Pendências e próxima ação</small></div></a>
+<a class="process-step {{ 'active' if request.endpoint=='competency_apuration_page' }}" href="{{ url_for('competency_apuration_page',competency_id=comp.id) }}"><span>1</span><div><strong>Apurar</strong><small>Planilha de controle</small></div></a>
+<a class="process-step {{ 'active' if request.endpoint=='competency_documents_page' }}" href="{{ url_for('competency_documents_page',competency_id=comp.id) }}"><span>2</span><div><strong>Documentos</strong><small>Mensalidade e complementares</small></div></a>
+<a class="process-step {{ 'active' if request.endpoint=='competency_review' }}" href="{{ url_for('competency_review',competency_id=comp.id) }}"><span>3</span><div><strong>Revisar e enviar</strong><small>Conferência final</small></div></a>
+<a class="process-step {{ 'active' if request.endpoint=='competency_payments_page' }}" href="{{ url_for('competency_payments_page',competency_id=comp.id) }}"><span>4</span><div><strong>Pagamentos</strong><small>Baixas e lembretes</small></div></a>
+</div>

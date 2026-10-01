@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% block title %}Configurar grupo · EDGE{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('billing_groups') }}">Cobranças agrupadas</a><span>›</span><span>{{ 'Editar' if group else 'Criar' }} grupo</span></div>
+<div class="page-head"><div><h1>{{ 'Editar' if group else 'Criar' }} grupo de cobrança</h1><p>A empresa principal fornece o destinatário, as cópias e todos os anexos do e-mail consolidado.</p></div></div>
+{% set form = submitted if submitted is defined else {} %}
+{% set selected_unit = group.unit_id if group else (form.get('unit_id')|int if form else (units[0].id if units else 0)) %}
+{% set selected_primary = form.get('primary_company_id')|int if form else (group.primary_company_id if group else 0) %}
+{% if not units and not group %}<div class="alert alert-warning">Cadastre uma unidade ativa antes de criar um grupo. <a href="{{ url_for('units') }}">Abrir unidades</a>.</div>{% endif %}
+<form method="post" id="billingGroupForm">
+<div class="card"><div class="grid grid-2">
+  <div class="form-group"><label for="groupName">Nome do grupo</label><input id="groupName" class="form-control" name="name" required maxlength="120" value="{{ form.get('name', group.name if group else '') }}" placeholder="Ex.: Grupo A e B"></div>
+  <div class="form-group"><label for="groupUnit">Unidade</label><select id="groupUnit" class="form-control" name="{{ 'unit_display' if group else 'unit_id' }}" required {% if group %}disabled{% endif %}>{% if group and not units|selectattr('id','equalto',group.unit_id)|list %}<option value="{{ group.unit_id }}" selected>Unidade do grupo (inativa)</option>{% endif %}{% for u in units %}<option value="{{ u.id }}" {% if selected_unit==u.id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}</select>{% if group %}<input type="hidden" name="unit_id" value="{{ group.unit_id }}"><small class="muted">A unidade é definida na criação do grupo.</small>{% endif %}</div>
+  <div class="form-group"><label for="primaryCompany">Empresa principal</label><select id="primaryCompany" class="form-control" name="primary_company_id" required><option value="">Selecione</option>{% for c in companies %}{% set assigned_elsewhere = c.group_id and (not group or c.group_id != group.id) %}<option value="{{ c.id }}" data-unit="{{ c.unit_id }}" data-assigned-elsewhere="{{ '1' if assigned_elsewhere else '0' }}" {% if selected_primary==c.id %}selected{% endif %} {% if assigned_elsewhere %}disabled{% endif %}>{{ c.name }} · {{ format_document(c.cnpj) }} · {{ c.email or 'sem e-mail' }}{% if assigned_elsewhere %} · pertence a {{ c.billing_group_name }}{% endif %}</option>{% endfor %}</select><small class="muted">Importe os documentos apenas no nome/CNPJ desta empresa. Ela participa automaticamente do grupo.</small></div>
+  <fieldset class="form-group group-modalities" style="border:0;padding:0;margin:0"><legend style="font-size:inherit;font-weight:700;margin-bottom:8px">Modalidades agrupadas</legend><label class="checkbox-line"><input type="checkbox" name="consolidate_fixed" {% if (form.get('consolidate_fixed') if form else (group.consolidate_fixed if group else true)) %}checked{% endif %}> Mensalidades</label><label class="checkbox-line"><input type="checkbox" name="consolidate_complementary" {% if (form.get('consolidate_complementary') if form else (group.consolidate_complementary if group else true)) %}checked{% endif %}> Exames complementares</label></fieldset>
+</div></div>
+<div class="card"><h2>Empresas participantes</h2><p class="muted">Selecione as empresas cujos valores deverão compor a cobrança. Empresas pagas não entram no total do próximo envio; os pagamentos continuam registrados individualmente.</p><div class="form-group"><label for="memberFilter">Buscar empresa nesta unidade</label><input class="form-control" id="memberFilter" type="search" placeholder="Nome ou CNPJ/CPF"></div><p id="groupSelectionStatus" class="small-muted" role="status" aria-live="polite"></p>
+<div class="table-wrap"><table class="table"><thead><tr><th>Incluir</th><th>Empresa</th><th>E-mail cadastrado</th><th>Grupo atual</th></tr></thead><tbody>{% for c in companies %}{% set assigned_elsewhere = c.group_id and (not group or c.group_id != group.id) %}<tr data-member-unit="{{ c.unit_id }}" data-search="{{ c.name }} {{ c.cnpj }}"><td><input aria-label="Incluir {{ c.name }}" type="checkbox" name="company_ids" value="{{ c.id }}" data-assigned-elsewhere="{{ '1' if assigned_elsewhere else '0' }}" {% if (c.id|string in form.getlist('company_ids') if form else c.id in selected_members) %}checked{% endif %} {% if assigned_elsewhere %}disabled{% endif %}></td><td><strong>{{ c.name }}</strong><span class="row-subtitle">{{ format_document(c.cnpj) }}</span></td><td>{{ c.email or '—' }}</td><td>{{ c.billing_group_name or 'Individual' }}<span class="row-subtitle" data-primary-caption></span></td></tr>{% else %}<tr><td colspan="4">Nenhuma empresa ativa cadastrada.</td></tr>{% endfor %}</tbody></table></div>
+<div id="groupValidation" class="alert alert-error hidden" role="alert"></div>
+<div class="notice-box">Os valores vêm de cada empresa na competência. A soma será apresentada na revisão e na prévia. Confira se os documentos da empresa principal foram emitidos com esse mesmo total.</div></div>
+<div class="form-actions"><a class="btn btn-ghost" href="{{ url_for('billing_groups') }}">Cancelar</a><button class="btn btn-primary" type="submit" {% if not units and not group %}disabled{% endif %}>Salvar grupo</button></div></form>
+{% if group %}<details class="card" style="margin-top:24px"><summary>Mais opções</summary><p>Desfazer o grupo mantém valores, documentos, pagamentos e histórico. Próximos envios passam a ser individuais.</p><form method="post" action="{{ url_for('billing_group_delete',group_id=group.id) }}" onsubmit="return confirm('Desfazer este grupo e voltar aos envios individuais?')"><button class="btn btn-ghost-danger" type="submit">Desfazer grupo</button></form></details>{% endif %}
+{% endblock %}
+{% block scripts %}<script>
+(() => {
+  const form=document.getElementById('billingGroupForm'),unit=document.getElementById('groupUnit'),primary=document.getElementById('primaryCompany'),search=document.getElementById('memberFilter'),status=document.getElementById('groupSelectionStatus'),validation=document.getElementById('groupValidation');
+  const rows=Array.from(document.querySelectorAll('[data-member-unit]'));
+  const normalize=value=>String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[.\/-]/g,'').trim();
+  function updateSelection(){
+    const currentRows=rows.filter(row=>row.dataset.memberUnit===unit.value);
+    let selected=0,hiddenSelected=0;
+    for(const row of rows){
+      const input=row.querySelector('input'),isPrimary=input.value===primary.value&&row.dataset.memberUnit===unit.value;
+      const blocked=input.dataset.assignedElsewhere==='1';
+      input.disabled=blocked||row.dataset.memberUnit!==unit.value||isPrimary;
+      if(isPrimary&&!blocked)input.checked=true;
+      row.querySelector('[data-primary-caption]').textContent=isPrimary?'Principal · incluída automaticamente':'';
+      if(input.checked&&row.dataset.memberUnit===unit.value&&!blocked){selected++;if(row.hidden)hiddenSelected++;}
+    }
+    const visible=currentRows.filter(row=>!row.hidden).length;
+    status.textContent=selected+' empresa(s) selecionada(s)'+(primary.value?', incluindo a principal.':'; escolha a principal.')+' '+visible+' empresa(s) exibida(s).'+(hiddenSelected?' '+hiddenSelected+' selecionada(s) fora da busca; a seleção foi mantida.':'');
+    return selected;
+  }
+  function filter(){
+    const query=normalize(search.value);
+    for(const option of primary.options){
+      if(!option.value)continue;
+      option.hidden=option.dataset.unit!==unit.value;
+      option.disabled=option.hidden||option.dataset.assignedElsewhere==='1';
+    }
+    if(primary.selectedOptions[0]?.disabled)primary.value='';
+    for(const row of rows){
+      const sameUnit=row.dataset.memberUnit===unit.value;
+      row.hidden=!sameUnit||!normalize(row.dataset.search).includes(query);
+      if(!sameUnit)row.querySelector('input').checked=false;
+    }
+    updateSelection();
+  }
+  unit.addEventListener('change',filter);
+  search.addEventListener('input',filter);
+  primary.addEventListener('change',updateSelection);
+  rows.forEach(row=>row.querySelector('input').addEventListener('change',updateSelection));
+  form.addEventListener('submit',event=>{
+    let message='';
+    if(updateSelection()<2)message='Selecione ao menos duas empresas, incluindo a principal.';
+    else if(!form.querySelector('[name="consolidate_fixed"]:checked,[name="consolidate_complementary"]:checked'))message='Escolha ao menos uma modalidade de cobrança.';
+    validation.textContent=message;validation.classList.toggle('hidden',!message);
+    if(message){event.preventDefault();validation.scrollIntoView({block:'center',behavior:'smooth'});}
+  });
+  filter();
+})();
+</script>{% endblock %}

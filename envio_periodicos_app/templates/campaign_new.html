@@ -20,7 +20,7 @@
 
         <section class="source-mode-card source-mode-directed">
           <div class="source-mode-head"><span class="source-mode-number">2</span><div><strong>Lista direcionada</strong><p>Para empresas em que você já sabe exatamente quem deve ser convocado.</p></div></div>
-          <div class="upload-box compact-upload"><div class="upload-icon">⇧</div><div><label for="campaign-new-directed"><strong>EMPRESA + NOME DO FUNCIONÁRIO</strong></label><p>Não precisa informar data de admissão. Todo nome enviado entra diretamente nesta competência.</p><a class="inline-download" href="{{ url_for('directed_campaign_template') }}">Baixar modelo simples</a></div><input class="form-control" id="campaign-new-directed" type="file" name="directed_files" accept=".xlsx,.zip" multiple></div>
+          <div class="upload-box compact-upload"><div class="upload-icon">⇧</div><div><label for="campaign-new-directed"><strong>EMPRESA / CNPJ + NOME DO FUNCIONÁRIO</strong></label><p>Não precisa informar data de admissão. Todo nome enviado entra diretamente nesta competência.</p><a class="inline-download" href="{{ url_for('directed_campaign_template') }}">Baixar modelo simples</a></div><input class="form-control" id="campaign-new-directed" type="file" name="directed_files" accept=".xlsx,.zip" multiple></div>
         </section>
       </div>
 
@@ -28,6 +28,6 @@
       <div class="form-actions"><a class="btn btn-ghost" href="{{ url_for('unit_dashboard',unit_id=selected_unit_id) if selected_unit_id else url_for('dashboard') }}">Cancelar</a><button class="btn btn-primary">Processar e criar</button></div>
     </form>
   </div>
-  <aside class="card help-card"><h3>Como cada opção funciona?</h3><ol class="clean-list"><li><strong>Base por admissão:</strong> considera colaboradores ativos e seleciona quem tiver ADMISSAO no mês da competência.</li><li><strong>Lista direcionada:</strong> considera todos os nomes enviados, sem olhar data de admissão.</li><li>Na lista direcionada, as únicas colunas obrigatórias são <strong>EMPRESA</strong> e <strong>NOME DO FUNCIONÁRIO</strong>.</li><li>O nome da empresa deve ser igual ao cadastro do sistema. Se houver dúvida, você também pode adicionar uma coluna <strong>CNPJ/CPF</strong>.</li><li>Na convocação, cada nome aparece uma única vez por empresa.</li><li>As duas formas alimentam a mesma competência e seguem o mesmo fluxo de e-mail, comparecimento e lembretes.</li></ol></aside>
+  <aside class="card help-card"><h3>Como cada opção funciona?</h3><ol class="clean-list"><li><strong>Base por admissão:</strong> considera colaboradores ativos e seleciona quem tiver ADMISSAO no mês da competência.</li><li><strong>Lista direcionada:</strong> considera todos os nomes enviados, sem olhar data de admissão.</li><li>Na lista direcionada, as únicas colunas obrigatórias são <strong>EMPRESA / CNPJ</strong> e <strong>NOME DO FUNCIONÁRIO</strong>.</li><li>Na coluna <strong>EMPRESA / CNPJ</strong>, você pode informar o nome cadastrado da empresa ou diretamente o CNPJ. O sistema identifica automaticamente qual formato foi usado.</li><li>Na convocação, cada nome aparece uma única vez por empresa.</li><li>As duas formas alimentam a mesma competência e seguem o mesmo fluxo de e-mail, comparecimento e lembretes.</li></ol></aside>
 </div>
 {% endblock %}

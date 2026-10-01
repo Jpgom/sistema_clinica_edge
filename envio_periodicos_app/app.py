@@ -1227,7 +1227,7 @@ def directed_campaign_template():
 
 # ---------------------------- COMPETÊNCIAS ----------------------------
 SOURCE_ALIASES = {
-    "company": {"EMPRESA", "NOMEEMPRESA", "RAZAOSOCIAL"},
+    "company": {"EMPRESA", "EMPRESACNPJ", "EMPRESACPF", "EMPRESADOCUMENTO", "NOMEEMPRESA", "RAZAOSOCIAL"},
     "cnpj": {"CNPJ", "CNPJEMPRESA", "CPFEMPRESA", "CNPJCPF", "CPFCNPJ", "DOCUMENTO", "DOCUMENTOEMPRESA", "IDENTIFICADOR", "IDENTIFICADOREMPRESA"},
     "name": {"NOME", "NOMEDOFUNCIONARIO", "NOMEFUNCIONARIO", "FUNCIONARIO", "COLABORADOR"},
     "sector": {"SETOR", "GES"},
@@ -1238,7 +1238,7 @@ SOURCE_ALIASES = {
 }
 
 DIRECTED_SOURCE_ALIASES = {
-    "company": {"EMPRESA", "NOMEEMPRESA", "RAZAOSOCIAL"},
+    "company": {"EMPRESA", "EMPRESACNPJ", "EMPRESACPF", "EMPRESADOCUMENTO", "NOMEEMPRESA", "RAZAOSOCIAL"},
     "cnpj": {"CNPJ", "CNPJEMPRESA", "CPFEMPRESA", "CNPJCPF", "CPFCNPJ", "DOCUMENTO", "DOCUMENTOEMPRESA"},
     "name": {"NOME", "NOMEDOFUNCIONARIO", "NOMEFUNCIONARIO", "FUNCIONARIO", "COLABORADOR"},
     "cpf": {"CPF", "CPFFUNCIONARIO", "CPFCOLABORADOR"},
@@ -1279,7 +1279,7 @@ def ensure_company(conn, cnpj, source_name):
 def resolve_directed_company(conn, company_value, document_value=""):
     """Localiza uma empresa da lista direcionada sem exigir data de admissão.
 
-    A planilha mínima pode conter apenas EMPRESA + NOME DO FUNCIONÁRIO.
+    A planilha mínima pode conter apenas EMPRESA / CNPJ + NOME DO FUNCIONÁRIO.
     CNPJ/CPF é aceito opcionalmente para eliminar ambiguidades.
     """
     document = company_document_digits(document_value)
@@ -1315,7 +1315,7 @@ def import_directed_campaign_sources(campaign_id, files, additive=True):
     """Importa uma lista direcionada de convocação.
 
     Regra principal: cada linha enviada já pertence à competência, portanto não há
-    filtro por ADMISSÃO. A planilha mínima exige apenas EMPRESA + NOME DO FUNCIONÁRIO.
+    filtro por ADMISSÃO. A planilha mínima exige apenas EMPRESA / CNPJ + NOME DO FUNCIONÁRIO.
     """
     conn = db()
     try:
@@ -1353,7 +1353,7 @@ def import_directed_campaign_sources(campaign_id, files, additive=True):
                         continue
                     row_count += 1
                     if not company_text or not employee_name:
-                        conn.execute("INSERT INTO import_errors(campaign_id,source_file,row_number,company_cnpj,employee_name,error) VALUES(?,?,?,?,?,?)", (campaign_id, filename, excel_row, "", employee_name, "Preencha EMPRESA e NOME DO FUNCIONÁRIO"))
+                        conn.execute("INSERT INTO import_errors(campaign_id,source_file,row_number,company_cnpj,employee_name,error) VALUES(?,?,?,?,?,?)", (campaign_id, filename, excel_row, "", employee_name, "Preencha EMPRESA / CNPJ e NOME DO FUNCIONÁRIO"))
                         errors += 1
                         continue
 
@@ -1385,7 +1385,7 @@ def import_directed_campaign_sources(campaign_id, files, additive=True):
                         target_count += 1
 
             if not parsed_sheet:
-                conn.execute("INSERT INTO import_errors(campaign_id,source_file,error) VALUES(?,?,?)", (campaign_id, filename, "Não encontrei as colunas EMPRESA e NOME DO FUNCIONÁRIO"))
+                conn.execute("INSERT INTO import_errors(campaign_id,source_file,error) VALUES(?,?,?)", (campaign_id, filename, "Não encontrei as colunas EMPRESA / CNPJ e NOME DO FUNCIONÁRIO"))
                 errors += 1
             conn.execute("INSERT OR IGNORE INTO campaign_source_imports(campaign_id,file_name,file_hash,import_type,imported_at) VALUES(?,?,?,?,?)", (campaign_id, filename, source_hash, 'directed', now_iso()))
 

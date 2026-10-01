@@ -46,7 +46,7 @@ from mail_transport import send_email
 from send_queue import SendQueue, migrate_send_queue, GROUP_LABELS, TERMINAL_JOB_STATES
 
 APP_NAME = "EDGE - Envio de cobranças"
-APP_VERSION = "V2.15 INTEGRADO"
+APP_VERSION = "V2.16 INTEGRADO"
 BASE_DIR = Path(__file__).resolve().parent
 BUNDLED_DATA_DIR = BASE_DIR / "data"
 DATA_DIR = Path(os.environ.get("ENVIO_COBRANCAS_DATA_DIR") or os.environ.get("DATA_DIR") or BUNDLED_DATA_DIR)
@@ -3705,6 +3705,98 @@ def resolve_send_result(job_id, group_id):
         return jsonify({"ok": False, "error": str(exc)}), 400
 
 
+def _email_error_guidance(raw_error, status="ERROR", delivery_result=None):
+    """Traduz erros técnicos de envio em orientação operacional simples."""
+    raw = str(raw_error or "").strip()
+    low = raw.lower()
+    delivery_result = delivery_result or {}
+    title = "Falha no envio do e-mail"
+    explanation = "O sistema não conseguiu concluir o envio desta cobrança."
+    steps = [
+        "Confira o e-mail principal e os e-mails em cópia no cadastro da empresa.",
+        "Corrija o cadastro ou a configuração indicada abaixo, se necessário.",
+        "Depois, use Reenviar somente erros ou o reenvio individual da empresa.",
+    ]
+    if status == "UNCERTAIN" or "conexão interrompida durante o envio" in low or "aceite pode ter ocorrido" in low:
+        title = "Envio sem confirmação"
+        explanation = "A conexão caiu durante a transmissão e o Gmail pode ter recebido a mensagem, mesmo sem o sistema conseguir confirmar."
+        steps = [
+            "Abra o Gmail da conta remetente e consulte a pasta Enviados.",
+            "Pesquise pelo nome da empresa, destinatário ou assunto da cobrança.",
+            "Se a mensagem estiver em Enviados, volte ao sistema e confirme que o envio ocorreu.",
+            "Se não estiver, confirme que não enviou para liberar uma nova tentativa.",
+        ]
+    elif status in {"PARTIAL", "TEST_PARTIAL"} or "destinatários recusados" in low or "recipients refused" in low:
+        title = "Um ou mais destinatários recusaram o e-mail"
+        refused = delivery_result.get("refused") or {}
+        if refused:
+            explanation = "O servidor recusou: " + ", ".join(str(x) for x in refused.keys()) + ". Outros destinatários podem ter recebido normalmente."
+        else:
+            explanation = "O servidor recusou um ou mais destinatários. Outros destinatários da mesma mensagem podem ter recebido normalmente."
+        steps = [
+            "Confira no cadastro da empresa o e-mail principal e os e-mails em cópia (CC).",
+            "Corrija ou remova o endereço recusado.",
+            "Antes de reenviar, confira no Gmail quais destinatários já receberam para evitar duplicidade.",
+            "Use o reenvio individual da empresa responsável quando necessário.",
+        ]
+    elif any(x in low for x in ["535", "authentication", "username and password", "senha de app", "badcredentials", "credentials"]):
+        title = "Gmail recusou a autenticação"
+        explanation = "O Gmail não aceitou o usuário ou a senha de app configurados no sistema. Nenhum e-mail desta tentativa foi enviado."
+        steps = [
+            "Abra Cobranças → Configurações.",
+            "Confirme o endereço da conta Gmail usada para envio.",
+            "Gere ou confira uma Senha de app da Conta Google; não use a senha normal do Gmail.",
+            "Salve a nova senha de app e clique em Enviar e-mail de teste.",
+            "Quando o teste funcionar, volte à competência e reenvie somente os erros.",
+        ]
+    elif any(x in low for x in ["5.1.1", "550", "recipient", "destinatário", "destinatario", "e-mail principal válido", "e-mail principal valido"]):
+        title = "E-mail da empresa inválido ou recusado"
+        explanation = "O endereço de destino não foi aceito pelo servidor de e-mail ou está inválido no cadastro."
+        steps = [
+            "Abra o cadastro da empresa destacada abaixo.",
+            "Confira se o e-mail está completo, sem espaços, erros de digitação ou endereço antigo.",
+            "Se houver CC, confira também cada endereço de cópia.",
+            "Salve o cadastro e faça o reenvio individual desta empresa.",
+        ]
+    elif any(x in low for x in ["25 mb", "message size", "too large", "552", "ultrapassa 25"]):
+        title = "Anexos excederam o limite do Gmail"
+        explanation = "O e-mail ficou maior que o limite permitido pelo Gmail por causa dos anexos."
+        steps = [
+            "Abra os documentos anexados desta empresa na competência.",
+            "Reduza o tamanho dos PDFs ou substitua arquivos muito grandes por versões compactadas.",
+            "Mantenha o conjunto total de anexos abaixo de 25 MB.",
+            "Depois faça o reenvio individual da empresa.",
+        ]
+    elif any(x in low for x in ["anexo não encontrado", "anexo nao encontrado", "anexo vazio"]):
+        title = "Problema em um anexo da cobrança"
+        explanation = "Um documento necessário não foi encontrado ou está vazio, por isso o sistema interrompeu o envio antes de transmitir o e-mail."
+        steps = [
+            "Abra a empresa dentro da competência e confira os documentos anexados.",
+            "Remova o arquivo inválido e envie novamente o documento correto.",
+            "Abra a prévia da cobrança para conferir os anexos.",
+            "Faça o reenvio individual da empresa.",
+        ]
+    elif any(x in low for x in ["timed out", "timeout", "temporarily", "421", "450", "4.7.0", "rate limit", "quota", "connection", "conexão", "conexao"]):
+        title = "Falha temporária de conexão ou limite do Gmail"
+        explanation = "O servidor do Gmail ou a conexão não respondeu normalmente. Em geral, é uma falha temporária."
+        steps = [
+            "Aguarde alguns minutos e confirme se a internet e o serviço no Render estão normais.",
+            "Faça um e-mail de teste em Cobranças → Configurações.",
+            "Se o teste funcionar, use Reenviar somente erros.",
+            "Se continuar falhando, confira os logs do Render e a conta Gmail antes de novas tentativas em lote.",
+        ]
+    elif any(x in low for x in ["sender refused", "remetente", "553"]):
+        title = "Remetente recusado pelo Gmail"
+        explanation = "O endereço configurado como remetente não foi aceito pela conta Gmail usada para autenticação."
+        steps = [
+            "Abra Cobranças → Configurações.",
+            "Confira se E-mail do remetente corresponde à conta autorizada no Gmail.",
+            "Salve e envie um e-mail de teste.",
+            "Depois reenvie somente os erros.",
+        ]
+    return {"title": title, "explanation": explanation, "steps": steps, "technical": raw or "Sem detalhe técnico adicional informado pelo servidor."}
+
+
 @app.route("/jobs/<job_id>")
 def job_status(job_id):
     conn = db()
@@ -3713,7 +3805,7 @@ def job_status(job_id):
         if not job:
             return jsonify({"ok": False, "error": "Fila não encontrada."}), 404
         groups = conn.execute(
-            """SELECT g.id,g.company_id,g.member_ids_json,g.status,g.error,g.delivery_result_json,c.name FROM send_job_groups g JOIN companies c ON c.id=g.company_id
+            """SELECT g.id,g.company_id,g.member_ids_json,g.status,g.error,g.delivery_result_json,c.name,c.cnpj,c.email,c.email_cc FROM send_job_groups g JOIN companies c ON c.id=g.company_id
                WHERE g.job_id=? ORDER BY CASE WHEN g.status IN ('UNCERTAIN','PARTIAL','TEST_PARTIAL') THEN 0 ELSE 1 END,g.id DESC""", (job_id,)
         ).fetchall()
         counts = _send_queue.counts(conn, job_id)
@@ -3738,9 +3830,28 @@ def job_status(job_id):
             "mode_unknown": job["test_mode"] is None,
             "reconciliation_url": url_for("resolve_send_result", job_id=job_id, group_id=group["id"]) if done and status in {"UNCERTAIN", "PARTIAL", "TEST_PARTIAL"} else None,
         })
+    error_details = []
+    for group in groups:
+        if group["status"] not in {"ERROR", "UNCERTAIN", "PARTIAL", "TEST_PARTIAL"}:
+            continue
+        try:
+            result = json.loads(group["delivery_result_json"] or "{}")
+        except (TypeError, ValueError):
+            result = {}
+        guidance = _email_error_guidance(group["error"], group["status"], result)
+        error_details.append({
+            "group_id": group["id"], "company_id": group["company_id"],
+            "company": _send_queue.package_label(group, group["name"]),
+            "cnpj": format_document(group["cnpj"]), "email": group["email"] or "", "email_cc": group["email_cc"] or "",
+            "status": group["status"], "title": guidance["title"], "explanation": guidance["explanation"],
+            "steps": guidance["steps"], "technical": guidance["technical"],
+            "reconciliation_url": url_for("resolve_send_result", job_id=job_id, group_id=group["id"]) if done and group["status"] in {"UNCERTAIN", "PARTIAL", "TEST_PARTIAL"} else None,
+            "primary_accepted": result.get("primary_accepted"), "mode_unknown": job["test_mode"] is None,
+        })
+
     return jsonify({
         "ok": True, "percent": percent, "done": done, "job": dict(job), "counts": counts,
-        "events": events, "retryable": retryable,
+        "events": events, "error_details": error_details, "retryable": retryable,
         "retry_url": url_for("retry_send_errors", job_id=job_id) if retryable else None,
     })
 

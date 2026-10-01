@@ -92,7 +92,7 @@
     setText('sendProgressPercent', '0%'); setText('sendDockPercent', '0%');
     setText('sendProgressTitle', 'Processando cobranças'); setText('sendDockTitle', 'Processando cobranças');
     setText('sendProgressCurrent', 'Aguardando a criação da fila...'); setText('sendDockCurrent', 'Preparando...');
-    setText('sendDockNumbers', '0 enviados'); setText('sendProgressEvents', ''); setText('sendDockLabel', 'PREPARANDO ENVIO');
+    setText('sendDockNumbers', '0 enviados'); setText('sendProgressEvents', ''); setText('sendDockLabel', 'PREPARANDO ENVIO'); const errorBox=byId('sendErrorDetails'); if(errorBox){errorBox.replaceChildren(); errorBox.classList.add('hidden');}
     ['sendProgressBar', 'sendDockBar'].forEach(id => { if (byId(id)) byId(id).style.width = '0%'; });
     byId('sendProgressTrack')?.setAttribute('aria-valuenow', '0');
   }
@@ -186,6 +186,55 @@
     ['sendProgressBar', 'sendDockBar'].forEach(id => { if (byId(id)) byId(id).style.width = `${view.percent}%`; });
     byId('sendProgressTrack')?.setAttribute('aria-valuenow', String(view.percent));
     byId('sendProgressTrack')?.setAttribute('aria-valuetext', `${view.processed} de ${view.total} cobranças processadas`);
+    const errorBox = byId('sendErrorDetails');
+    if (errorBox) {
+      errorBox.replaceChildren();
+      const errors = Array.isArray(data.error_details) ? data.error_details : [];
+      errors.forEach((error, index) => {
+        const card = document.createElement('section');
+        card.className = 'send-error-card';
+
+        const header = document.createElement('div'); header.className = 'send-error-header';
+        const companyWrap = document.createElement('div');
+        const eyebrow = document.createElement('div'); eyebrow.className = 'send-error-eyebrow'; eyebrow.textContent = `ERRO ${index + 1} DE ${errors.length}`;
+        const company = document.createElement('h3'); company.textContent = error.company || 'Empresa não identificada';
+        const meta = document.createElement('div'); meta.className = 'send-error-meta';
+        const metaParts = []; if (error.cnpj) metaParts.push(error.cnpj); if (error.email) metaParts.push(`E-mail: ${error.email}`); if (error.email_cc) metaParts.push(`CC: ${error.email_cc}`);
+        meta.textContent = metaParts.join(' · ');
+        companyWrap.append(eyebrow, company, meta);
+        const badge = document.createElement('span'); badge.className = 'send-error-badge'; badge.textContent = error.status === 'UNCERTAIN' ? 'CONFERIR' : error.status === 'PARTIAL' || error.status === 'TEST_PARTIAL' ? 'PARCIAL' : 'FALHA';
+        header.append(companyWrap, badge); card.appendChild(header);
+
+        const cause = document.createElement('div'); cause.className = 'send-error-cause';
+        const causeTitle = document.createElement('strong'); causeTitle.textContent = error.title || 'Falha no envio';
+        const causeText = document.createElement('p'); causeText.textContent = error.explanation || 'Não foi possível concluir o envio.';
+        cause.append(causeTitle, causeText); card.appendChild(cause);
+
+        const stepsWrap = document.createElement('div'); stepsWrap.className = 'send-error-steps';
+        const stepsTitle = document.createElement('strong'); stepsTitle.textContent = 'O que fazer agora'; stepsWrap.appendChild(stepsTitle);
+        const list = document.createElement('ol'); (error.steps || []).forEach(step => { const li=document.createElement('li'); li.textContent=step; list.appendChild(li); }); stepsWrap.appendChild(list); card.appendChild(stepsWrap);
+
+        const details = document.createElement('details'); details.className = 'send-error-technical';
+        const summary = document.createElement('summary'); summary.textContent = 'Ver detalhe técnico do erro';
+        const tech = document.createElement('code'); tech.textContent = error.technical || 'Sem detalhe técnico.';
+        details.append(summary, tech); card.appendChild(details);
+
+        if (error.reconciliation_url) {
+          const actions = document.createElement('div'); actions.className = 'row-actions send-error-actions';
+          const delivered = document.createElement('button'), notDelivered = document.createElement('button');
+          delivered.type = notDelivered.type = 'button'; delivered.className = 'btn btn-sm btn-secondary'; notDelivered.className = 'btn btn-sm btn-warning';
+          const partial = ['PARTIAL','TEST_PARTIAL'].includes(error.status);
+          delivered.textContent = partial ? 'Confirmar cobrança recebida' : 'Confirmar envio no Gmail';
+          notDelivered.textContent = partial ? 'Liberar reenvio após conferência' : 'Confirmar que não enviou';
+          delivered.onclick = () => reconcileEvent(error, 'delivered', [delivered, notDelivered]);
+          notDelivered.onclick = () => reconcileEvent(error, 'not_delivered', [delivered, notDelivered]);
+          actions.appendChild(delivered); if (!partial || !error.primary_accepted) actions.appendChild(notDelivered); card.appendChild(actions);
+        }
+        errorBox.appendChild(card);
+      });
+      errorBox.classList.toggle('hidden', errors.length === 0);
+    }
+
     const events = byId('sendProgressEvents');
     if (events) {
       events.replaceChildren();

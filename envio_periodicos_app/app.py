@@ -45,6 +45,7 @@ SECRET_FILE = DATA_DIR / ".flask_secret"
 FERNET_FILE = DATA_DIR / ".fernet_key"
 XLSX_TEMPLATES_DIR = BASE_DIR / "xlsx_templates"
 REFERRAL_BASE_TEMPLATE = XLSX_TEMPLATES_DIR / "planilha base para encaminhamentos.xlsx"
+DIRECTED_BASE_TEMPLATE = XLSX_TEMPLATES_DIR / "MODELO_BASE_DIRECIONADA.xlsx"
 
 MONTHS = {
     1: "JANEIRO", 2: "FEVEREIRO", 3: "MARÇO", 4: "ABRIL", 5: "MAIO", 6: "JUNHO",
@@ -67,7 +68,7 @@ fernet = Fernet(FERNET_KEY.encode())
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET
 app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("ENVIO_PERIODICOS_MAX_UPLOAD_MB", "120")) * 1024 * 1024
-APP_VERSION = "V5.3"
+APP_VERSION = "V5.4"
 
 
 def safe_int(value, default=0):
@@ -1217,6 +1218,13 @@ def company_template():
     return send_file(bio,as_attachment=True,download_name="MODELO_CADASTRO_EMPRESAS.xlsx",mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
+@app.route("/campaigns/template-direcionada.xlsx")
+def directed_campaign_template():
+    if not DIRECTED_BASE_TEMPLATE.exists():
+        abort(404)
+    return send_file(DIRECTED_BASE_TEMPLATE, as_attachment=True, download_name="MODELO_BASE_DIRECIONADA.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 # ---------------------------- COMPETÊNCIAS ----------------------------
 SOURCE_ALIASES = {
     "company": {"EMPRESA", "NOMEEMPRESA", "RAZAOSOCIAL"},
@@ -1227,6 +1235,15 @@ SOURCE_ALIASES = {
     "status": {"SITUACAO", "STATUS"},
     "cpf": {"CPF"},
     "admission": {"ADMISSAO", "DATAADMISSAO"},
+}
+
+DIRECTED_SOURCE_ALIASES = {
+    "company": {"EMPRESA", "NOMEEMPRESA", "RAZAOSOCIAL"},
+    "cnpj": {"CNPJ", "CNPJEMPRESA", "CPFEMPRESA", "CNPJCPF", "CPFCNPJ", "DOCUMENTO", "DOCUMENTOEMPRESA"},
+    "name": {"NOME", "NOMEDOFUNCIONARIO", "NOMEFUNCIONARIO", "FUNCIONARIO", "COLABORADOR"},
+    "cpf": {"CPF", "CPFFUNCIONARIO", "CPFCOLABORADOR"},
+    "sector": {"SETOR", "GES"},
+    "role": {"CARGO", "FUNCAO", "FUNCAOCARGO"},
 }
 
 
@@ -1257,6 +1274,136 @@ def ensure_company(conn, cnpj, source_name):
         return company
     cur = conn.execute("INSERT INTO companies(cnpj,name,email,email_cc,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", (cnpj,cleaned,"","",1,now_iso(),now_iso()))
     return conn.execute("SELECT * FROM companies WHERE id=?", (cur.lastrowid,)).fetchone()
+
+
+def resolve_directed_company(conn, company_value, document_value=""):
+    """Localiza uma empresa da lista direcionada sem exigir data de admissão.
+
+    A planilha mínima pode conter apenas EMPRESA + NOME DO FUNCIONÁRIO.
+    CNPJ/CPF é aceito opcionalmente para eliminar ambiguidades.
+    """
+    document = company_document_digits(document_value)
+    if valid_company_document(document):
+        company = conn.execute("SELECT * FROM companies WHERE cnpj=?", (document,)).fetchone()
+        if company:
+            return company, None
+        return None, f"Empresa com {company_document_label(document)} {format_documento(document)} não encontrada no cadastro geral"
+
+    company_text = str(company_value or "").strip()
+    if not company_text:
+        return None, "Empresa não informada"
+
+    # Se o próprio campo EMPRESA trouxer um CPF/CNPJ, tenta localizar por documento.
+    embedded = company_document_digits(company_text)
+    if valid_company_document(embedded):
+        company = conn.execute("SELECT * FROM companies WHERE cnpj=?", (embedded,)).fetchone()
+        if company:
+            return company, None
+
+    target = normalize_text(company_text)
+    rows = conn.execute("SELECT * FROM companies ORDER BY name").fetchall()
+    exact = [row for row in rows if normalize_text(row["name"]) == target]
+    if len(exact) == 1:
+        return exact[0], None
+    if len(exact) > 1:
+        return None, "Há mais de uma empresa com esse mesmo nome. Inclua uma coluna CNPJ/CPF para identificar corretamente"
+
+    return None, "Empresa não encontrada no cadastro geral. Use o nome exatamente como está cadastrado ou inclua uma coluna CNPJ/CPF"
+
+
+def import_directed_campaign_sources(campaign_id, files, additive=True):
+    """Importa uma lista direcionada de convocação.
+
+    Regra principal: cada linha enviada já pertence à competência, portanto não há
+    filtro por ADMISSÃO. A planilha mínima exige apenas EMPRESA + NOME DO FUNCIONÁRIO.
+    """
+    conn = db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        seen_email_names = set()
+        for r in conn.execute("SELECT c.cnpj,v.employee_name FROM convocations v JOIN companies c ON c.id=v.company_id WHERE v.campaign_id=?", (campaign_id,)).fetchall():
+            seen_email_names.add((r["cnpj"], normalize_text(r["employee_name"])))
+
+        seen_base_pairs = set()
+        for r in conn.execute("SELECT c.cnpj,b.employee_name,b.role FROM campaign_base_rows b JOIN companies c ON c.id=b.company_id WHERE b.campaign_id=?", (campaign_id,)).fetchall():
+            seen_base_pairs.add((r["cnpj"], normalize_text(r["employee_name"]), normalize_text(r["role"] or "")))
+
+        source_count = row_count = target_count = base_count = errors = 0
+        for filename, raw, source_hash in iter_uploaded_xlsx(files):
+            if conn.execute("SELECT 1 FROM campaign_source_imports WHERE campaign_id=? AND file_hash=? AND import_type='directed'", (campaign_id, source_hash)).fetchone():
+                continue
+            source_count += 1
+            try:
+                wb = load_workbook(io.BytesIO(raw), data_only=True, read_only=True)
+            except Exception as e:
+                conn.execute("INSERT INTO import_errors(campaign_id,source_file,error) VALUES(?,?,?)", (campaign_id, filename, f"Arquivo inválido: {e}"))
+                errors += 1
+                continue
+
+            parsed_sheet = False
+            for ws in wb.worksheets:
+                header_row, mapping = detect_header_and_map(ws, DIRECTED_SOURCE_ALIASES, required_any=["company", "name"])
+                if not header_row or not {"company", "name"}.issubset(mapping):
+                    continue
+                parsed_sheet = True
+                for excel_row, row in enumerate(ws.iter_rows(min_row=header_row + 1, values_only=True), start=header_row + 1):
+                    company_text = str(row[mapping["company"]] or "").strip() if mapping["company"] < len(row) else ""
+                    employee_name = str(row[mapping["name"]] or "").strip().upper() if mapping["name"] < len(row) else ""
+                    if not company_text and not employee_name:
+                        continue
+                    row_count += 1
+                    if not company_text or not employee_name:
+                        conn.execute("INSERT INTO import_errors(campaign_id,source_file,row_number,company_cnpj,employee_name,error) VALUES(?,?,?,?,?,?)", (campaign_id, filename, excel_row, "", employee_name, "Preencha EMPRESA e NOME DO FUNCIONÁRIO"))
+                        errors += 1
+                        continue
+
+                    document_value = row[mapping["cnpj"]] if "cnpj" in mapping and mapping["cnpj"] < len(row) else ""
+                    company, company_error = resolve_directed_company(conn, company_text, document_value)
+                    if not company:
+                        conn.execute("INSERT INTO import_errors(campaign_id,source_file,row_number,company_cnpj,employee_name,error) VALUES(?,?,?,?,?,?)", (campaign_id, filename, excel_row, company_document_digits(document_value), employee_name, company_error))
+                        errors += 1
+                        continue
+
+                    conn.execute("INSERT OR IGNORE INTO campaign_companies(campaign_id,company_id,source_name,source_cnpj) VALUES(?,?,?,?)", (campaign_id, company["id"], company_text, company["cnpj"]))
+                    cpf = digits(row[mapping["cpf"]]) if "cpf" in mapping and mapping["cpf"] < len(row) else ""
+                    sector = str(row[mapping["sector"]] or "").strip().upper() if "sector" in mapping and mapping["sector"] < len(row) else ""
+                    role = str(row[mapping["role"]] or "").strip().upper() if "role" in mapping and mapping["role"] < len(row) else ""
+                    source_label = f"DIRECIONADA · {filename}"
+
+                    base_key = (company["cnpj"], normalize_text(employee_name), normalize_text(role))
+                    if base_key not in seen_base_pairs:
+                        seen_base_pairs.add(base_key)
+                        conn.execute("INSERT OR IGNORE INTO campaign_base_rows(campaign_id,company_id,cpf,employee_name,sector,role,admission_date,source_file,created_at) VALUES(?,?,?,?,?,?,?,?,?)", (campaign_id, company["id"], cpf, employee_name, sector, role, "", source_label, now_iso()))
+                        base_count += 1
+
+                    email_key = (company["cnpj"], normalize_text(employee_name))
+                    if email_key in seen_email_names:
+                        continue
+                    seen_email_names.add(email_key)
+                    cur = conn.execute("INSERT OR IGNORE INTO convocations(campaign_id,company_id,cpf,employee_name,sector,role,admission_date,source_file) VALUES(?,?,?,?,?,?,?,?)", (campaign_id, company["id"], cpf, employee_name, sector, role, "", source_label))
+                    if cur.rowcount:
+                        target_count += 1
+
+            if not parsed_sheet:
+                conn.execute("INSERT INTO import_errors(campaign_id,source_file,error) VALUES(?,?,?)", (campaign_id, filename, "Não encontrei as colunas EMPRESA e NOME DO FUNCIONÁRIO"))
+                errors += 1
+            conn.execute("INSERT OR IGNORE INTO campaign_source_imports(campaign_id,file_name,file_hash,import_type,imported_at) VALUES(?,?,?,?,?)", (campaign_id, filename, source_hash, 'directed', now_iso()))
+
+        if additive:
+            conn.execute("UPDATE campaigns SET source_file_count=source_file_count+?,source_row_count=source_row_count+?,updated_at=? WHERE id=?", (source_count, row_count, now_iso(), campaign_id))
+        else:
+            conn.execute("UPDATE campaigns SET source_file_count=?,source_row_count=?,updated_at=? WHERE id=?", (source_count, row_count, now_iso(), campaign_id))
+        result = {"source_count": source_count, "row_count": row_count, "target_count": target_count, "base_count": base_count, "errors": errors}
+        conn.commit()
+        return result
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        conn.close()
 
 
 def import_campaign_sources(campaign_id, month, year, files, additive=True):
@@ -1347,9 +1494,12 @@ def campaign_new():
     if request.method=="POST":
         unit_id=int(request.form.get("unit_id",0) or 0); month=int(request.form.get("month",0) or 0); year=int(request.form.get("year",0) or 0)
         files=request.files.getlist("files")
+        directed_files=request.files.getlist("directed_files")
+        has_standard=any(f.filename for f in files)
+        has_directed=any(f.filename for f in directed_files)
         if unit_id not in {u["id"] for u in units_rows}: flash("Selecione uma unidade válida.","danger")
         elif month not in range(1,13) or year<2020 or year>2100: flash("Competência inválida.","danger")
-        elif not any(f.filename for f in files): flash("Selecione um ou mais arquivos .xlsx ou um .zip.","danger")
+        elif not has_standard and not has_directed: flash("Envie a base por admissão, a lista direcionada ou as duas.","danger")
         else:
             conn=db(); conn.execute("BEGIN IMMEDIATE"); existing=conn.execute("SELECT id FROM campaigns WHERE unit_id=? AND month=? AND year=?",(unit_id,month,year)).fetchone()
             if existing:
@@ -1361,10 +1511,21 @@ def campaign_new():
                 if row: flash("Essa competência já foi criada em outra tentativa.","warning"); return redirect(url_for("campaign_detail",campaign_id=row["id"]))
                 raise
             try:
-                result=import_campaign_sources(cid,month,year,files,additive=False)
-                flash(f"Competência criada: {result['source_count']} arquivo(s), {result['target_count']} nome(s) único(s) para convocação e {result['base_count']} linha(s) na base de encaminhamentos.","success")
+                total={"source_count":0,"target_count":0,"base_count":0,"errors":0}
+                first_import=True
+                if has_standard:
+                    result=import_campaign_sources(cid,month,year,files,additive=False)
+                    for k in total: total[k]+=result.get(k,0)
+                    first_import=False
+                if has_directed:
+                    result=import_directed_campaign_sources(cid,directed_files,additive=not first_import)
+                    for k in total: total[k]+=result.get(k,0)
+                msg=f"Competência criada: {total['source_count']} arquivo(s), {total['target_count']} nome(s) único(s) para convocação e {total['base_count']} linha(s) na base de encaminhamentos."
+                if total['errors']:
+                    msg += f" Há {total['errors']} alerta(s) para conferir."
+                flash(msg,"success" if not total['errors'] else "warning")
             except Exception as e:
-                flash(f"A competência foi criada, mas a base não pôde ser processada: {e}. Você pode abrir a competência e adicionar a base novamente sem duplicar dados.","warning")
+                flash(f"A competência foi criada, mas uma das bases não pôde ser processada: {e}. Você pode abrir a competência e adicionar a base novamente sem duplicar dados.","warning")
             return redirect(url_for("campaign_detail",campaign_id=cid))
     return render_template("campaign_new.html",current_year=datetime.now().year,units=units_rows,selected_unit_id=selected_unit_id)
 
@@ -1455,6 +1616,25 @@ def campaign_add_sources(campaign_id):
             flash(f"Adição concluída: {result['target_count']} novo(s) nome(s) para convocação e {result['base_count']} nova(s) linha(s) na base de encaminhamentos.","success")
         except Exception as e:
             flash(f"Não foi possível processar a base: {e}. Nenhuma operação precisa ser repetida às cegas; tente novamente com o arquivo corrigido.","danger")
+    return redirect(url_for("campaign_detail",campaign_id=campaign_id))
+
+
+@app.post("/campaigns/<int:campaign_id>/sources/add-directed")
+def campaign_add_directed_sources(campaign_id):
+    campaign=get_campaign_or_404(campaign_id)
+    if campaign_mutation_blocked(campaign_id): return redirect(url_for("campaign_detail",campaign_id=campaign_id))
+    files=request.files.getlist("directed_files")
+    if not any(f.filename for f in files):
+        flash("Selecione a planilha direcionada para adicionar.","warning")
+    else:
+        try:
+            result=import_directed_campaign_sources(campaign_id,files,additive=True)
+            msg=f"Lista direcionada adicionada: {result['target_count']} novo(s) nome(s) para convocação e {result['base_count']} nova(s) linha(s) na base de encaminhamentos."
+            if result['errors']:
+                msg += f" Há {result['errors']} alerta(s) para conferir."
+            flash(msg,"success" if not result['errors'] else "warning")
+        except Exception as e:
+            flash(f"Não foi possível processar a lista direcionada: {e}. Corrija o arquivo e tente novamente.","danger")
     return redirect(url_for("campaign_detail",campaign_id=campaign_id))
 
 

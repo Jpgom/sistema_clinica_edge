@@ -1152,3 +1152,24 @@ html[data-theme="dark"] .sidebar-close{color:var(--ui-text)}
   html[data-theme="dark"] .table td::before{color:var(--ui-muted)}
   .compact-kpis .kpi-card:last-child:nth-child(odd){grid-column:1/-1}
 }
+
+/* V5.4 — duas formas de montar a base da competência */
+.source-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
+.source-mode-card{border:1px solid var(--line);border-radius:10px;padding:16px;background:#fbfcfc}
+.source-mode-directed{background:#f7fbfd;border-color:#c9dfe9}
+.source-mode-head{display:flex;gap:10px;align-items:flex-start;margin-bottom:12px}
+.source-mode-head strong{display:block;font-size:14px;color:var(--text)}
+.source-mode-head p{margin:3px 0 0;color:var(--muted);font-size:12px}
+.source-mode-number{display:grid;place-items:center;width:27px;height:27px;border-radius:50%;background:var(--navy-soft);color:var(--navy);font-weight:800;flex:0 0 27px}
+.compact-upload{margin-top:0!important;padding:14px!important;align-items:flex-start!important}
+.compact-upload p{margin:3px 0 5px!important;font-size:12px!important}
+.inline-download{display:inline-block;font-size:12px;font-weight:700;color:var(--navy);text-decoration:underline;text-underline-offset:2px}
+.source-info{margin-top:14px}
+.base-source-actions{display:grid!important;gap:12px!important}
+.base-source-actions form{display:grid!important;gap:7px!important}
+.source-divider{height:1px;background:var(--line)}
+html[data-theme="dark"] .source-mode-card{background:var(--ui-surface-2)!important;border-color:var(--ui-border)!important}
+html[data-theme="dark"] .source-mode-directed{background:#192c36!important;border-color:#34596d!important}
+html[data-theme="dark"] .source-mode-head strong{color:var(--ui-text)!important}
+html[data-theme="dark"] .source-mode-head p{color:var(--ui-muted)!important}
+@media(max-width:900px){.source-mode-grid{grid-template-columns:1fr}}

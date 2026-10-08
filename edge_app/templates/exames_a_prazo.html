@@ -45,7 +45,7 @@
   {% include "_sidebar.html" %}
 
   <main class="main-area">
-    <div class="topbar compact-topbar"><div class="page-title"><h1>Exames a Prazo</h1><p>Busca exames por CNPJ nas bases de consulta e gera planilhas com o mesmo nome dos arquivos enviados.</p></div></div>
+    <div class="topbar compact-topbar"><div class="page-title"><h1>Exames a Prazo</h1><p>Busca exames por CPF ou CNPJ nas bases de consulta e gera planilhas com o mesmo nome dos arquivos enviados.</p></div></div>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -75,7 +75,7 @@
 
     {% if stage == 'generate' and month_options %}
     <section class="step-panel">
-      <div class="step-title"><span class="step-badge">2</span><div><h2>Escolher guias e enviar planilhas com CNPJ</h2><p class="muted">O sistema vai procurar os CNPJs em qualquer célula das planilhas enviadas. Cada planilha gera uma saída com o mesmo nome.</p></div></div>
+      <div class="step-title"><span class="step-badge">2</span><div><h2>Escolher guias e enviar planilhas com CPF ou CNPJ</h2><p class="muted">O sistema vai procurar os CPFs e CNPJs das empresas em qualquer célula das planilhas enviadas. Cada planilha gera uma saída com o mesmo nome.</p></div></div>
       <form method="POST" action="{{ url_for('exames_a_prazo_gerar') }}" enctype="multipart/form-data">
         <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="source_token" value="{{ source_token }}">
@@ -93,10 +93,10 @@
           {% endfor %}
         </div>
 
-        <div class="warning-box"><strong>Importante:</strong> CNPJs sem exames não serão descartados. Eles sairão na planilha com a faixa amarela de identificação.</div>
+        <div class="warning-box"><strong>Importante:</strong> Empresas com CPF ou CNPJ sem exames não serão descartadas. Elas sairão na planilha com a faixa amarela de identificação.</div>
 
         <div class="file-grid" style="margin-top:18px">
-          <label class="field-card"><strong>Planilhas com CNPJs ou ZIP</strong><br><span class="muted">Envie uma ou várias planilhas .xlsx, ou um ZIP contendo várias planilhas.</span><br><input type="file" name="request_files" accept=".xlsx,.zip" multiple required></label>
+          <label class="field-card"><strong>Planilhas com CPFs/CNPJs ou ZIP</strong><br><span class="muted">Envie uma ou várias planilhas .xlsx, ou um ZIP contendo várias planilhas.</span><br><input type="file" name="request_files" accept=".xlsx,.zip" multiple required></label>
         </div>
 
         <div class="actions-row"><button class="btn btn--primary" type="submit">Gerar Exames a Prazo</button><a class="btn btn--secondary" href="{{ url_for('exames_a_prazo') }}">Trocar bases</a></div>

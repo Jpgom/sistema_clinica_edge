@@ -4220,8 +4220,8 @@ def exames_a_prazo_guias():
 def exames_a_prazo_gerar():
     from edge_app.exames_a_prazo_core import (
         company_key,
-        extract_cnpjs_from_workbook,
-        format_cnpj,
+        extract_company_documents_from_workbook,
+        format_company_document,
         generate_group_workbook,
         generate_solo_workbook,
         month_identity,
@@ -4282,22 +4282,22 @@ def exames_a_prazo_gerar():
 
     for filename, content in request_files:
         try:
-            cnpjs = extract_cnpjs_from_workbook(content)
+            documents = extract_company_documents_from_workbook(content)
         except Exception as exc:
             errors.append(f'{filename}: não foi possível ler a planilha ({exc}).')
             continue
-        if not cnpjs:
-            errors.append(f'{filename}: nenhum CNPJ foi encontrado e a planilha foi ignorada.')
+        if not documents:
+            errors.append(f'{filename}: nenhum CPF ou CNPJ foi encontrado e a planilha foi ignorada.')
             continue
-        requests_data.append({'name': filename, 'bytes': content, 'cnpjs': cnpjs})
-        for cnpj in cnpjs:
-            key = company_key(cnpj)
+        requests_data.append({'name': filename, 'bytes': content, 'documents': documents})
+        for document in documents:
+            key = company_key(document)
             if key not in seen_requested_keys:
                 seen_requested_keys.add(key)
                 all_requested_keys.append(key)
 
     if not requests_data:
-        for msg in errors or ['Envie pelo menos uma planilha .xlsx ou ZIP contendo CNPJs.']:
+        for msg in errors or ['Envie pelo menos uma planilha .xlsx ou ZIP contendo CPFs ou CNPJs.']:
             flash(msg, 'error')
         return render_template(
             'exames_a_prazo.html',
@@ -4337,11 +4337,11 @@ def exames_a_prazo_gerar():
     output_files = {}
     for req in requests_data:
         filename = req['name']
-        cnpjs = req['cnpjs']
-        keys = [company_key(cnpj) for cnpj in cnpjs]
+        documents = req['documents']
+        keys = [company_key(document) for document in documents]
         request_companies = {
-            key: companies.get(key, format_cnpj(cnpj))
-            for key, cnpj in zip(keys, cnpjs)
+            key: companies.get(key, format_company_document(document))
+            for key, document in zip(keys, documents)
         }
         try:
             if len(keys) == 1:
@@ -4388,7 +4388,7 @@ def exames_a_prazo_gerar():
         )
 
     # Relatório técnico simples dentro do ZIP para o usuário conferir rapidamente
-    # se a base foi lida e quantos registros foram encontrados por CNPJ.
+    # se a base foi lida e quantos registros foram encontrados por CPF/CNPJ.
     record_counts = {key: 0 for key in all_requested_keys}
     for rec in records:
         if rec.company_key in record_counts:
@@ -4397,15 +4397,15 @@ def exames_a_prazo_gerar():
         'RESUMO DA GERAÇÃO - EXAMES A PRAZO',
         '',
         f'Competências selecionadas: {", ".join(selected_months)}',
-        f'Total de CNPJs solicitados: {len(all_requested_keys)}',
+        f'Total de CPFs/CNPJs solicitados: {len(all_requested_keys)}',
         f'Total de registros encontrados: {len(records)}',
         '',
-        'CNPJs / empresas:',
+        'CPFs/CNPJs / empresas:',
     ]
     for req in requests_data:
-        for cnpj in req['cnpjs']:
-            key = company_key(cnpj)
-            resumo_lines.append(f'- {format_cnpj(cnpj)}: {record_counts.get(key, 0)} registro(s)')
+        for document in req['documents']:
+            key = company_key(document)
+            resumo_lines.append(f'- {format_company_document(document)}: {record_counts.get(key, 0)} registro(s)')
     if errors:
         resumo_lines.extend(['', 'Avisos:', *errors])
 

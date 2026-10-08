@@ -183,10 +183,78 @@ def extract_cnpjs_from_workbook(file_bytes: bytes) -> List[str]:
     return found
 
 
+def extract_company_documents(value: object) -> List[str]:
+    """Extrai CPFs e CNPJs únicos na ordem em que aparecem na célula.
+
+    Aceita documentos com ou sem máscara e células numéricas do Excel.
+    Recupera um zero inicial perdido em CPFs de 10 e CNPJs de 13 dígitos,
+    seguindo a tolerância já usada para CNPJ. A alternativa de CNPJ vem
+    primeiro para não interpretar partes de um CNPJ como CPF.
+    """
+    if value is None:
+        return []
+    raw = str(int(value)) if isinstance(value, float) and value.is_integer() else str(value).strip()
+    if re.fullmatch(r"\d+", raw):
+        if len(raw) == 10:
+            raw = raw.zfill(11)
+        elif len(raw) == 13:
+            raw = raw.zfill(14)
+        return [raw] if len(raw) in (11, 14) else []
+
+    pattern = re.compile(
+        r"(?<!\d)(?:"
+        r"(?P<cnpj>\d{2}\D{0,3}\d{3}\D{0,3}\d{3}\D{0,3}\d{4}\D{0,3}\d{2})"
+        r"|(?P<cpf>\d{3}[.\s]{0,3}\d{3}[.\s]{0,3}\d{3}[-\s]{0,3}\d{2})"
+        r")(?!\d)"
+    )
+    found: List[str] = []
+    seen = set()
+    for match in pattern.finditer(raw):
+        digits = re.sub(r"\D", "", match.group())
+        if digits not in seen:
+            seen.add(digits)
+            found.append(digits)
+    return found
+
+
+def extract_company_document(value: object) -> str | None:
+    found = extract_company_documents(value)
+    return found[0] if found else None
+
+
+def format_company_document(value: object) -> str:
+    """Formata CPF como 000.000.000-00 e CNPJ como 00.000.000/0000-00."""
+    document = extract_company_document(value)
+    if document is None:
+        return str(value or "").strip()
+    if len(document) == 11:
+        return f"{document[:3]}.{document[3:6]}.{document[6:9]}-{document[9:]}"
+    return format_cnpj(document)
+
+
+def extract_company_documents_from_workbook(file_bytes: bytes) -> List[str]:
+    """Lê CPF/CNPJ em qualquer guia/célula da lista de empresas solicitadas."""
+    wb = load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
+    found: List[str] = []
+    seen = set()
+    try:
+        for ws in wb.worksheets:
+            for row in ws.iter_rows(values_only=True):
+                for value in row:
+                    for document in extract_company_documents(value):
+                        if document not in seen:
+                            seen.add(document)
+                            found.append(document)
+    finally:
+        wb.close()
+    return found
+
+
 def company_key(company: object) -> str:
-    cnpj = extract_cnpj(company)
-    if cnpj:
-        return f"CNPJ:{cnpj}"
+    document = extract_company_document(company)
+    if document:
+        kind = "CPF" if len(document) == 11 else "CNPJ"
+        return f"{kind}:{document}"
     return f"NOME:{normalize_text(company)}"
 
 
@@ -532,12 +600,12 @@ def parse_selected_months(
     months: Sequence[str],
     company_keys: Sequence[str] | None = None,
 ) -> Tuple[List[ExamRecord], Dict[str, str]]:
-    """Lê as competências selecionadas, opcionalmente filtrando pelos CNPJs pedidos.
+    """Lê as competências selecionadas, filtrando pelos CPFs/CNPJs pedidos.
 
     A leitura possui uma proteção importante para arquivos do Excel cujo
     ``max_row`` foi inflado artificialmente até 1.048.576 por formatação ou por
     algum valor repetido em uma coluna secundária. Como um registro válido deste
-    sistema precisa ter empresa/CNPJ na coluna identificadora, encerramos a guia
+    sistema precisa ter empresa/CPF/CNPJ na coluna identificadora, encerramos a guia
     depois de muitas linhas consecutivas sem empresa, após os dados reais terem
     começado.
     """
@@ -580,8 +648,8 @@ def parse_selected_months(
                     rows_without_record += 1
                     continue
 
-                display = str(company).strip()
-                key = company_key(display)
+                display = format_company_document(company) if isinstance(company, (int, float)) else str(company).strip()
+                key = company_key(company)
                 employee = _value(row, employee_col)
                 out = _to_output_row(row, mapping)
                 number_formats = _output_number_formats(row_cells, mapping)
@@ -600,11 +668,11 @@ def parse_selected_months(
                     continue
 
                 # Qualquer registro válido confirma que ainda estamos na área real
-                # dos dados, mesmo que o CNPJ não seja um dos pedidos.
+                # dos dados, mesmo que o CPF/CNPJ não seja um dos pedidos.
                 rows_without_record = 0
                 saw_record_row = True
 
-                # Depois que o usuário envia as planilhas com CNPJs, só guardamos
+                # Depois que o usuário envia as planilhas com CPFs/CNPJs, só guardamos
                 # os exames das empresas realmente solicitadas. Isso reduz tempo e
                 # memória em bases grandes, sem alterar o resultado final.
                 if requested_keys is not None and key not in requested_keys:
@@ -629,7 +697,7 @@ def parse_selected_months_from_sources(
 
     A busca não depende de uma base "principal": cada competência selecionada é
     procurada em todas as fontes. Quando ``company_keys`` é informado, somente
-    os CNPJs pedidos são materializados na memória.
+    os CPFs/CNPJs pedidos são materializados na memória.
     """
     all_records: List[ExamRecord] = []
     all_companies: Dict[str, str] = {}
@@ -902,7 +970,7 @@ def _write_solo_sheet(
         ws.freeze_panes = "A3"
         ws.auto_filter.ref = f"A2:L{last_row}"
     else:
-        # CNPJ solicitado sem exames: mantém somente a faixa amarela de
+        # CPF/CNPJ solicitado sem exames: mantém somente a faixa amarela de
         # identificação, sem cabeçalho e sem linhas de exame abaixo.
         last_row = 1
         ws.freeze_panes = "A1"

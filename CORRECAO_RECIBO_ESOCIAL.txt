@@ -1,0 +1,28 @@
+CORREÇÃO – RECIBOS ESOCIAL – 09/10/2026
+
+Problema analisado:
+- RELFUNCGERAL (5).xls e RELFUNCGERAL (6).xls não contêm planilhas de dados.
+- São páginas HTML ASP.NET vazias, com um formulário e campo __VIEWSTATE,
+  sem tabelas <table> com funcionários ou números de recibo.
+- Isso não permite gerar PDF a partir dessas duas exportações.
+
+Ajustes efetuados:
+1. O importador agora detecta exportações ASP.NET sem dados e informa
+   claramente que é necessário exportar o relatório com registros.
+2. Arquivos HTML que não contêm tabela também recebem aviso específico.
+3. O formulário da função Recibos eSocial agora aceita arquivos ZIP pelo seletor,
+   conforme os formatos que o servidor já oferecia.
+4. Mantida a importação de .xls HTML válido e de .zip com planilha válida.
+
+Como obter arquivo utilizável:
+- Voltar ao sistema que gera RELFUNCGERAL.
+- Consultar o evento S-2220 e selecionar empresa e período.
+- Certificar-se de que os registros realmente aparecem no relatório.
+- Exportar novamente para Excel e verificar as linhas antes de enviar.
+- Renomear o .xls para .xlsx não recupera linhas que não existem.
+
+Arquivos de código alterados:
+- pgr_app/app.py
+- pgr_app/templates/recibos_esocial.html
+Arquivo de testes acrescentado:
+- tests/test_recibos_esocial_import.py

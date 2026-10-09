@@ -2011,7 +2011,20 @@ def _receipt_norm_header(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "", text.lower())
 
 
+# Formato atual do arquivo ``envios.xls``: exportar SOMENTE A:H.
 RECEIPT_PDF_COLUMNS = [
+    ("empresa", "EMPRESA"),
+    ("cnpj", "CNPJ"),
+    ("funcionario", "FUNCIONARIO"),
+    ("cpf", "CPF"),
+    ("data", "Data"),
+    ("sefaz", "SEFAZ"),
+    ("esocial", "esocial"),
+    ("resultado", "RESULTADO"),
+]
+
+# Aceita o RELFUNCGERAL antigo sem alterar o funcionamento de suas exportações.
+LEGACY_RECEIPT_PDF_COLUMNS = [
     ("evento", "EVENTO"),
     ("empresa", "empresa"),
     ("nome", "NOME"),
@@ -2022,6 +2035,42 @@ RECEIPT_PDF_COLUMNS = [
     ("reciboesocial", "Recibo\neSocial"),
     ("recibosefaz", "Recibo\nSefaz"),
 ]
+
+
+def _format_receipt_cnpj(value: Any) -> str:
+    """Aplica a máscara brasileira, inclusive quando o Excel omitiu zero inicial.
+
+    Não altera dígitos informados. Com quantidade ambígua de dígitos, informa
+    erro em vez de adivinhar a identidade da empresa.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        raise ValueError("CNPJ da empresa não informado na coluna B.")
+    if re.fullmatch(r"\d+(?:[.,]0+)?", raw):
+        raw = re.sub(r"[.,]0+$", "", raw)
+    if re.fullmatch(r"\d+(?:[.,]\d+)?[eE][+\-]?\d+", raw):
+        from decimal import Decimal, InvalidOperation
+        try:
+            number = Decimal(raw.replace(",", "."))
+            if number != number.to_integral_value():
+                raise ValueError
+            raw = str(int(number))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError("CNPJ com notação científica inválida.") from exc
+    if not re.fullmatch(r"[\d.\-/\s]+", raw):
+        raise ValueError(f"CNPJ inválido na coluna B: {raw!r}.")
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) == 13:
+        digits = digits.zfill(14)  # Excel importou como número e suprimiu 0 inicial
+    if len(digits) != 14:
+        raise ValueError(f"CNPJ da coluna B deve conter 14 dígitos (recebido: {len(digits)}).")
+    return f"{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}"
+
+
+def _receipt_columns(rows: list[dict[str, str]]) -> list[tuple[str, str]]:
+    if rows and "cnpj" in rows[0]:
+        return RECEIPT_PDF_COLUMNS
+    return LEGACY_RECEIPT_PDF_COLUMNS
 
 
 def _parse_html_table_rows(path: Path) -> list[list[str]]:
@@ -2092,31 +2141,37 @@ def _parse_binary_xls_table_rows(path: Path) -> list[list[str]]:
 
 
 def _receipt_header_map(rows: list[list[str]]) -> tuple[int | None, dict[str, int]]:
-    header_index = None
-    header_map: dict[str, int] = {}
-    required = {key for key, _ in RECEIPT_PDF_COLUMNS}
+    # Layout envios: reconhecer exatamente os campos físicos A:H.
+    expected = [key for key, _ in RECEIPT_PDF_COLUMNS]
+    aliases_new = {"funcionário": "funcionario", "razaosocial": "empresa", "nomeempresa": "empresa"}
+    for idx, row in enumerate(rows[:50]):
+        normed = [_receipt_norm_header(cell) for cell in row[:8]]
+        normed = [aliases_new.get(value, value) for value in normed]
+        if normed == expected:
+            return idx, {key: col_idx for col_idx, key in enumerate(expected)}
+
+    # Preserva suporte ao formato RELFUNCGERAL, usado até a mudança da base.
+    required = {key for key, _ in LEGACY_RECEIPT_PDF_COLUMNS}
     aliases = {
         "reciboesocial": {"reciboesocial", "reciboeventoesocial", "reciboe_social"},
-        "recibosefaz": {"recibosefaz", "recibosefaze", "recibosefaz"},
+        "recibosefaz": {"recibosefaz", "recibosefaze"},
         "empresa": {"empresa", "razaosocial"},
     }
-    reverse_alias: dict[str, str] = {}
-    for canonical in required:
-        reverse_alias[canonical] = canonical
+    reverse_alias = {key: key for key in required}
     for canonical, values in aliases.items():
         for value in values:
             reverse_alias[value] = canonical
     for idx, row in enumerate(rows[:50]):
         normed = [_receipt_norm_header(cell) for cell in row]
-        found = {reverse_alias[name] for name in normed if name in reverse_alias and reverse_alias[name] in required}
+        found = {reverse_alias[name] for name in normed if name in reverse_alias}
         if len(found) >= 5:
-            header_index = idx
+            header_map = {}
             for col_idx, name in enumerate(normed):
                 canonical = reverse_alias.get(name)
                 if canonical in required and canonical not in header_map:
                     header_map[canonical] = col_idx
-            break
-    return header_index, header_map
+            return idx, header_map
+    return None, {}
 
 
 def _receipt_rows_from_raw_rows(rows: list[list[str]]) -> list[dict[str, str]]:
@@ -2124,16 +2179,30 @@ def _receipt_rows_from_raw_rows(rows: list[list[str]]) -> list[dict[str, str]]:
         raise ValueError("Não encontrei nenhuma tabela na planilha enviada.")
     header_index, header_map = _receipt_header_map(rows)
     if header_index is None:
-        raise ValueError("Não localizei o cabeçalho da planilha. Confirme se ela possui as colunas EVENTO, empresa, NOME, CPF, TIPO, STATUS, DATA, Recibo eSocial e Recibo Sefaz.")
+        raise ValueError(
+            "Cabeçalho não encontrado: envie a planilha envios com as colunas "
+            "EMPRESA, CNPJ, FUNCIONARIO, CPF, Data, SEFAZ, esocial e RESULTADO, "
+            "ou o arquivo RELFUNCGERAL anterior."
+        )
+    is_new_layout = "cnpj" in header_map
+    columns = RECEIPT_PDF_COLUMNS if is_new_layout else LEGACY_RECEIPT_PDF_COLUMNS
     data_rows: list[dict[str, str]] = []
-    for row in rows[header_index + 1:]:
-        item: dict[str, str] = {}
-        for key, _label in RECEIPT_PDF_COLUMNS:
+    for row_number, row in enumerate(rows[header_index + 1:], start=header_index + 2):
+        item = {}
+        for key, _label in columns:
             col_idx = header_map.get(key)
             item[key] = str(row[col_idx]).strip() if col_idx is not None and col_idx < len(row) else ""
-        # Evita salvar linhas de navegação/abas e linhas completamente vazias.
-        if any(item.values()) and any(item.get(k) for k in ("evento", "nome", "reciboesocial", "recibosefaz")):
-            data_rows.append(item)
+        if is_new_layout:
+            # Evita linhas vazias/rodapés exportados e ignora inteiramente a coluna I.
+            if not item["funcionario"] and not item["esocial"] and not item["sefaz"]:
+                continue
+            try:
+                item["cnpj"] = _format_receipt_cnpj(item["cnpj"])
+            except ValueError as exc:
+                raise ValueError(f"Linha {row_number}: {exc}") from exc
+        elif not (any(item.values()) and any(item.get(k) for k in ("evento", "nome", "reciboesocial", "recibosefaz"))):
+            continue
+        data_rows.append(item)
     if not data_rows:
         raise ValueError("A planilha foi lida, mas não encontrei linhas de recibos para converter.")
     return data_rows
@@ -2177,11 +2246,11 @@ def _read_receipt_rows_from_file(path: Path, *, allow_linked_sheet: bool = True)
     if ext == ".xls":
         return _receipt_rows_from_raw_rows(_parse_binary_xls_table_rows(path))
 
-    raise ValueError("Arquivo não reconhecido. Envie .xls, .xlsx ou .zip contendo a planilha RELFUNCGERAL.")
+    raise ValueError("Arquivo não reconhecido. Envie .xls, .xlsx ou .zip contendo a planilha envios ou RELFUNCGERAL.")
 
 
 def _read_receipt_spreadsheet(path: Path) -> list[dict[str, str]]:
-    """Lê RELFUNCGERAL (.xls HTML, .xls binário, .xlsx ou .zip) e retorna somente as colunas usadas no PDF."""
+    """Lê envios/RELFUNCGERAL (.xls HTML, .xls binário, .xlsx ou .zip)."""
     ext = path.suffix.lower()
     if ext == ".zip":
         with tempfile.TemporaryDirectory() as tmp:
@@ -2299,12 +2368,18 @@ def _build_receipts_pdf(rows: list[dict[str, str]], output_path: Path) -> Path:
     margin_top = 14
     margin_bottom = 14
     inner_width = page_width - (margin_x * 2)
-    # Proporções ajustadas para todas as colunas caberem na mesma folha em paisagem.
-    proportions = [0.073, 0.115, 0.170, 0.112, 0.100, 0.105, 0.092, 0.105, 0.128]
+    columns = _receipt_columns(rows)
+    # Layout novo A:H; o formato RELFUNCGERAL antigo mantém suas proporções.
+    proportions = (
+        [0.16, 0.14, 0.17, 0.09, 0.085, 0.12, 0.135, 0.10]
+        if columns == RECEIPT_PDF_COLUMNS
+        else [0.073, 0.115, 0.170, 0.112, 0.100, 0.105, 0.092, 0.105, 0.128]
+    )
     widths = [inner_width * p for p in proportions]
     header_height = 38
-    body_font = 11
-    header_font = 12
+    # O novo formato precisa mostrar CNPJ, CPF e RESULTADO completos e legíveis.
+    body_font = 10 if columns == RECEIPT_PDF_COLUMNS else 11
+    header_font = 11 if columns == RECEIPT_PDF_COLUMNS else 12
     fonts = _receipt_pdf_font_config()
     doc = fitz.open()
 
@@ -2312,7 +2387,7 @@ def _build_receipts_pdf(rows: list[dict[str, str]], output_path: Path) -> Path:
         page = doc.new_page(width=page_width, height=page_height)
         x = margin_x
         y = margin_top
-        for idx, (_key, label) in enumerate(RECEIPT_PDF_COLUMNS):
+        for idx, (_key, label) in enumerate(columns):
             rect = fitz.Rect(x, y, x + widths[idx], y + header_height)
             page.draw_rect(rect, color=(0, 0, 0), fill=(0.36, 0.36, 0.36), width=0.9)
             _draw_centered_cell(page, rect, label, fonts["header_name"], header_font, color=(1, 1, 1), fontfile=fonts["header_file"], measure_fontname=fonts["measure_header"])
@@ -2322,13 +2397,13 @@ def _build_receipts_pdf(rows: list[dict[str, str]], output_path: Path) -> Path:
     page, y = new_page()
     for item in rows:
         line_counts = []
-        for idx, (key, _label) in enumerate(RECEIPT_PDF_COLUMNS):
+        for idx, (key, _label) in enumerate(columns):
             line_counts.append(len(_wrap_pdf_text(page, item.get(key, ""), widths[idx] - 8, "helv", body_font)))
         row_height = max(52, max(line_counts) * body_font * 1.28 + 14)
         if y + row_height > page_height - margin_bottom:
             page, y = new_page()
         x = margin_x
-        for idx, (key, _label) in enumerate(RECEIPT_PDF_COLUMNS):
+        for idx, (key, _label) in enumerate(columns):
             rect = fitz.Rect(x, y, x + widths[idx], y + row_height)
             page.draw_rect(rect, color=(0, 0, 0), width=0.9)
             _draw_centered_cell(page, rect, item.get(key, ""), fonts["body_name"], body_font, color=(0, 0, 0), fontfile=fonts["body_file"], measure_fontname=fonts["measure_body"])
@@ -4940,7 +5015,7 @@ def recibos_esocial():
                     request.files.get("planilha"),
                     tmpdir,
                     {".xls", ".xlsx", ".zip"},
-                    "Planilha de recibos RELFUNCGERAL (.xls, .xlsx ou .zip)",
+                    "Planilha de recibos envios ou RELFUNCGERAL (.xls, .xlsx ou .zip)",
                 )
                 rows = _read_receipt_spreadsheet(planilha)
                 empresa = rows[0].get("empresa", "RECIBOS") if rows else "RECIBOS"

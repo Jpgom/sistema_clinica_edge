@@ -1,0 +1,42 @@
+ATUALIZACAO EDGE - RECIBO ESOCIAL (09/10/2026)
+
+OBJETIVO
+Adequar apenas a importacao da planilha 'envios' e o PDF de Recibo eSocial
+sem alterar as outras funcoes do site.
+
+ARQUIVOS ALTERADOS
+- sistema_clinica_edge/pgr_app/app.py
+- sistema_clinica_edge/pgr_app/templates/recibos_esocial.html
+
+TESTES ADICIONADOS
+- sistema_clinica_edge/tests/test_recibos_esocial_envios.py
+
+NOVO LAYOUT (COLUNAS A:H)
+A - EMPRESA
+B - CNPJ (mascara XX.XXX.XXX/XXXX-XX, com zero inicial preservado)
+C - FUNCIONARIO
+D - CPF
+E - Data
+F - SEFAZ
+G - esocial
+H - RESULTADO
+Coluna I (MENSAGEM) e posteriores sao ignoradas.
+
+NOTAS
+- Continua aceitando o formato anterior RELFUNCGERAL quando enviado.
+- Mantem a geracao em PDF A4 paisagem.
+- O arquivo envios.xls enviado foi usado para testar agosto de 2026:
+  5 registros da empresa A. M. CAXIAS DE SOUSA - EPP.
+- Os 5 nomes e o CNPJ foram confirmados na aba AGOSTO.2026 OK
+  da planilha-base enviada; a base nao contem os numeros oficiais
+  de recibos eSocial/SEFAZ para os demais funcionarios do mes.
+- Nenhuma coluna da planilha de origem e sobrescrita.
+
+INSTALACAO
+Opcao 1: usar o ZIP completo com o projeto atualizado.
+Opcao 2: usar o ZIP de patch, copiando somente os arquivos alterados
+para o mesmo caminho do seu sistema atual, depois reiniciar/republicar.
+Antes de substituir arquivos do sistema em producao, faca backup.
+
+TESTES
+Rodar: python -m unittest discover -s tests -p test_recibos_esocial_envios.py -v

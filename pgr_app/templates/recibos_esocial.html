@@ -6,21 +6,21 @@
   <div>
     <p class="eyebrow">Conversão</p>
     <h1>Formatar recibos das empresas</h1>
-    <p class="muted">Envie a planilha RELFUNCGERAL para gerar um PDF em paisagem com todas as colunas na mesma folha.</p>
+    <p class="muted">Envie a planilha envios para gerar um PDF em paisagem com somente as colunas A a H. O modelo RELFUNCGERAL antigo continua disponível.</p>
   </div>
 </div>
 
 <section class="panel">
   <form method="post" enctype="multipart/form-data" action="{{ url_for('recibos_esocial') }}" class="grid-form">
     <label class="span-2">
-      <span>Planilha de recibos RELFUNCGERAL (.xls, .xlsx ou .zip)</span>
-      <input type="file" name="planilha" required accept=".xls,.xlsx">
+      <span>Planilha de recibos envios (.xls, .xlsx ou .zip)</span>
+      <input type="file" name="planilha" required accept=".xls,.xlsx,.zip">
     </label>
 
     <div class="span-2 info-panel soft-note">
       <strong>Colunas que sairão no PDF</strong>
-      <p class="muted">EVENTO, empresa, NOME, CPF, TIPO, STATUS, DATA, Recibo eSocial e Recibo Sefaz.</p>
-      <p class="muted">A coluna unidade e outras colunas da planilha serão ignoradas. Se o Excel gerar uma pasta _arquivos junto do .xls, compacte o .xls com essa pasta em .zip ou salve como .xlsx antes de enviar.</p>
+      <p class="muted">EMPRESA, CNPJ, FUNCIONARIO, CPF, Data, SEFAZ, esocial e RESULTADO (colunas A a H).</p>
+      <p class="muted">A coluna I (MENSAGEM) e as posteriores não sairão no PDF. O CNPJ será exibido como 00.000.000/0000-00, mesmo quando o Excel omitir o zero inicial. Também aceitamos o formato antigo RELFUNCGERAL.</p>
     </div>
 
     <div class="form-actions span-2">

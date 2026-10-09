@@ -1,0 +1,41 @@
+EDGE - CORREÇÃO RECIBO eSOCIAL (09/10/2026)
+=============================================
+
+ALTERAÇÃO DO MÓDULO CORRETO DA TELA "INTERNO > RECIBO eSOCIAL".
+Arquivo alterado:
+  edge_app/application.py
+Teste novo:
+  tests/test_recibo_esocial_portal.py
+
+O QUE FOI CORRIGIDO
+- Aceita a exportação envios.xls (tabela HTML com extensão XLS).
+- Mantém a leitura de arquivos XLS binários e XLSX.
+- Reconhece as colunas do novo formato: EMPRESA, CNPJ, FUNCIONARIO,
+  CPF, Data, SEFAZ, esocial, RESULTADO, MENSAGEM.
+- Gera o PDF somente com as primeiras 8 colunas (A-H), omitindo MENSAGEM.
+- Recompõe o zero inicial de CNPJ de 13 dígitos vindo como número,
+  exibindo 00.000.000/0000-00 no PDF.
+- Preserva cruzamento de CNPJ e funcionário com OK E-SOCIAL na base.
+- Se um arquivo XLS inválido não tiver dados, não bloqueia os válidos;
+  detalha os arquivos ignorados no RESUMO PROCESSAMENTO.txt do ZIP.
+
+COMO ATUALIZAR
+1. Faça backup do seu sistema atual.
+2. Utilize o ZIP de atualização, preservando a estrutura de pastas.
+3. Copie edge_app/application.py sobre o arquivo atual de mesmo caminho.
+4. Opcionalmente copie tests/test_recibo_esocial_portal.py.
+5. Reinicie/reimplante a aplicação do Sistema Interno EDGE no servidor.
+6. Em Interno > Recibo eSocial, mantenha a base e escolha AGOSTO.2026 OK.
+7. Anexe envios.xls e gere os PDFs normalmente.
+
+ATENÇÃO: Arquivos RELFUNCGERAL.xls com aproximadamente 1 KB podem ser
+páginas índice do Excel sem tabela. Nesse caso, abra no Excel e salve
+como .xlsx contendo os registros completos antes de enviar novamente.
+
+TESTES EXECUTADOS
+- envios.xls real: 14 registros lidos corretamente, CNPJ mantido.
+- base 'AGOSTO.2026 OK': 5 funcionários correspondentes localizados.
+- PDF de agosto: gerado com 8 colunas, sem MENSAGEM.
+- 4 testes automáticos de regressão aprovados.
+
+A atualização altera os arquivos entregues, não o servidor em produção.

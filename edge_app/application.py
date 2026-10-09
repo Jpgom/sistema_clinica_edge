@@ -1999,6 +1999,10 @@ def extract_cnpj(text: str) -> str:
         except Exception:
             text = str(text)
     digits = re.sub(r"\D", "", str(text))
+    # Uma planilha pode gravar CNPJ como número e eliminar o zero inicial.
+    # Não completa números com menos de 13 dígitos, para não fabricar CNPJs.
+    if len(digits) == 13:
+        digits = "0" + digits
     return digits[:14] if len(digits) >= 14 else ""
 
 
@@ -2192,49 +2196,102 @@ def read_esocial_base_rows(base_file: str, base_sheet: str) -> pd.DataFrame:
 
 
 def _score_esocial_export_sheet(df: pd.DataFrame) -> int:
+    """Reconhece as exportações RELFUNCGERAL anteriores e o novo envios (A:I)."""
     if df is None or df.empty:
         return -1
     cols = {normalize_text(c) for c in df.columns}
-    required_groups = [
+    common = [
         {"CNPJ", "CNPJ EMPRESA", "CNPJ DA EMPRESA"},
         {"FUNCIONARIO", "FUNCIONÁRIO", "NOME", "COLABORADOR"},
-        {"RECIBO", "NUMERO DO RECIBO", "NÚMERO DO RECIBO", "RECIBO ESOCIAL", "RECIBO E-SOCIAL"},
     ]
-    score = 0
-    for group in required_groups:
-        if cols.intersection(group):
-            score += 100
-    for wanted in ["EVENTO", "EMPRESA", "CPF", "MATRICULA", "MATRÍCULA", "DATA REF.", "DATA REF", "STATUS", "DATA ENVIO"]:
+    if not all(cols.intersection(group) for group in common):
+        return -1
+    receipt_options = {
+        "RECIBO", "NUMERO DO RECIBO", "NÚMERO DO RECIBO",
+        "RECIBO ESOCIAL", "RECIBO E-SOCIAL", "ESOCIAL", "E-SOCIAL",
+    }
+    if not cols.intersection(receipt_options):
+        return -1
+    score = 300
+    for wanted in ["EMPRESA", "CPF", "SEFAZ", "RESULTADO", "DATA", "STATUS", "EVENTO", "DATA ENVIO"]:
         if wanted in cols:
             score += 10
-    score += min(len(df), 500)
-    return score
+    return score + min(len(df), 500)
+
+
+def _load_esocial_export_tables(path: str) -> list[tuple[str, pd.DataFrame]]:
+    """Abre XLS real, XLSX e XLS que na verdade contém uma página HTML com tabela.
+
+    Exportações do portal eSocial/SEFAZ com nome *.xls às vezes são HTML,
+    portanto pd.ExcelFile() não pode ser usado indiscriminadamente.
+    """
+    source = Path(path)
+    head = source.read_bytes()[:4096]
+    stripped = head.lstrip(b"\xef\xbb\xbf\x00\t\r\n ").lower()
+    is_html = (stripped.startswith((b"<!doctype html", b"<html", b"<table"))
+               or b"<html" in head.lower() or b"<table" in head.lower())
+    if is_html:
+        from io import StringIO
+        raw = source.read_bytes()
+        html = None
+        for encoding in ("utf-8-sig", "utf-16", "cp1252", "latin-1"):
+            try:
+                html = raw.decode(encoding)
+                if "<" in html:
+                    break
+            except UnicodeError:
+                continue
+        if not html or "<table" not in html.lower():
+            raise ValueError(
+                f"{source.name}: arquivo .xls é uma página índice do Excel sem tabela. "
+                "Abra no Excel e use 'Salvar como' > 'Pasta de Trabalho do Excel (.xlsx)', "
+                "ou exporte novamente com a tabela de funcionários."
+            )
+        try:
+            tables = pd.read_html(
+                StringIO(html), converters={"CNPJ": str, "CPF": str},
+                keep_default_na=False,
+            )
+        except (ValueError, ImportError) as exc:
+            raise ValueError(f"{source.name}: não foi possível ler a tabela HTML da exportação .xls: {exc}") from exc
+        return [(f"TABELA HTML {number}", table) for number, table in enumerate(tables, 1)]
+
+    # XLS antigo binário utiliza xlrd, XLSX usa openpyxl (inclusive se extensão errada).
+    engine = "openpyxl" if head.startswith(b"PK\x03\x04") else "xlrd"
+    try:
+        with pd.ExcelFile(path, engine=engine) as workbook:
+            result = []
+            for sheet in workbook.sheet_names:
+                try:
+                    result.append((sheet, pd.read_excel(workbook, sheet_name=sheet, dtype=object)))
+                except Exception:
+                    continue
+            return result
+    except Exception as exc:
+        raise ValueError(
+            f"{source.name}: não foi possível abrir a planilha como Excel. "
+            "Reexporte o arquivo com os dados como .xlsx ou .xls. "
+            f"Detalhes: {exc}"
+        ) from exc
 
 
 def read_esocial_export_file(path: str) -> tuple[pd.DataFrame, str]:
-    try:
-        xl = pd.ExcelFile(path)
-    except Exception as exc:
-        raise RuntimeError(f"Não foi possível abrir {os.path.basename(path)}. Erro: {exc}") from exc
-
+    candidates = _load_esocial_export_tables(path)
     best_df = None
     best_sheet = ""
     best_score = -1
-    for sheet in xl.sheet_names:
-        try:
-            candidate = pd.read_excel(path, sheet_name=sheet, dtype=object)
-            candidate = prepare_dataframe(candidate)
-        except Exception:
-            continue
+    for sheet_name, candidate in candidates:
+        candidate = prepare_dataframe(candidate)
         score = _score_esocial_export_sheet(candidate)
         if score > best_score:
             best_score = score
             best_df = candidate
-            best_sheet = sheet
+            best_sheet = sheet_name
 
     if best_df is None or best_score < 300:
         raise ValueError(
-            f"{os.path.basename(path)} não possui uma guia de envios com CNPJ, Funcionário e Recibo."
+            f"{Path(path).name}: não encontrei uma tabela de funcionários com "
+            "CNPJ, FUNCIONARIO e recibo (RECIBO ou esocial)."
         )
 
     df = best_df
@@ -2245,9 +2302,12 @@ def read_esocial_export_file(path: str) -> tuple[pd.DataFrame, str]:
     cpf_col = _find_column_optional(df, ["CPF"])
     matricula_col = _find_column_optional(df, ["MATRÍCULA", "MATRICULA"])
     data_ref_col = _find_column_optional(df, ["DATA REF.", "DATA REF", "DATA REFERÊNCIA", "DATA REFERENCIA", "DATA"])
-    status_col = _find_column_optional(df, ["STATUS"])
+    status_col = _find_column_optional(df, ["STATUS", "RESULTADO"])
     data_envio_col = _find_column_optional(df, ["DATA ENVIO", "DATA DE ENVIO"])
-    recibo_col = find_column(df, ["RECIBO", "NÚMERO DO RECIBO", "NUMERO DO RECIBO", "RECIBO ESOCIAL", "RECIBO E-SOCIAL"])
+    recibo_col = find_column(df, ["RECIBO", "NÚMERO DO RECIBO", "NUMERO DO RECIBO", "RECIBO ESOCIAL", "RECIBO E-SOCIAL", "esocial", "e-social"])
+    sefaz_col = _find_column_optional(df, ["SEFAZ", "RECIBO SEFAZ", "RECIBO SEFAZ-E"])
+    is_envios_layout = (bool(sefaz_col) and bool(_find_column_optional(df, ["RESULTADO"]))
+                         and normalize_text(recibo_col) in {"ESOCIAL", "E-SOCIAL"})
 
     rows = []
     for _, row in df.iterrows():
@@ -2270,6 +2330,8 @@ def read_esocial_export_file(path: str) -> tuple[pd.DataFrame, str]:
             "DATA_ENVIO_DATE": _parse_excel_date(row.get(data_envio_col, "")) if data_envio_col else None,
             "DATA_ENVIO": _format_date(row.get(data_envio_col, "")) if data_envio_col else "",
             "RECIBO": _safe_text(row.get(recibo_col, "")),
+            "SEFAZ": _safe_text(row.get(sefaz_col, "")) if sefaz_col else "",
+            "FORMATO_ENVIO": "ENVIO" if is_envios_layout else "LEGADO",
             "ARQUIVO_ORIGEM": os.path.basename(path),
             "GUIA_ORIGEM": best_sheet,
         })
@@ -2376,12 +2438,33 @@ def build_esocial_receipt_pdf(df: pd.DataFrame, pdf_path: str, company_name: str
         leading=8.8,
     )
 
-    headers = ["Evento", "Empresa", "Funcionário", "CPF", "Matrícula", "Data Ref.", "Status", "Data Envio", "Recibo"]
+    # Novo modelo "envios": somente as colunas A-H; MENSAGEM (I) nunca é exportada.
+    new_layout = ("FORMATO_ENVIO" in df.columns and df["FORMATO_ENVIO"].eq("ENVIO").any())
+    if new_layout:
+        headers = ["EMPRESA", "CNPJ", "FUNCIONARIO", "CPF", "Data", "SEFAZ", "esocial", "RESULTADO"]
+        body_style.fontSize = 6.8
+        body_style.leading = 8.0
+        body_style.wordWrap = "CJK"  # Permite quebrar GUIDs longos dentro da célula.
+        header_style.fontSize = 7.1
+    else:
+        headers = ["Evento", "Empresa", "Funcionário", "CPF", "Matrícula", "Data Ref.", "Status", "Data Envio", "Recibo"]
     full_company = f"{company_name} ({format_cnpj(company_cnpj)})"
     table_data = [[make_paragraph(h, header_style) for h in headers]]
     for _, row in df.iterrows():
         # Mantém o mesmo padrão visual do recibo de referência: Razão Social (CNPJ).
         company_value = full_company
+        if new_layout:
+            table_data.append([
+                make_paragraph(row.get("EMPRESA") or company_name, body_style),
+                make_paragraph(format_cnpj(row.get("CNPJ") or company_cnpj), body_style),
+                make_paragraph(row.get("FUNCIONARIO"), body_style),
+                make_paragraph(row.get("CPF"), body_style),
+                make_paragraph(row.get("DATA_REF"), body_style),
+                make_paragraph(row.get("SEFAZ"), body_style),
+                make_paragraph(row.get("RECIBO"), body_style),
+                make_paragraph(row.get("STATUS"), body_style),
+            ])
+            continue
         table_data.append([
             make_paragraph(row.get("EVENTO") or "S-2220", body_style),
             make_paragraph(company_value, body_style),
@@ -2395,7 +2478,7 @@ def build_esocial_receipt_pdf(df: pd.DataFrame, pdf_path: str, company_name: str
         ])
 
     usable = page_width - doc.leftMargin - doc.rightMargin
-    weights = [5, 30, 19, 9, 9, 7, 7, 7, 14]
+    weights = [16, 13, 20, 10, 8, 17, 16, 10] if new_layout else [5, 30, 19, 9, 9, 7, 7, 7, 14]
     total = sum(weights)
     widths = [usable * value / total for value in weights]
     table = Table(table_data, colWidths=widths, repeatRows=1, hAlign="LEFT")
@@ -2492,16 +2575,24 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
 
     export_frames = []
     source_notes = []
+    skipped_files = []
     total_files = max(1, len(export_files))
     for idx, file_path in enumerate(export_files, start=1):
         if progress:
             progress(20 + int((idx - 1) * 30 / total_files), f"Lendo planilha eSocial {idx}/{total_files}: {Path(file_path).name}")
-        frame, sheet = read_esocial_export_file(file_path)
+        try:
+            frame, sheet = read_esocial_export_file(file_path)
+        except (ValueError, RuntimeError) as exc:
+            # Um XLS-HTML vazio/índice não deve impedir o processamento dos outros arquivos.
+            skipped_files.append(f"{Path(file_path).name}: {exc}")
+            logger.warning("Recibo eSocial - arquivo de envio ignorado: %s", exc)
+            continue
         export_frames.append(frame)
         source_notes.append(f"{Path(file_path).name} -> guia {sheet}")
 
     if not export_frames:
-        raise ValueError("Envie pelo menos uma planilha de envios do eSocial.")
+        errors = " | ".join(skipped_files[:3])
+        raise ValueError("Nenhuma planilha válida de envios do eSocial. " + errors)
 
     exports = pd.concat(export_frames, ignore_index=True)
     # Remove linhas repetidas quando o mesmo arquivo/registro é enviado mais de uma vez.
@@ -2584,6 +2675,9 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
             f.write(f"Ano identificado: {year}\n")
         f.write(f"Linhas com OK E-SOCIAL válidas na base: {len(base_rows)}\n")
         f.write(f"Planilhas de eSocial recebidas: {len(export_files)}\n")
+        f.write(f"Planilhas válidas: {len(export_frames)}; ignoradas: {len(skipped_files)}\n")
+        for error in skipped_files:
+            f.write(f"  - IGNORADO: {error}\n")
         for note in source_notes:
             f.write(f"  - {note}\n")
         f.write("\nEMPRESAS\n" + "-" * 78 + "\n")
@@ -2605,6 +2699,7 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
         "total_generated": len(generated),
         "total_companies": len(company_order),
         "total_without_match": sum(1 for item in summary if item.get("status") != "GERADO"),
+        "ignored_files": skipped_files,
     }
 
 
@@ -5368,6 +5463,8 @@ def esocial_processar_async():
             )
         else:
             final_message = f"Concluído: {total_generated} PDF(s) de recibo gerado(s)."
+        if result.get("ignored_files"):
+            final_message += f" {len(result['ignored_files'])} arquivo(s) inválido(s) ignorado(s); detalhes no RESUMO PROCESSAMENTO.txt."
         return str(zip_path), zip_path.name, final_message
 
     month, year = _sheet_month_year(base_sheet)

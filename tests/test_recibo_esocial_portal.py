@@ -8,6 +8,7 @@ import re
 import tempfile
 import unittest
 import unicodedata
+from unittest.mock import patch
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -15,7 +16,11 @@ import pandas as pd
 
 APP_PATH = Path(__file__).resolve().parents[1] / "edge_app" / "application.py"
 NAMES = {
-    "normalize_text", "extract_cnpj", "format_cnpj", "_find_column_optional", "find_column",
+    "normalize_text", "normalize_company_name", "extract_cnpj", "format_cnpj",
+    "extract_employer_document", "format_employer_document", "format_employer_document_filename",
+    "_find_column_optional", "find_column", "_normalize_marker", "_row_has_ok_esocial",
+    "_strip_cnpj_from_company", "read_esocial_base_rows", "select_esocial_rows_for_company",
+    "_candidate_priority",
     "prepare_dataframe", "_normalize_person_name", "_safe_text", "_cpf_text",
     "_parse_excel_date", "_format_date", "_score_esocial_export_sheet",
     "_load_esocial_export_tables", "read_esocial_export_file", "make_paragraph",
@@ -81,6 +86,70 @@ class TestReciboEsocialPortal(unittest.TestCase):
         self.assertEqual(self.fn["extract_cnpj"](4854015000178), "04854015000178")
         self.assertEqual(self.fn["format_cnpj"]("04854015000178"), "04.854.015/0001-78")
         self.assertEqual(self.fn["extract_cnpj"]("123456789012"), "")
+
+    def test_cpf_de_empregador_pessoa_fisica_em_envios_xls(self):
+        html = """<html><body><table>
+        <tr><th>EMPRESA</th><th>CNPJ</th><th>FUNCIONARIO</th><th>CPF</th><th>Data</th><th>SEFAZ</th><th>esocial</th><th>RESULTADO</th><th>MENSAGEM</th></tr>
+        <tr><td>EMPREGADOR PESSOA FISICA</td><td>12345678909</td><td>TRABALHADOR A</td><td>98765432100</td><td>01/10/2026</td><td></td><td>1.1.000222</td><td>AUTORIZADO</td><td>não incluir</td></tr>
+        </table></body></html>"""
+        with tempfile.TemporaryDirectory() as td:
+            xls = Path(td) / "envios.xls"
+            xls.write_text(html, encoding="utf-8")
+            df, _ = self.fn["read_esocial_export_file"](str(xls))
+            self.assertEqual(len(df), 1)
+            self.assertEqual(df.iloc[0]["CNPJ"], "12345678909")  # CPF do empregador
+            self.assertEqual(df.iloc[0]["CPF"], "98765432100")  # CPF do funcionário
+            pdf = Path(td) / "empregador.pdf"
+            self.fn["build_esocial_receipt_pdf"](df, str(pdf), "EMPREGADOR PESSOA FISICA", "12345678909")
+            import fitz
+            with fitz.open(pdf) as result:
+                txt = " ".join(page.get_text() for page in result)
+            self.assertIn("123.456.789-09", txt)
+            self.assertIn("CPF/CNPJ", txt)
+            self.assertIn("98765432100", txt)
+            self.assertNotIn("não incluir", txt)
+            self.assertEqual(
+                self.fn["format_employer_document_filename"]("12345678909"), "123.456.789-09"
+            )
+
+    def test_base_aceita_cpf_empregador_e_cruzamento_pelo_nome_funcionario(self):
+        base_data = pd.DataFrame([
+            {"SETOR": "EMPREGADOR PESSOA FISICA - CPF: 123.456.789-09", "FUNCIONÁRIO": "TRABALHADOR A", "OBSERVACAO": "OK E-SOCIAL"},
+            {"SETOR": "EMPREGADOR PESSOA FISICA - CPF: 123.456.789-09", "FUNCIONÁRIO": "TRABALHADOR B", "OBSERVACAO": "OK E-SOCIAL"},
+            {"SETOR": "OUTRO EMPREGADOR - CPF: 222.222.222-22", "FUNCIONÁRIO": "TRABALHADOR A", "OBSERVACAO": "OK E-SOCIAL"},
+        ])
+        with patch.object(pd, "read_excel", return_value=base_data):
+            base_rows = self.fn["read_esocial_base_rows"]("planilha.xlsx", "OUTUBRO.2026 OK")
+        self.assertEqual(len(base_rows), 3)
+        filtered = base_rows[base_rows["CNPJ"] == "12345678909"]
+        self.assertEqual(len(filtered), 2)
+        self.assertEqual(filtered.iloc[0]["EMPRESA_NOME"], "EMPREGADOR PESSOA FISICA")
+        exports = pd.DataFrame([
+            {"CNPJ": "12345678909", "NOME_KEY": "TRABALHADOR A", "FUNCIONARIO": "TRABALHADOR A", "RECIBO": "1.1.223", "EVENTO": "S-2220"},
+            {"CNPJ": "12345678909", "NOME_KEY": "OUTRO FUNCIONARIO", "FUNCIONARIO": "OUTRO FUNCIONARIO", "RECIBO": "1.1.225", "EVENTO": "S-2220"},
+        ])
+        selected, missing = self.fn["select_esocial_rows_for_company"](filtered, exports)
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(missing, ["TRABALHADOR B"])
+
+    def test_documento_do_empregador_preserva_zero_inicial(self):
+        doc = self.fn["extract_employer_document"]
+        self.assertEqual(doc("012.345.678-90"), "01234567890")
+        self.assertEqual(doc(1234567890), "01234567890")
+        self.assertEqual(self.fn["format_employer_document"]("01234567890"), "012.345.678-90")
+        self.assertEqual(doc("04.854.015/0001-78"), "04854015000178")
+        self.assertEqual(doc(4854015000178), "04854015000178")
+        self.assertEqual(doc("documento incorreto"), "")
+        self.assertEqual(doc("123456789012"), "")
+
+    def test_base_sem_cpf_do_empregador_conserva_nome_para_correspondencia_segura(self):
+        base_data = pd.DataFrame([
+            {"SETOR": "EMPREGADOR PESSOA FISICA", "FUNCIONÁRIO": "TRABALHADOR A", "OBSERVACAO": "OK E-SOCIAL"},
+        ])
+        with patch.object(pd, "read_excel", return_value=base_data):
+            base_rows = self.fn["read_esocial_base_rows"]("planilha.xlsx", "OUTUBRO.2026 OK")
+        self.assertEqual(base_rows.iloc[0]["CNPJ"], "")
+        self.assertEqual(base_rows.iloc[0]["EMPRESA_KEY"], "EMPREGADOR PESSOA FISICA")
 
     def test_extracao_legada_continua_compativel(self):
         html = """<html><body><table>

@@ -2006,6 +2006,43 @@ def extract_cnpj(text: str) -> str:
     return digits[:14] if len(digits) >= 14 else ""
 
 
+def extract_employer_document(value) -> str:
+    """Extrai CPF (11 dígitos) ou CNPJ (14) do *empregador*, não do funcionário.
+
+    Em arquivos Excel, números podem chegar sem o zero inicial: 10 dígitos
+    (CPF) e 13 dígitos (CNPJ). Valores de outros comprimentos são rejeitados.
+    """
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    raw = _safe_text(value)
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) == 10:
+        digits = digits.zfill(11)
+    elif len(digits) == 13:
+        digits = digits.zfill(14)
+    return digits if len(digits) in (11, 14) else ""
+
+
+def format_employer_document(value) -> str:
+    """Máscara documental correta para recibos de empregadores PJ e PF."""
+    digits = extract_employer_document(value)
+    if len(digits) == 11:
+        return f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
+    if len(digits) == 14:
+        return f"{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}"
+    return "CPF/CNPJ NÃO INFORMADO"
+
+
+def format_employer_document_filename(value) -> str:
+    """Preserva o nome histórico dos PDFs por CNPJ; usa CPF mascarado para PF."""
+    digits = extract_employer_document(value)
+    if len(digits) == 11:
+        return format_employer_document(digits)
+    if len(digits) == 14:
+        return format_cnpj_filename(digits)
+    return "CPF-CNPJ NÃO INFORMADO"
+
+
 def format_cnpj(cnpj: str) -> str:
     digits = re.sub(r"\D", "", cnpj or "")
     if len(digits) != 14:
@@ -2140,11 +2177,13 @@ def _sheet_month_year(sheet_name: str) -> tuple[str, int | None]:
 
 
 def _strip_cnpj_from_company(company_text: str, cnpj: str) -> str:
+    """Retira o CPF/CNPJ do empregador presente junto à razão social/nome."""
     company = _safe_text(company_text)
     digits = re.sub(r"\D", "", cnpj or "")
     if digits:
         flexible = r"\D*".join(re.escape(ch) for ch in digits)
         company = re.sub(flexible, "", company, count=1)
+        company = re.sub(r"\b(?:CPF|CNPJ)\s*[:\-]?\s*$", "", company, flags=re.I)
     company = re.sub(r"\s*[-–—|/]\s*$", "", company).strip(" -–—|/")
     return company or "EMPRESA"
 
@@ -2162,10 +2201,14 @@ def read_esocial_base_rows(base_file: str, base_sheet: str) -> pd.DataFrame:
 
     employee_col = find_column(df, ["FUNCIONÁRIO", "FUNCIONARIO", "NOME", "COLABORADOR"])
     company_col = _find_column_optional(df, ["SETOR", "EMPRESA", "UNIDADE", "RAZÃO SOCIAL", "RAZAO SOCIAL"])
-    cnpj_col = _find_column_optional(df, ["CNPJ", "CNPJ EMPRESA", "CNPJ DA EMPRESA"])
+    cnpj_col = _find_column_optional(df, [
+        "CNPJ", "CNPJ EMPRESA", "CNPJ DA EMPRESA", "CPF/CNPJ", "CPF CNPJ",
+        "CPF/CNPJ EMPRESA", "CPF EMPRESA", "CPF DO EMPREGADOR", "CPF EMPREGADOR",
+        "DOCUMENTO EMPREGADOR", "DOCUMENTO DA EMPRESA",
+    ])
     date_col = _find_column_optional(df, ["DATA", "DATA DO EXAME", "DATA EXAME"])
     if not company_col and not cnpj_col:
-        raise KeyError("Não foi possível identificar a empresa/CNPJ na planilha base.")
+        raise KeyError("Não foi possível identificar a empresa ou o CPF/CNPJ do empregador na planilha base.")
 
     eligible = df[df.apply(_row_has_ok_esocial, axis=1)].copy()
     if eligible.empty:
@@ -2174,24 +2217,28 @@ def read_esocial_base_rows(base_file: str, base_sheet: str) -> pd.DataFrame:
     rows = []
     for idx, row in eligible.iterrows():
         company_text = _safe_text(row.get(company_col, "")) if company_col else ""
-        cnpj = extract_cnpj(row.get(cnpj_col, "")) if cnpj_col else ""
+        cnpj = extract_employer_document(row.get(cnpj_col, "")) if cnpj_col else ""
         if not cnpj:
-            cnpj = extract_cnpj(company_text)
+            cnpj = extract_employer_document(company_text)
         employee = _safe_text(row.get(employee_col, ""))
-        if len(cnpj) != 14 or not employee:
+        # Sem documento na base, mantém o registro para cruzamento *exato* pelo
+        # nome do empregador PF. Nunca usa o CPF da coluna do funcionário.
+        if not employee or (not cnpj and not company_text):
             continue
+        company_name = _strip_cnpj_from_company(company_text, cnpj) if company_text else "EMPRESA"
         rows.append({
             "BASE_ROW": int(idx) + 2 if isinstance(idx, int) else len(rows) + 2,
             "CNPJ": cnpj,
             "EMPRESA_BASE": company_text,
-            "EMPRESA_NOME": _strip_cnpj_from_company(company_text, cnpj),
+            "EMPRESA_NOME": company_name,
+            "EMPRESA_KEY": normalize_company_name(company_name) if company_text else "",
             "FUNCIONARIO_BASE": employee,
             "NOME_KEY": _normalize_person_name(employee),
             "BASE_DATE": _parse_excel_date(row.get(date_col, "")) if date_col else None,
         })
     result = pd.DataFrame(rows)
     if result.empty:
-        raise ValueError("As linhas com OK E-SOCIAL não possuem CNPJ de empresa e funcionário válidos.")
+        raise ValueError("As linhas com OK E-SOCIAL não possuem empregador e funcionário válidos.")
     return result
 
 
@@ -2201,7 +2248,7 @@ def _score_esocial_export_sheet(df: pd.DataFrame) -> int:
         return -1
     cols = {normalize_text(c) for c in df.columns}
     common = [
-        {"CNPJ", "CNPJ EMPRESA", "CNPJ DA EMPRESA"},
+        {"CNPJ", "CNPJ EMPRESA", "CNPJ DA EMPRESA", "CPF/CNPJ", "CPF CNPJ", "CPF EMPRESA", "CPF EMPREGADOR", "DOCUMENTO EMPREGADOR"},
         {"FUNCIONARIO", "FUNCIONÁRIO", "NOME", "COLABORADOR"},
     ]
     if not all(cols.intersection(group) for group in common):
@@ -2291,13 +2338,16 @@ def read_esocial_export_file(path: str) -> tuple[pd.DataFrame, str]:
     if best_df is None or best_score < 300:
         raise ValueError(
             f"{Path(path).name}: não encontrei uma tabela de funcionários com "
-            "CNPJ, FUNCIONARIO e recibo (RECIBO ou esocial)."
+            "CPF/CNPJ do empregador, FUNCIONARIO e recibo (RECIBO ou esocial)."
         )
 
     df = best_df
     evento_col = _find_column_optional(df, ["EVENTO", "TIPO EVENTO"])
     empresa_col = _find_column_optional(df, ["EMPRESA", "RAZÃO SOCIAL", "RAZAO SOCIAL"])
-    cnpj_col = find_column(df, ["CNPJ", "CNPJ EMPRESA", "CNPJ DA EMPRESA"])
+    cnpj_col = find_column(df, [
+        "CNPJ", "CNPJ EMPRESA", "CNPJ DA EMPRESA", "CPF/CNPJ", "CPF CNPJ",
+        "CPF EMPRESA", "CPF EMPREGADOR", "DOCUMENTO EMPREGADOR",
+    ])
     funcionario_col = find_column(df, ["FUNCIONÁRIO", "FUNCIONARIO", "NOME", "COLABORADOR"])
     cpf_col = _find_column_optional(df, ["CPF"])
     matricula_col = _find_column_optional(df, ["MATRÍCULA", "MATRICULA"])
@@ -2311,9 +2361,9 @@ def read_esocial_export_file(path: str) -> tuple[pd.DataFrame, str]:
 
     rows = []
     for _, row in df.iterrows():
-        cnpj = extract_cnpj(row.get(cnpj_col, ""))
+        cnpj = extract_employer_document(row.get(cnpj_col, ""))
         employee = _safe_text(row.get(funcionario_col, ""))
-        if len(cnpj) != 14 or not employee:
+        if not cnpj or not employee:
             continue
         evento = _safe_text(row.get(evento_col, "")) if evento_col else ""
         rows.append({
@@ -2441,14 +2491,14 @@ def build_esocial_receipt_pdf(df: pd.DataFrame, pdf_path: str, company_name: str
     # Novo modelo "envios": somente as colunas A-H; MENSAGEM (I) nunca é exportada.
     new_layout = ("FORMATO_ENVIO" in df.columns and df["FORMATO_ENVIO"].eq("ENVIO").any())
     if new_layout:
-        headers = ["EMPRESA", "CNPJ", "FUNCIONARIO", "CPF", "Data", "SEFAZ", "esocial", "RESULTADO"]
+        headers = ["EMPRESA", "CPF/CNPJ", "FUNCIONARIO", "CPF", "Data", "SEFAZ", "esocial", "RESULTADO"]
         body_style.fontSize = 6.8
         body_style.leading = 8.0
         body_style.wordWrap = "CJK"  # Permite quebrar GUIDs longos dentro da célula.
         header_style.fontSize = 7.1
     else:
         headers = ["Evento", "Empresa", "Funcionário", "CPF", "Matrícula", "Data Ref.", "Status", "Data Envio", "Recibo"]
-    full_company = f"{company_name} ({format_cnpj(company_cnpj)})"
+    full_company = f"{company_name} ({format_employer_document(company_cnpj)})"
     table_data = [[make_paragraph(h, header_style) for h in headers]]
     for _, row in df.iterrows():
         # Mantém o mesmo padrão visual do recibo de referência: Razão Social (CNPJ).
@@ -2456,7 +2506,7 @@ def build_esocial_receipt_pdf(df: pd.DataFrame, pdf_path: str, company_name: str
         if new_layout:
             table_data.append([
                 make_paragraph(row.get("EMPRESA") or company_name, body_style),
-                make_paragraph(format_cnpj(row.get("CNPJ") or company_cnpj), body_style),
+                make_paragraph(format_employer_document(row.get("CNPJ") or company_cnpj), body_style),
                 make_paragraph(row.get("FUNCIONARIO"), body_style),
                 make_paragraph(row.get("CPF"), body_style),
                 make_paragraph(row.get("DATA_REF"), body_style),
@@ -2499,14 +2549,14 @@ def build_esocial_receipt_pdf(df: pd.DataFrame, pdf_path: str, company_name: str
 
 def build_pdf(df: pd.DataFrame, pdf_path: str, title: str):
     """Compatibilidade com o serviço antigo; usa o novo layout quando chamado diretamente."""
-    cnpj = extract_cnpj(title)
+    cnpj = extract_employer_document(title)
     company = _strip_cnpj_from_company(title, cnpj) if cnpj else (_safe_text(title) or "EMPRESA")
     build_esocial_receipt_pdf(df, pdf_path, company, cnpj)
 
 
 def build_esocial_pdf_filename(company_name: str, company_cnpj: str, pdf_month: str) -> str:
     return sanitize_filename(
-        f"{company_name} - {format_cnpj_filename(company_cnpj)} - {pdf_month}"
+        f"{company_name} - {format_employer_document_filename(company_cnpj)} - {pdf_month}"
     ) + ".pdf"
 
 
@@ -2601,7 +2651,7 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
         keep="first",
     ).reset_index(drop=True)
 
-    # Processa somente CNPJs realmente presentes nas planilhas enviadas pelo usuário.
+    # Processa somente CPFs/CNPJs de empregadores presentes nas planilhas enviadas.
     company_order = list(dict.fromkeys(exports["CNPJ"].dropna().astype(str).tolist()))
     generated = []
     summary = []
@@ -2614,6 +2664,17 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
         export_company = exports[exports["CNPJ"] == cnpj].copy()
         base_company = base_rows[base_rows["CNPJ"] == cnpj].copy()
         export_name = _safe_text(export_company.iloc[0].get("EMPRESA", "")) if not export_company.empty else ""
+        matched_by_name = False
+        # Para empregador PF cuja base ainda não informa o CPF, aceita apenas
+        # nome do empregador exatamente equivalente e CPF de exportação válido.
+        # Não faz esta aproximação para CNPJ, preservando a regra anterior.
+        if base_company.empty and len(cnpj) == 11 and export_name:
+            name_key = normalize_company_name(_strip_cnpj_from_company(export_name, cnpj))
+            if name_key:
+                base_company = base_rows[
+                    (base_rows["CNPJ"] == "") & (base_rows["EMPRESA_KEY"] == name_key)
+                ].copy()
+                matched_by_name = not base_company.empty
 
         if base_company.empty:
             summary.append({
@@ -2623,7 +2684,7 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
                 "total_base": 0,
                 "total_export": len(export_company),
                 "total_encontrado": 0,
-                "motivo": "CNPJ não possui linhas com OK E-SOCIAL na guia selecionada.",
+                "motivo": "CPF/CNPJ não possui linhas com OK E-SOCIAL na guia selecionada.",
                 "pdf": "",
                 "faltantes": [],
             })
@@ -2656,7 +2717,7 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
             "total_base": len(base_company),
             "total_export": len(export_company),
             "total_encontrado": len(selected),
-            "motivo": "OK",
+            "motivo": "OK (nome do empregador; CPF ausente na base)" if matched_by_name else "OK",
             "pdf": pdf_name,
             "faltantes": missing,
         })
@@ -2682,7 +2743,7 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
             f.write(f"  - {note}\n")
         f.write("\nEMPRESAS\n" + "-" * 78 + "\n")
         for item in summary:
-            f.write(f"{item['empresa']} | {format_cnpj(item['cnpj'])} | {item['status']} | ")
+            f.write(f"{item['empresa']} | {format_employer_document(item['cnpj'])} | {item['status']} | ")
             f.write(
                 f"base={item['total_base']} | exportação={item.get('total_export', 0)} | "
                 f"encontrados={item['total_encontrado']} | {item['motivo']}\n"

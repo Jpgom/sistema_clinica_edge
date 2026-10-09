@@ -1,0 +1,33 @@
+EDGE - CORRECAO CPF EMPREGADOR - RECIBO ESOCIAL - 09/10/2026
+
+TELA: Interno > Recibo eSocial.
+
+O QUE FOI ALTERADO
+- Permite CPF de 11 digitos (empregador pessoa fisica) no campo "CNPJ" do arquivo envios.xls.
+- Mantem CNPJ de 14 digitos para empresas pessoa juridica.
+- Preserva zero inicial de CPF/CNPJ quando o Excel trata o documento como numero.
+- Reconhece CPF/CNPJ do empregador na planilha base, inclusive quando acompanha o nome da empresa.
+- Para empregador CPF e apenas nome na base, permite cruzamento por nome exato do empregador + funcionario.
+- O PDF usa cabecalho CPF/CNPJ e aplica a mascara correta por tipo de identificador.
+- Mantem 8 colunas do envios (sem a coluna MENSAGEM); nomeia o arquivo PDF com CPF ou CNPJ.
+- O resumo de processamento identifica corretamente CPF ou CNPJ.
+
+ARQUIVOS ALTERADOS
+- edge_app/application.py
+- edge_app/templates/esocial.html
+- tests/test_recibo_esocial_portal.py (novos testes)
+
+VALIDACAO
+- Arquivo recebido envios (5).xls: 837 registros de empregador pessoa fisica lidos.
+- Teste integrado: recibo PDF gerado com CPF presente na base e tambem com apenas nome do empregador.
+- Testes do modulo alvo: 8 aprovados.
+
+INSTALACAO
+1. Faca backup do sistema e bancos de dados antes de atualizar.
+2. Se usar o pacote PATCH, substitua somente os arquivos nos mesmos caminhos informados.
+3. Se usar o ZIP completo, preserve os dados e configuracoes do servidor.
+4. Reinicie/republique o servico que disponibiliza o Sistema Interno EDGE.
+5. Em Interno > Recibo eSocial, use a base habitual e envie a planilha XLS.
+
+NOTA: Os arquivos sao codigo local atualizado; nao alteram automaticamente o site publicado.
+A base original do cliente nao foi fornecida; os testes de integracao usaram uma base sintetica.

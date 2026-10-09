@@ -17,10 +17,10 @@ import pandas as pd
 APP_PATH = Path(__file__).resolve().parents[1] / "edge_app" / "application.py"
 NAMES = {
     "normalize_text", "normalize_company_name", "extract_cnpj", "format_cnpj",
-    "extract_employer_document", "format_employer_document", "format_employer_document_filename",
+    "_employer_documents_in_text", "extract_employer_document", "format_employer_document", "format_employer_document_filename",
     "_find_column_optional", "find_column", "_normalize_marker", "_row_has_ok_esocial",
     "_strip_cnpj_from_company", "read_esocial_base_rows", "select_esocial_rows_for_company",
-    "_candidate_priority",
+    "_candidate_priority", "_is_valid_esocial_receipt",
     "prepare_dataframe", "_normalize_person_name", "_safe_text", "_cpf_text",
     "_parse_excel_date", "_format_date", "_score_esocial_export_sheet",
     "_load_esocial_export_tables", "read_esocial_export_file", "make_paragraph",
@@ -45,6 +45,12 @@ def receipt_functions():
         ParagraphStyle=ParagraphStyle, getSampleStyleSheet=getSampleStyleSheet,
         Paragraph=Paragraph, SimpleDocTemplate=SimpleDocTemplate, Table=Table, TableStyle=TableStyle,
     )
+    namespace["ESOCIAL_MONTHS"] = {
+        "JANEIRO": "JANEIRO", "FEVEREIRO": "FEVEREIRO", "MARCO": "MARÇO",
+        "ABRIL": "ABRIL", "MAIO": "MAIO", "JUNHO": "JUNHO",
+        "JULHO": "JULHO", "AGOSTO": "AGOSTO", "SETEMBRO": "SETEMBRO",
+        "OUTUBRO": "OUTUBRO", "NOVEMBRO": "NOVEMBRO", "DEZEMBRO": "DEZEMBRO",
+    }
     exec("from __future__ import annotations", namespace)
     exec(compile(ast.Module(body=nodes, type_ignores=[]), str(APP_PATH), "exec"), namespace)
     return namespace
@@ -131,6 +137,114 @@ class TestReciboEsocialPortal(unittest.TestCase):
         selected, missing = self.fn["select_esocial_rows_for_company"](filtered, exports)
         self.assertEqual(len(selected), 1)
         self.assertEqual(missing, ["TRABALHADOR B"])
+
+    def test_cnpj_duplicado_na_base_abril_e_numeros_no_nome(self):
+        value = "B G SANTOS NAZARE EIRELI - ME 16.804.110/0001-46 - 16.804.110/0001-46"
+        self.assertEqual(self.fn["extract_employer_document"](value), "16804110000146")
+        self.assertEqual(
+            self.fn["_strip_cnpj_from_company"](value, "16804110000146"),
+            "B G SANTOS NAZARE EIRELI - ME",
+        )
+        self.assertEqual(self.fn["extract_employer_document"](
+            "EMPRESA 123 - 16.804.110/0001-46 - 16.804.110/0001-46"
+        ), "16804110000146")
+        base = pd.DataFrame([
+            {"SETOR": value, "FUNCIONÁRIO": "ROMULO HENRIQUE CORREA LIMA",
+             "DATA": datetime(2026, 4, 23), "OBS": "OK E-SOCIAL"},
+        ])
+        with patch.object(pd, "read_excel", return_value=base):
+            rows = self.fn["read_esocial_base_rows"]("planilha.xlsx", "ABRIL.2026")
+        self.assertEqual(rows.iloc[0]["CNPJ"], "16804110000146")
+        self.assertEqual(rows.iloc[0]["EMPRESA_NOME"], "B G SANTOS NAZARE EIRELI - ME")
+        export = pd.DataFrame([
+            {"CNPJ": "16804110000146", "NOME_KEY": "ROMULO HENRIQUE CORREA LIMA",
+             "FUNCIONARIO": "ROMULO HENRIQUE CORREA LIMA", "CPF": "03907802276",
+             "DATA_REF_DATE": datetime(2026, 4, 23).date(),
+             "RECIBO": "1.1.000000012", "EVENTO": "", "STATUS": "AUTORIZADO"}
+        ])
+        selection, missing = self.fn["select_esocial_rows_for_company"](rows, export)
+        self.assertEqual(len(selection), 1)
+        self.assertEqual(missing, [])
+
+    def test_documentos_conflitantes_nao_se_associam_ao_primeiro(self):
+        doc = self.fn["extract_employer_document"]
+        self.assertEqual(doc("EMPRESA 16.804.110/0001-46 / 11.222.333/0001-44"), "")
+        self.assertEqual(doc("EMPRESA 1680411000014616804110000146"), "")
+        self.assertEqual(doc("EMPRESA - 16.804.110/0001-46 - 16804110000146"), "16804110000146")
+        base = pd.DataFrame([
+            {"SETOR": "EMPRESA - 16.804.110/0001-46 - 11.222.333/0001-44",
+             "FUNCIONÁRIO": "FUNCIONARIO A", "OBS": "OK E-SOCIAL"},
+            {"SETOR": "EMPRESA - 16.804.110/0001-46",
+             "FUNCIONÁRIO": "FUNCIONARIO B", "OBS": "OK E-SOCIAL"},
+        ])
+        with patch.object(pd, "read_excel", return_value=base):
+            parsed = self.fn["read_esocial_base_rows"]("base.xlsx", "ABRIL.2026")
+        self.assertEqual(parsed["FUNCIONARIO_BASE"].tolist(), ["FUNCIONARIO B"])
+        self.assertEqual(len(parsed.attrs["identification_warnings"]), 1)
+
+    def test_nao_utiliza_recibo_rejeitado_ou_de_exame_em_outra_data(self):
+        company = pd.DataFrame([{
+            "NOME_KEY": "FUNCIONARIO A", "FUNCIONARIO_BASE": "FUNCIONARIO A",
+            "BASE_DATE": datetime(2026, 4, 23).date(), "BASE_ROW": 10,
+        }])
+        export = pd.DataFrame([
+            {"CNPJ": "16804110000146", "NOME_KEY": "FUNCIONARIO A",
+             "CPF": "11111111111", "DATA_REF_DATE": datetime(2026, 4, 23).date(),
+             "STATUS": "REJEITADO", "RECIBO": "1.1.111", "EVENTO": ""},
+            {"CNPJ": "16804110000146", "NOME_KEY": "FUNCIONARIO A",
+             "CPF": "11111111111", "DATA_REF_DATE": datetime(2026, 3, 23).date(),
+             "STATUS": "AUTORIZADO", "RECIBO": "1.1.222", "EVENTO": ""},
+            {"CNPJ": "16804110000146", "NOME_KEY": "FUNCIONARIO A",
+             "CPF": "11111111111", "DATA_REF_DATE": datetime(2026, 4, 23).date(),
+             "STATUS": "AUTORIZADO", "RECIBO": "", "EVENTO": ""},
+        ])
+        selected, missing = self.fn["select_esocial_rows_for_company"](company, export)
+        self.assertEqual(len(selected), 0)
+        self.assertTrue(missing)
+
+    def test_homonimos_cpfs_diferentes_sao_sinalizados(self):
+        company = pd.DataFrame([{
+            "NOME_KEY": "NOME COMUM", "FUNCIONARIO_BASE": "NOME COMUM",
+            "BASE_DATE": None, "BASE_ROW": 2,
+        }])
+        export = pd.DataFrame([
+            {"CNPJ": "16804110000146", "NOME_KEY": "NOME COMUM",
+             "CPF": "11111111111", "STATUS": "AUTORIZADO", "RECIBO": "1.1.111",
+             "EVENTO": ""},
+            {"CNPJ": "16804110000146", "NOME_KEY": "NOME COMUM",
+             "CPF": "22222222222", "STATUS": "AUTORIZADO", "RECIBO": "1.1.222",
+             "EVENTO": ""},
+        ])
+        selected, missing = self.fn["select_esocial_rows_for_company"](company, export)
+        self.assertTrue(selected.empty)
+        self.assertIn("homônimos", missing[0])
+
+    def test_sem_data_na_base_impede_cruzamento_com_ano_errado(self):
+        base = pd.DataFrame([{
+            "NOME_KEY": "FUNCIONARIO A", "FUNCIONARIO_BASE": "FUNCIONARIO A",
+            "BASE_DATE": None, "BASE_ROW": 12,
+        }])
+        export = pd.DataFrame([{
+            "CNPJ": "16804110000146", "NOME_KEY": "FUNCIONARIO A", "CPF": "11111111111",
+            "DATA_REF_DATE": datetime(2025, 4, 23).date(),
+            "RECIBO": "1.1.345", "STATUS": "AUTORIZADO", "EVENTO": "S-2220",
+        }])
+        selected, missing = self.fn["select_esocial_rows_for_company"](base, export, "ABRIL", 2026)
+        self.assertTrue(selected.empty)
+        self.assertIn("fora da competência", missing[0])
+
+    def test_exportacao_outros_eventos_nao_pode_virar_recibo_asos(self):
+        html = """<html><body><table>
+        <tr><th>EVENTO</th><th>EMPRESA</th><th>CNPJ</th><th>FUNCIONARIO</th>
+        <th>CPF</th><th>DATA</th><th>STATUS</th><th>RECIBO</th></tr>
+        <tr><td>S-2240</td><td>EMPRESA TESTE</td><td>16804110000146</td>
+        <td>FUNCIONARIO A</td><td>11111111111</td><td>23/04/2026</td>
+        <td>AUTORIZADO</td><td>1.1.345</td></tr></table></body></html>"""
+        with tempfile.TemporaryDirectory() as td:
+            f = Path(td) / "outro_evento.xls"
+            f.write_text(html, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "não contém eventos S-2220"):
+                self.fn["read_esocial_export_file"](str(f))
 
     def test_documento_do_empregador_preserva_zero_inicial(self):
         doc = self.fn["extract_employer_document"]

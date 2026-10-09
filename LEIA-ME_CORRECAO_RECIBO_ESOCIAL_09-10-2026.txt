@@ -1,0 +1,57 @@
+ATUALIZACAO EDGE - RECIBO eSOCIAL
+Data: 09/10/2026
+
+OBJETIVO
+Corrigir a identificacao de empregadores com CPF/CNPJ repetido no texto do SETOR
+na planilha-base, impedindo associacoes inseguras na geracao de recibos S-2220.
+
+PROBLEMA CORRIGIDO
+Na guia ABRIL.2026, a empresa
+B G SANTOS NAZARE EIRELI - ME 16.804.110/0001-46 - 16.804.110/0001-46
+estava sendo ignorada porque a rotina antiga juntava os dois CNPJs (28 digitos).
+O sistema agora reconhece um CNPJ unico repetido e retira todas as ocorrencias
+da razao social exibida no PDF.
+
+OUTRAS PROTECOES
+- Documentos repetidos identicos sao aceitos e normalizados.
+- CPFs e CNPJs diferentes no mesmo campo, ou divergentes entre colunas, sao
+  sinalizados; a linha nao eh associada automaticamente.
+- O CNPJ da exportacao eh comparado ao identificador da empresa quando presente.
+- Arquivos com EVENTO explicito diferente de S-2220 nao sao usados para ASO.
+- Recibos ausentes e resultados rejeitados/invalidos nao sao exportados.
+- Datas diferentes do exame sao barradas quando ambas estao informadas.
+- Sem data na base, verifica-se a competencia (mes/ano) da guia quando houver
+  data na exportacao; varias datas possiveis nao sao escolhidas ao acaso.
+- Homonimos com CPFs diferentes nao sao associados sem revisao.
+- Relatorio de processamento registra pendencias por funcionario e avisos de
+  identificacao; PDF gerado com faltantes fica como GERADO PARCIAL.
+- Nenhuma planilha original, banco de dados ou documento historico foi alterado.
+
+INSTALACAO
+1. Faca copia de seguranca do sistema e dos seus dados antes do deploy.
+2. Na atualizacao pontual (recomendada), substitua APENAS o arquivo
+   edge_app/application.py pelo do ZIP da correcao, preservando os demais
+   arquivos e as pastas de dados, banco, uploads, configuracao e outputs.
+3. Reinicie/reimplante o servico para carregar o novo codigo.
+4. Abra Recibo eSocial, selecione a guia ABRIL.2026 e envie bg santos.xls.
+5. Confira o PDF e RESUMO PROCESSAMENTO.txt dentro do ZIP produzido.
+
+VALIDACAO LOCAL REALIZADA
+- Guia: ABRIL.2026 (planilha-base fornecida).
+- Exportacao: bg santos.xls (HTML XLS fornecido).
+- CNPJ: 16.804.110/0001-46.
+- Funcionario: ROMULO HENRIQUE CORREA LIMA.
+- Exame: 23/04/2026.
+- Recibo encontrado: 1.1.000000001202439517457340 (AUTORIZADO).
+- Resultado: 1 PDF, 1 funcionario localizado, nenhuma pendencia para a empresa.
+- 14 testes especificos passaram.
+
+PACOTES
+- pacote_correcao_recibo_esocial_edge.zip: atualizacao pontual, testes e instrucoes.
+- sistema_edge_recibo_esocial_corrigido.zip: codigo e recursos do sistema sem
+  dados operacionais, outputs historicos, repositorio .git nem arquivos secretos.
+  Nao substitua as pastas de dados existentes por este pacote de codigo-fonte.
+
+ATENCAO
+Em caso de CPF/CNPJ inconsistente, divergencia de data ou homonimos, corrigir
+os dados na fonte e conferir manualmente. O sistema evita escolher por adivinhacao.

@@ -2006,21 +2006,48 @@ def extract_cnpj(text: str) -> str:
     return digits[:14] if len(digits) >= 14 else ""
 
 
-def extract_employer_document(value) -> str:
-    """Extrai CPF (11 dígitos) ou CNPJ (14) do *empregador*, não do funcionário.
+def _employer_documents_in_text(value) -> set[str]:
+    """Identifica documentos completos sem juntar CNPJs, CPFs ou outros números.
 
-    Em arquivos Excel, números podem chegar sem o zero inicial: 10 dígitos
-    (CPF) e 13 dígitos (CNPJ). Valores de outros comprimentos são rejeitados.
+    O mesmo CNPJ pode constar duas ou mais vezes no SETOR da planilha-base.
+    Retorna um único documento quando todas as ocorrências são iguais; havendo
+    documentos diferentes, o registro é ambíguo e NÃO deve ser associado.
     """
     if value is None or (isinstance(value, float) and pd.isna(value)):
-        return ""
+        return set()
     raw = _safe_text(value)
-    digits = re.sub(r"\D", "", raw)
-    if len(digits) == 10:
-        digits = digits.zfill(11)
-    elif len(digits) == 13:
-        digits = digits.zfill(14)
-    return digits if len(digits) in (11, 14) else ""
+    if not raw:
+        return set()
+
+    # Excel frequentemente elimina o zero inicial de documentos numéricos.
+    # Completar com zero é permitido apenas quando a célula INTEIRA representa
+    # um documento, jamais quando os dígitos são parte de uma razão social.
+    full_digits = re.fullmatch(r"\d+", raw)
+    if full_digits:
+        digits = full_digits.group(0)
+        if len(digits) in (10, 13):
+            digits = digits.zfill(11 if len(digits) == 10 else 14)
+        return {digits} if len(digits) in (11, 14) else set()
+
+    patterns = (
+        r"(?<!\d)\d{2}\s*\.\s*\d{3}\s*\.\s*\d{3}\s*/\s*\d{4}\s*-\s*\d{2}(?!\d)",
+        r"(?<!\d)\d{3}\s*\.\s*\d{3}\s*\.\s*\d{3}\s*-\s*\d{2}(?!\d)",
+        r"(?<!\d)\d{14}(?!\d)",
+        r"(?<!\d)\d{11}(?!\d)",
+    )
+    found = set()
+    for pattern in patterns:
+        for match in re.finditer(pattern, raw):
+            digits = re.sub(r"\D", "", match.group(0))
+            if len(digits) in (11, 14):
+                found.add(digits)
+    return found
+
+
+def extract_employer_document(value) -> str:
+    """Retorna CPF/CNPJ único, mesmo se repetido; rejeita dados contraditórios."""
+    documents = _employer_documents_in_text(value)
+    return next(iter(documents)) if len(documents) == 1 else ""
 
 
 def format_employer_document(value) -> str:
@@ -2177,14 +2204,16 @@ def _sheet_month_year(sheet_name: str) -> tuple[str, int | None]:
 
 
 def _strip_cnpj_from_company(company_text: str, cnpj: str) -> str:
-    """Retira o CPF/CNPJ do empregador presente junto à razão social/nome."""
+    """Retira TODAS as ocorrências do documento sem deixar CNPJ duplicado no PDF."""
     company = _safe_text(company_text)
     digits = re.sub(r"\D", "", cnpj or "")
-    if digits:
-        flexible = r"\D*".join(re.escape(ch) for ch in digits)
-        company = re.sub(flexible, "", company, count=1)
-        company = re.sub(r"\b(?:CPF|CNPJ)\s*[:\-]?\s*$", "", company, flags=re.I)
-    company = re.sub(r"\s*[-–—|/]\s*$", "", company).strip(" -–—|/")
+    if len(digits) in (11, 14):
+        # Os separadores são opcionais, mas não atravessamos outros dígitos.
+        flexible = r"(?<!\d)" + r"[\s./-]*".join(map(re.escape, digits)) + r"(?!\d)"
+        company = re.sub(flexible, " ", company)
+        company = re.sub(r"\b(?:CPF|CNPJ)\s*:?\s*(?=[-–—|/,]|$)", " ", company, flags=re.I)
+    company = re.sub(r"\s+", " ", company)
+    company = company.strip(" -–—|/,.:;")
     return company or "EMPRESA"
 
 
@@ -2215,12 +2244,27 @@ def read_esocial_base_rows(base_file: str, base_sheet: str) -> pd.DataFrame:
         raise ValueError("Não encontrei nenhuma linha com 'OK E-SOCIAL' na guia selecionada.")
 
     rows = []
+    warnings = []
     for idx, row in eligible.iterrows():
+        base_line = int(idx) + 2 if isinstance(idx, int) else len(rows) + 2
         company_text = _safe_text(row.get(company_col, "")) if company_col else ""
-        cnpj = extract_employer_document(row.get(cnpj_col, "")) if cnpj_col else ""
-        if not cnpj:
-            cnpj = extract_employer_document(company_text)
+        col_value = row.get(cnpj_col, "") if cnpj_col else ""
+        col_documents = _employer_documents_in_text(col_value)
+        name_documents = _employer_documents_in_text(company_text)
         employee = _safe_text(row.get(employee_col, ""))
+        # CNPJs/CPFs diferentes na mesma linha, inclusive entre colunas, NÃO
+        # podem ser resolvidos pelo primeiro número encontrado.
+        documents = col_documents | name_documents
+        if len(documents) > 1:
+            warnings.append(
+                f"Linha {base_line}: documentos conflitantes para {employee or 'funcionário não informado'} "
+                f"({company_text or _safe_text(col_value)}). Conferir manualmente."
+            )
+            continue
+        cnpj = next(iter(documents)) if documents else ""
+        if _safe_text(col_value) and not col_documents and re.search(r"\d", _safe_text(col_value)):
+            warnings.append(f"Linha {base_line}: CPF/CNPJ do empregador inválido: {_safe_text(col_value)}.")
+            continue
         # Sem documento na base, mantém o registro para cruzamento *exato* pelo
         # nome do empregador PF. Nunca usa o CPF da coluna do funcionário.
         if not employee or (not cnpj and not company_text):
@@ -2238,7 +2282,9 @@ def read_esocial_base_rows(base_file: str, base_sheet: str) -> pd.DataFrame:
         })
     result = pd.DataFrame(rows)
     if result.empty:
-        raise ValueError("As linhas com OK E-SOCIAL não possuem empregador e funcionário válidos.")
+        detail = " ".join(warnings[:3])
+        raise ValueError("As linhas com OK E-SOCIAL não possuem empregador e funcionário válidos. " + detail)
+    result.attrs["identification_warnings"] = warnings
     return result
 
 
@@ -2360,15 +2406,33 @@ def read_esocial_export_file(path: str) -> tuple[pd.DataFrame, str]:
                          and normalize_text(recibo_col) in {"ESOCIAL", "E-SOCIAL"})
 
     rows = []
-    for _, row in df.iterrows():
-        cnpj = extract_employer_document(row.get(cnpj_col, ""))
+    warnings = []
+    for idx, row in df.iterrows():
+        source_document = row.get(cnpj_col, "")
+        documents = _employer_documents_in_text(source_document)
+        cnpj = next(iter(documents)) if len(documents) == 1 else ""
         employee = _safe_text(row.get(funcionario_col, ""))
         if not cnpj or not employee:
+            if employee:
+                warnings.append(
+                    f"Linha {int(idx) + 2 if isinstance(idx, int) else '?'}: "
+                    f"CPF/CNPJ inválido ou ambíguo para {employee} ({_safe_text(source_document)})."
+                )
+            continue
+        # Quando a exportação informa também o documento no campo EMPRESA,
+        # confere se o identificador é consistente com a coluna CPF/CNPJ.
+        company_docs = _employer_documents_in_text(row.get(empresa_col, "")) if empresa_col else set()
+        if company_docs and company_docs != {cnpj}:
+            warnings.append(f"Linha {int(idx) + 2 if isinstance(idx, int) else '?'}: "
+                            f"empresa/documento divergentes para {employee}.")
             continue
         evento = _safe_text(row.get(evento_col, "")) if evento_col else ""
         rows.append({
             "EVENTO": evento,
-            "EMPRESA": _safe_text(row.get(empresa_col, "")) if empresa_col else "",
+            "EMPRESA": (
+                _strip_cnpj_from_company(_safe_text(row.get(empresa_col, "")), cnpj)
+                if empresa_col else ""
+            ),
             "CNPJ": cnpj,
             "FUNCIONARIO": employee,
             "NOME_KEY": _normalize_person_name(employee),
@@ -2388,13 +2452,20 @@ def read_esocial_export_file(path: str) -> tuple[pd.DataFrame, str]:
 
     result = pd.DataFrame(rows)
     if result.empty:
-        raise ValueError(f"{os.path.basename(path)} não possui registros de funcionários válidos.")
+        raise ValueError(
+            f"{os.path.basename(path)} não possui registros de funcionários válidos. "
+            + " ".join(warnings[:3])
+        )
+    result.attrs["identification_warnings"] = warnings
 
-    # A base clínica representa ASO/S-2220. Se a exportação contiver S-2220, ignora outros eventos.
+    # Recibos clínicos correspondem a S-2220. Se o arquivo identifica eventos,
+    # nunca reaproveita por engano comprovantes de S-2240, S-2210 etc.
     if "EVENTO" in result.columns:
         event_key = result["EVENTO"].map(lambda x: re.sub(r"[^A-Z0-9]", "", normalize_text(x)))
-        if (event_key == "S2220").any():
+        if event_key.ne("").any():
             result = result[event_key == "S2220"].copy()
+            if result.empty:
+                raise ValueError(f"{Path(path).name}: a exportação não contém eventos S-2220.")
     return result.reset_index(drop=True), best_sheet
 
 
@@ -2416,22 +2487,95 @@ def _candidate_priority(row: pd.Series, base_date) -> tuple:
     return (exact, same_month, authorized, has_receipt, -distance, ref_ord, send_ord)
 
 
-def select_esocial_rows_for_company(base_company: pd.DataFrame, export_company: pd.DataFrame):
+def _is_valid_esocial_receipt(row: pd.Series) -> bool:
+    """Não gera comprovante de envio rejeitado ou sem número de recibo."""
+    receipt = _safe_text(row.get("RECIBO", ""))
+    if not receipt or normalize_text(receipt) in {"-", "0", "PENDENTE", "N/A", "NA", "SEM RECIBO", "NAO INFORMADO"}:
+        return False
+    status = normalize_text(row.get("STATUS", ""))
+    if any(marker in status for marker in (
+        "REJEIT", "CANCEL", "EXCLUI", "ERRO", "INVALID",
+        "NEGAD", "NAO AUTORIZ", "NÃO AUTORIZ", "FALHA",
+    )):
+        return False
+    return True
+
+
+def select_esocial_rows_for_company(base_company: pd.DataFrame, export_company: pd.DataFrame,
+                                   month: str = "", year: int | None = None):
     selected = []
     missing = []
     used_indexes = set()
 
+    # A mesma pessoa pode ter exames diferentes no mesmo dia; um recibo S-2220
+    # não deve ser duplicado apenas por haver duas linhas iguais na base.
     for _, base_row in base_company.sort_values(["BASE_DATE", "BASE_ROW"], na_position="last").iterrows():
         candidates = export_company[export_company["NOME_KEY"] == base_row["NOME_KEY"]]
         if candidates.empty:
             missing.append(base_row["FUNCIONARIO_BASE"])
             continue
 
+        candidates = candidates[candidates.apply(_is_valid_esocial_receipt, axis=1)]
+        if candidates.empty:
+            missing.append(f"{base_row['FUNCIONARIO_BASE']} (sem recibo válido/autorizado)")
+            continue
+
+        base_date = base_row.get("BASE_DATE")
+        if not base_date and "DATA_REF_DATE" in candidates.columns:
+            month_number = next(
+                (position for position, name in enumerate(ESOCIAL_MONTHS.values(), 1)
+                 if normalize_text(name) == normalize_text(month)), None
+            ) if month else None
+            if month_number:
+                dated = candidates[candidates["DATA_REF_DATE"].map(
+                    lambda date: date is not None and not pd.isna(date)
+                    and date.month == month_number and (year is None or date.year == year)
+                )]
+                if dated.empty and candidates["DATA_REF_DATE"].map(
+                    lambda date: date is not None and not pd.isna(date)
+                ).any():
+                    missing.append(f"{base_row['FUNCIONARIO_BASE']} (exame fora da competência selecionada)")
+                    continue
+                if not dated.empty:
+                    candidates = dated
+        if not base_date and "DATA_REF_DATE" in candidates.columns:
+            distinct_dates = {
+                date for date in candidates["DATA_REF_DATE"]
+                if date is not None and not pd.isna(date)
+            }
+            if len(distinct_dates) > 1:
+                missing.append(f"{base_row['FUNCIONARIO_BASE']} (base sem data; vários exames possíveis)")
+                continue
+        if base_date:
+            # Evita usar recibo de outro exame/mês do mesmo funcionário.
+            same_date = candidates[candidates["DATA_REF_DATE"].map(
+                lambda date: date is not None and not pd.isna(date) and date == base_date
+            )] if "DATA_REF_DATE" in candidates.columns else pd.DataFrame()
+            no_date = candidates[candidates["DATA_REF_DATE"].map(
+                lambda date: date is None or pd.isna(date)
+            )] if "DATA_REF_DATE" in candidates.columns else candidates
+            if not same_date.empty:
+                candidates = same_date
+            elif not no_date.empty:
+                candidates = no_date
+            else:
+                missing.append(f"{base_row['FUNCIONARIO_BASE']} (data divergente; conferir manualmente)")
+                continue
+
+        # Nomes iguais com CPFs diferentes na exportação não permitem saber
+        # qual recibo corresponde ao funcionário da base (que não tem CPF).
+        if "CPF" in candidates.columns:
+            cpfs = {re.sub(r"\D", "", _safe_text(v)) for v in candidates["CPF"]}
+            cpfs.discard("")
+            if len(cpfs) > 1:
+                missing.append(f"{base_row['FUNCIONARIO_BASE']} (homônimos com CPFs diferentes)")
+                continue
+
         unused = candidates[~candidates.index.isin(used_indexes)]
         pool = unused if not unused.empty else candidates
         ranked = sorted(
             [(idx, row) for idx, row in pool.iterrows()],
-            key=lambda item: _candidate_priority(item[1], base_row.get("BASE_DATE")),
+            key=lambda item: _candidate_priority(item[1], base_date),
             reverse=True,
         )
         chosen_idx, chosen = ranked[0]
@@ -2445,7 +2589,7 @@ def select_esocial_rows_for_company(base_company: pd.DataFrame, export_company: 
     dedupe_cols = [c for c in ["CNPJ", "NOME_KEY", "DATA_REF", "RECIBO", "EVENTO"] if c in result.columns]
     if dedupe_cols:
         result = result.drop_duplicates(subset=dedupe_cols, keep="first")
-    return result.reset_index(drop=True), missing
+    return result.reset_index(drop=True), list(dict.fromkeys(missing))
 
 
 def make_paragraph(text: str, style: ParagraphStyle) -> Paragraph:
@@ -2626,6 +2770,7 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
     export_frames = []
     source_notes = []
     skipped_files = []
+    identification_warnings = list(base_rows.attrs.get("identification_warnings", []))
     total_files = max(1, len(export_files))
     for idx, file_path in enumerate(export_files, start=1):
         if progress:
@@ -2638,6 +2783,10 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
             logger.warning("Recibo eSocial - arquivo de envio ignorado: %s", exc)
             continue
         export_frames.append(frame)
+        identification_warnings.extend(
+            f"{Path(file_path).name}: {warning}"
+            for warning in frame.attrs.get("identification_warnings", [])
+        )
         source_notes.append(f"{Path(file_path).name} -> guia {sheet}")
 
     if not export_frames:
@@ -2691,7 +2840,7 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
             continue
 
         company_name = _safe_text(base_company.iloc[0]["EMPRESA_NOME"])
-        selected, missing = select_esocial_rows_for_company(base_company, export_company)
+        selected, missing = select_esocial_rows_for_company(base_company, export_company, month, year)
         if selected.empty:
             summary.append({
                 "empresa": company_name,
@@ -2700,7 +2849,7 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
                 "total_base": len(base_company),
                 "total_export": len(export_company),
                 "total_encontrado": 0,
-                "motivo": "Nenhum funcionário da planilha enviada coincide com a planilha base.",
+                "motivo": "Sem funcionário com mesmo nome, data e recibo válido; confira as pendências.",
                 "pdf": "",
                 "faltantes": missing,
             })
@@ -2713,7 +2862,7 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
         summary.append({
             "empresa": company_name,
             "cnpj": cnpj,
-            "status": "GERADO",
+            "status": "GERADO PARCIAL" if missing else "GERADO",
             "total_base": len(base_company),
             "total_export": len(export_company),
             "total_encontrado": len(selected),
@@ -2760,6 +2909,7 @@ def process_esocial_receipts(base_file: str, base_sheet: str, export_files: list
         "total_generated": len(generated),
         "total_companies": len(company_order),
         "total_without_match": sum(1 for item in summary if item.get("status") != "GERADO"),
+        "identification_warnings": identification_warnings,
         "ignored_files": skipped_files,
     }
 
@@ -5520,12 +5670,17 @@ def esocial_processar_async():
         elif total_without_match:
             final_message = (
                 f"Concluído: {total_generated} PDF(s) gerado(s). "
-                f"{total_without_match} empresa(s) ficaram sem correspondência; consulte o resumo no ZIP."
+                f"{total_without_match} empresa(s) possuem pendências de correspondência; consulte o resumo no ZIP."
             )
         else:
             final_message = f"Concluído: {total_generated} PDF(s) de recibo gerado(s)."
         if result.get("ignored_files"):
             final_message += f" {len(result['ignored_files'])} arquivo(s) inválido(s) ignorado(s); detalhes no RESUMO PROCESSAMENTO.txt."
+        if result.get("identification_warnings"):
+            final_message += (
+                f" Atenção: {len(result['identification_warnings'])} linha(s) com "
+                "problemas de identificação foram isoladas; confira o RESUMO PROCESSAMENTO.txt."
+            )
         return str(zip_path), zip_path.name, final_message
 
     month, year = _sheet_month_year(base_sheet)
